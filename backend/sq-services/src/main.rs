@@ -12,6 +12,7 @@ async fn main() -> anyhow::Result<()> {
     let config = sq_services::config::Config::from_env().context("loading configuration")?;
     let port = config.port;
     let state = sq_services::state::AppState::build(config).context("building application state")?;
+    sq_services::validator::spawn(state.clone());
     let app = sq_services::router(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

@@ -32,7 +32,7 @@ pub fn routes() -> Router<SharedState> {
 /// explains the result as multiplicative factors the UI can read out. Writes nothing.
 async fn risk_preview(State(state): State<SharedState>, Json(req): Json<RiskPreviewRequest>) -> ApiResult<RiskPreview> {
     let source = state.sources.get(&req.network).map_err(|e| ServiceError::BadRequest(e.to_string()))?;
-    let lists = provenance::Watchlists::from_raw(&state.config.sanctioned_raw, &state.config.flagged_raw);
+    let lists = state.watchlists()?;
     let model = state.model.clone();
     let now = state.now();
     let sender = match (req.sender, req.wallet) {
@@ -100,7 +100,7 @@ fn sender_context(state: &AppState, wallet: alloy_primitives::Address, network: 
 async fn event_report(State(state): State<SharedState>, Path(hash): Path<B256>) -> ApiResult<TransferReport> {
     let tx = state.chain()?.tx(hash)?;
     let source = state.sources.get(&tx.network.name).map_err(|e| ServiceError::BadRequest(e.to_string()))?;
-    let lists = provenance::Watchlists::from_raw(&state.config.sanctioned_raw, &state.config.flagged_raw);
+    let lists = state.watchlists()?;
     let model = state.model.clone();
     let r = report::report_for_event(source, &tx, &lists, ReportConfig { max_pages: 2, ..Default::default() }, Some(model.as_ref()), state.now())
         .await
@@ -163,7 +163,7 @@ pub async fn provenance_for(state: &AppState, hash: B256) -> Result<ProvenanceRe
         return Err(ServiceError::BadRequest("provenance applies to external events".into()));
     }
     let source = state.sources.get(&tx.network.name).map_err(|e| ServiceError::BadRequest(e.to_string()))?;
-    let lists = provenance::Watchlists::from_raw(&state.config.sanctioned_raw, &state.config.flagged_raw);
+    let lists = state.watchlists()?;
     let assessment = provenance::assess(source, &tx, &lists, 50).await.map_err(|e| ServiceError::Upstream { provider: "connector", msg: e.to_string() })?;
     let mut flagged = false;
     if assessment.risk != wallet_core::RiskBand::Low {

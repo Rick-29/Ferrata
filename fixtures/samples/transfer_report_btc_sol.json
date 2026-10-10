@@ -1,6 +1,6 @@
 [
   {
-    "elapsed_ms": 647,
+    "elapsed_ms": 29568,
     "from": "bc1qw4470903ceddn554nm7yg5f8xwdruqezr3qxa8",
     "from_info": {
       "address": "bc1qw4470903ceddn554nm7yg5f8xwdruqezr3qxa8",
@@ -27,8 +27,8 @@
       "tx_count": 2
     },
     "from_input": "bc1qw4470903ceddn554nm7yg5f8xwdruqezr3qxa8",
-    "generated_at": 1791650868,
-    "max_risk": 0.9403530732402888,
+    "generated_at": 1791655900,
+    "max_risk": 0.8653750149006261,
     "mode": "full",
     "network": {
       "chain_id": null,
@@ -41,10 +41,10 @@
       "counterparty": "3GUoNwZfZiWx4ZiXMcovrYARy93DHffgvY",
       "counterparty_info": {
         "address": "3GUoNwZfZiWx4ZiXMcovrYARy93DHffgvY",
-        "balance": "1250000",
+        "balance": "0",
         "extra": {
-          "mempool_tx_count": 2,
-          "pending_delta_sats": -950000
+          "mempool_tx_count": 0,
+          "pending_delta_sats": 0
         },
         "first_seen": null,
         "is_active": true,
@@ -61,7 +61,7 @@
           "name": "bitcoin"
         },
         "tokens": [],
-        "tx_count": 93
+        "tx_count": 97
       },
       "events_checked": 50,
       "exposure": null,
@@ -73,7 +73,7 @@
       "reasons": [
         {
           "code": "HIGH_FAN_IN",
-          "message": "collects from 35 distinct senders",
+          "message": "collects from 36 distinct senders",
           "points": 15
         },
         {
@@ -125,10 +125,10 @@
     "to": "3GUoNwZfZiWx4ZiXMcovrYARy93DHffgvY",
     "to_info": {
       "address": "3GUoNwZfZiWx4ZiXMcovrYARy93DHffgvY",
-      "balance": "1250000",
+      "balance": "0",
       "extra": {
-        "mempool_tx_count": 2,
-        "pending_delta_sats": -950000
+        "mempool_tx_count": 0,
+        "pending_delta_sats": 0
       },
       "first_seen": null,
       "is_active": true,
@@ -145,7 +145,7 @@
         "name": "bitcoin"
       },
       "tokens": [],
-      "tx_count": 93
+      "tx_count": 97
     },
     "to_input": "3GUoNwZfZiWx4ZiXMcovrYARy93DHffgvY",
     "transfers": [
@@ -186,10 +186,10 @@
             },
             "from_info": {
               "address": "bc1qm34lsc65zpw79lxes69zkqmk6ee3ewf0j77s3h",
-              "balance": "1562271807221",
+              "balance": "1569008664804",
               "extra": {
-                "mempool_tx_count": 15,
-                "pending_delta_sats": 8395201309
+                "mempool_tx_count": 3,
+                "pending_delta_sats": -2339476922
               },
               "first_seen": null,
               "is_active": true,
@@ -206,7 +206,7 @@
                 "name": "bitcoin"
               },
               "tokens": [],
-              "tx_count": 2350132
+              "tx_count": 2350179
             },
             "share_of_transfer": 1.0
           }
@@ -215,7 +215,7 @@
         "related": [],
         "risk": {
           "band": "Medium",
-          "combined": 0.9403530732402888,
+          "combined": 0.8653750149006261,
           "features": {
             "activity": "low",
             "amount": 0.0021778,
@@ -228,17 +228,17 @@
             "cancels_24h": 0,
             "cosigned": false,
             "counterparty": null,
-            "counterparty_distinct_senders": 35,
-            "counterparty_fan_out_ratio": 0.06666666666666667,
-            "counterparty_first_seen_age_secs": 4299564,
-            "counterparty_in_count": 35,
+            "counterparty_distinct_senders": 36,
+            "counterparty_fan_out_ratio": 0.07142857142857142,
+            "counterparty_first_seen_age_secs": 3538933,
+            "counterparty_in_count": 36,
             "counterparty_is_account": false,
             "counterparty_new_for_sender": true,
-            "counterparty_out_count": 15,
+            "counterparty_out_count": 14,
             "counterparty_pass_through": true,
             "counterparty_prior_flags": 0,
             "counterparty_prior_max_severity": null,
-            "counterparty_tx_count": 93,
+            "counterparty_tx_count": 97,
             "dapp_origin": null,
             "decision_latency_secs": null,
             "exceeds_own_limit": false,
@@ -297,11 +297,11 @@
           "model": {
             "above_threshold": true,
             "name": "ferra-risk-v0 (hand-set AML heuristics; replace with weights trained on GET /chain/dataset)",
-            "score": 0.9403530732402888,
+            "score": 0.8653750149006261,
             "top": [
               [
                 "policy_band",
-                2.7
+                1.8
               ],
               [
                 "counterparty_pass_through",
@@ -338,7 +338,7 @@
     ]
   },
   {
-    "elapsed_ms": 578,
+    "elapsed_ms": 30189,
     "from": "bc1qmyallkm64vz58mfulr440vwvnkren2rnks68cx",
     "from_info": {
       "address": "bc1qmyallkm64vz58mfulr440vwvnkren2rnks68cx",
@@ -365,8 +365,8 @@
       "tx_count": 2
     },
     "from_input": "bc1qmyallkm64vz58mfulr440vwvnkren2rnks68cx",
-    "generated_at": 1791650868,
-    "max_risk": 0.9284094216681662,
+    "generated_at": 1791655900,
+    "max_risk": 0.8409570755114285,
     "mode": "full",
     "network": {
       "chain_id": null,
@@ -379,10 +379,10 @@
       "counterparty": "3GUoNwZfZiWx4ZiXMcovrYARy93DHffgvY",
       "counterparty_info": {
         "address": "3GUoNwZfZiWx4ZiXMcovrYARy93DHffgvY",
-        "balance": "1250000",
+        "balance": "0",
         "extra": {
-          "mempool_tx_count": 2,
-          "pending_delta_sats": -950000
+          "mempool_tx_count": 0,
+          "pending_delta_sats": 0
         },
         "first_seen": null,
         "is_active": true,
@@ -399,7 +399,7 @@
           "name": "bitcoin"
         },
         "tokens": [],
-        "tx_count": 93
+        "tx_count": 97
       },
       "events_checked": 50,
       "exposure": null,
@@ -411,7 +411,7 @@
       "reasons": [
         {
           "code": "HIGH_FAN_IN",
-          "message": "collects from 35 distinct senders",
+          "message": "collects from 36 distinct senders",
           "points": 15
         },
         {
@@ -463,10 +463,10 @@
     "to": "3GUoNwZfZiWx4ZiXMcovrYARy93DHffgvY",
     "to_info": {
       "address": "3GUoNwZfZiWx4ZiXMcovrYARy93DHffgvY",
-      "balance": "1250000",
+      "balance": "0",
       "extra": {
-        "mempool_tx_count": 2,
-        "pending_delta_sats": -950000
+        "mempool_tx_count": 0,
+        "pending_delta_sats": 0
       },
       "first_seen": null,
       "is_active": true,
@@ -483,7 +483,7 @@
         "name": "bitcoin"
       },
       "tokens": [],
-      "tx_count": 93
+      "tx_count": 97
     },
     "to_input": "3GUoNwZfZiWx4ZiXMcovrYARy93DHffgvY",
     "transfers": [
@@ -524,7 +524,7 @@
             },
             "from_info": {
               "address": "bc1qmc4etzlhu9fcn4ug8jvxp9upej7jue9umrydhg",
-              "balance": "7288405275",
+              "balance": "7241839961",
               "extra": {
                 "mempool_tx_count": 0,
                 "pending_delta_sats": 0
@@ -544,7 +544,7 @@
                 "name": "bitcoin"
               },
               "tokens": [],
-              "tx_count": 24817
+              "tx_count": 24822
             },
             "share_of_transfer": 1.0
           }
@@ -553,7 +553,7 @@
         "related": [],
         "risk": {
           "band": "Medium",
-          "combined": 0.9284094216681662,
+          "combined": 0.8409570755114285,
           "features": {
             "activity": "low",
             "amount": 0.00132419,
@@ -566,17 +566,17 @@
             "cancels_24h": 0,
             "cosigned": false,
             "counterparty": null,
-            "counterparty_distinct_senders": 35,
-            "counterparty_fan_out_ratio": 0.06666666666666667,
-            "counterparty_first_seen_age_secs": 4299564,
-            "counterparty_in_count": 35,
+            "counterparty_distinct_senders": 36,
+            "counterparty_fan_out_ratio": 0.07142857142857142,
+            "counterparty_first_seen_age_secs": 3538933,
+            "counterparty_in_count": 36,
             "counterparty_is_account": false,
             "counterparty_new_for_sender": true,
-            "counterparty_out_count": 15,
+            "counterparty_out_count": 14,
             "counterparty_pass_through": true,
             "counterparty_prior_flags": 0,
             "counterparty_prior_max_severity": null,
-            "counterparty_tx_count": 93,
+            "counterparty_tx_count": 97,
             "dapp_origin": null,
             "decision_latency_secs": null,
             "exceeds_own_limit": false,
@@ -635,11 +635,11 @@
           "model": {
             "above_threshold": true,
             "name": "ferra-risk-v0 (hand-set AML heuristics; replace with weights trained on GET /chain/dataset)",
-            "score": 0.9284094216681662,
+            "score": 0.8409570755114285,
             "top": [
               [
                 "policy_band",
-                2.7
+                1.8
               ],
               [
                 "counterparty_pass_through",
@@ -676,14 +676,14 @@
     ]
   },
   {
-    "elapsed_ms": 9560,
+    "elapsed_ms": 32069,
     "from": "bc1q3wmx0z8m9udcvqeqmq297cnc62ujn5s85g0eld",
     "from_info": {
       "address": "bc1q3wmx0z8m9udcvqeqmq297cnc62ujn5s85g0eld",
-      "balance": "42324363",
+      "balance": "0",
       "extra": {
-        "mempool_tx_count": 1,
-        "pending_delta_sats": -42324363
+        "mempool_tx_count": 0,
+        "pending_delta_sats": 0
       },
       "first_seen": null,
       "is_active": true,
@@ -703,8 +703,8 @@
       "tx_count": 2
     },
     "from_input": "bc1q3wmx0z8m9udcvqeqmq297cnc62ujn5s85g0eld",
-    "generated_at": 1791650868,
-    "max_risk": 0.946993212694187,
+    "generated_at": 1791655900,
+    "max_risk": 0.5455491090928072,
     "mode": "full",
     "network": {
       "chain_id": null,
@@ -719,8 +719,8 @@
         "address": "13dGsLG17u3ty5ZyJTkubJmCPNGjmBnWZ2",
         "balance": "0",
         "extra": {
-          "mempool_tx_count": 1,
-          "pending_delta_sats": 120549
+          "mempool_tx_count": 0,
+          "pending_delta_sats": 0
         },
         "first_seen": null,
         "is_active": true,
@@ -737,7 +737,7 @@
           "name": "bitcoin"
         },
         "tokens": [],
-        "tx_count": 481
+        "tx_count": 482
       },
       "events_checked": 50,
       "exposure": null,
@@ -766,14 +766,14 @@
         "asset_address": null,
         "asset_symbol": "BTC",
         "counterparty": "13dGsLG17u3ty5ZyJTkubJmCPNGjmBnWZ2",
-        "counterparty_label": "unconfirmed",
-        "date": null,
+        "counterparty_label": null,
+        "date": "2026-10-10T16:50:59Z",
         "decimals": 8,
         "explorer_url": "https://mempool.space/tx/f4a39585056532ac0d102dd681fb3f6d8a09fc7baf8085f955bda202b68b7c6d",
         "fee": 4.32e-6,
         "incoming": false,
         "scam_flag": false,
-        "timestamp": null,
+        "timestamp": 1791651059,
         "tx_id": "f4a39585056532ac0d102dd681fb3f6d8a09fc7baf8085f955bda202b68b7c6d"
       },
       {
@@ -798,8 +798,8 @@
       "address": "13dGsLG17u3ty5ZyJTkubJmCPNGjmBnWZ2",
       "balance": "0",
       "extra": {
-        "mempool_tx_count": 1,
-        "pending_delta_sats": 120549
+        "mempool_tx_count": 0,
+        "pending_delta_sats": 0
       },
       "first_seen": null,
       "is_active": true,
@@ -816,7 +816,7 @@
         "name": "bitcoin"
       },
       "tokens": [],
-      "tx_count": 481
+      "tx_count": 482
     },
     "to_input": "13dGsLG17u3ty5ZyJTkubJmCPNGjmBnWZ2",
     "transfers": [
@@ -827,14 +827,14 @@
           "asset_address": null,
           "asset_symbol": "BTC",
           "counterparty": "13dGsLG17u3ty5ZyJTkubJmCPNGjmBnWZ2",
-          "counterparty_label": "unconfirmed",
-          "date": null,
+          "counterparty_label": null,
+          "date": "2026-10-10T16:50:59Z",
           "decimals": 8,
           "explorer_url": "https://mempool.space/tx/f4a39585056532ac0d102dd681fb3f6d8a09fc7baf8085f955bda202b68b7c6d",
           "fee": 4.32e-6,
           "incoming": false,
           "scam_flag": false,
-          "timestamp": null,
+          "timestamp": 1791651059,
           "tx_id": "f4a39585056532ac0d102dd681fb3f6d8a09fc7baf8085f955bda202b68b7c6d"
         },
         "funding": [
@@ -885,8 +885,8 @@
         "funding_coverage": 1.0,
         "related": [],
         "risk": {
-          "band": "Medium",
-          "combined": 0.946993212694187,
+          "band": "Low",
+          "combined": 0.5455491090928072,
           "features": {
             "activity": "low",
             "amount": 0.42324363,
@@ -895,13 +895,13 @@
             "archetype": "new",
             "asset": null,
             "asset_symbol": "BTC",
-            "balance_before": 0.42324363,
+            "balance_before": 0.0,
             "cancels_24h": 0,
             "cosigned": false,
             "counterparty": null,
             "counterparty_distinct_senders": 23,
             "counterparty_fan_out_ratio": 0.16,
-            "counterparty_first_seen_age_secs": 3976865,
+            "counterparty_first_seen_age_secs": 3967580,
             "counterparty_in_count": 25,
             "counterparty_is_account": false,
             "counterparty_new_for_sender": true,
@@ -909,13 +909,13 @@
             "counterparty_pass_through": true,
             "counterparty_prior_flags": 0,
             "counterparty_prior_max_severity": null,
-            "counterparty_tx_count": 481,
+            "counterparty_tx_count": 482,
             "dapp_origin": null,
             "decision_latency_secs": null,
             "exceeds_own_limit": false,
             "extra": {},
             "fee": 4.32e-6,
-            "fraction_of_balance": 1.0,
+            "fraction_of_balance": 0.0,
             "holding_ratio": 0.0,
             "hour_utc": 16,
             "intent_to_submit_secs": null,
@@ -939,9 +939,9 @@
             "prior_cancel_rate": 0.0,
             "reciprocal": false,
             "risk_accepted": false,
-            "secs_since_sender_prev_tx": 83043,
+            "secs_since_sender_prev_tx": 83234,
             "secs_since_settings_change": null,
-            "sender_age_secs": 83043,
+            "sender_age_secs": 83234,
             "sender_distinct_recipients": 0,
             "sender_escape_active": false,
             "sender_in_count": 1,
@@ -957,29 +957,21 @@
             "share_of_lifetime_volume": 1.0,
             "signer_kind": "none",
             "step_up": false,
-            "timestamp": 1791650868,
+            "timestamp": 1791651059,
             "velocity_ratio": 0.0,
             "version": 2,
             "via_dapp": false,
             "weekday": 5
           },
-          "heuristic_score": 47,
+          "heuristic_score": 17,
           "model": {
-            "above_threshold": true,
+            "above_threshold": false,
             "name": "ferra-risk-v0 (hand-set AML heuristics; replace with weights trained on GET /chain/dataset)",
-            "score": 0.946993212694187,
+            "score": 0.5455491090928072,
             "top": [
-              [
-                "fraction_of_balance",
-                1.8
-              ],
               [
                 "counterparty_pass_through",
                 1.6
-              ],
-              [
-                "policy_band",
-                0.9
               ],
               [
                 "counterparty_new_for_sender",
@@ -988,6 +980,14 @@
               [
                 "share_of_lifetime_volume",
                 0.6
+              ],
+              [
+                "has_prev_tx",
+                -0.3
+              ],
+              [
+                "kind_external",
+                0.3
               ]
             ]
           },
@@ -1001,16 +1001,6 @@
               "code": "FIRST_OUTGOING",
               "message": "the sender had never sent anything before",
               "points": 10
-            },
-            {
-              "code": "DRAINS_BALANCE",
-              "message": "moves 100% of the sender's balance",
-              "points": 25
-            },
-            {
-              "code": "UNCONFIRMED",
-              "message": "not yet confirmed on its network",
-              "points": 5
             }
           ]
         }
@@ -1018,63 +1008,13 @@
     ]
   },
   {
-    "elapsed_ms": 23056,
+    "elapsed_ms": 29006,
     "from": "bc1q3wmx0z8m9udcvqeqmq297cnc62ujn5s85g0eld",
-    "from_info": null,
-    "from_input": "bc1q3wmx0z8m9udcvqeqmq297cnc62ujn5s85g0eld",
-    "generated_at": 1791650868,
-    "max_risk": 0.0,
-    "mode": "full",
-    "network": {
-      "chain_id": null,
-      "family": "bitcoin",
-      "name": "bitcoin"
-    },
-    "notes": [
-      "sender history: http: error sending request for url (https://mempool.space/api/address/bc1q3wmx0z8m9udcvqeqmq297cnc62ujn5s85g0eld/txs/mempool)",
-      "sender account info: http: error sending request for url (https://mempool.space/api/address/bc1q3wmx0z8m9udcvqeqmq297cnc62ujn5s85g0eld)",
-      "receiver account info: http: error sending request for url (https://mempool.space/api/address/bc1qzuw5nhljn2h0a53annu20l24up7mjqr869shlt)",
-      "receiver history: http: error sending request for url (https://mempool.space/api/address/bc1qzuw5nhljn2h0a53annu20l24up7mjqr869shlt/txs/mempool)",
-      "no transfer from sender to receiver found in the fetched history"
-    ],
-    "pages_fetched": 0,
-    "receiver_provenance": {
-      "counterparty": "bc1qzuw5nhljn2h0a53annu20l24up7mjqr869shlt",
-      "counterparty_info": null,
-      "events_checked": 0,
-      "exposure": null,
-      "network": {
-        "chain_id": null,
-        "family": "bitcoin",
-        "name": "bitcoin"
-      },
-      "reasons": [
-        {
-          "code": "UNVERIFIED",
-          "message": "origin network could not be queried; counterparty unknown",
-          "points": 30
-        }
-      ],
-      "risk": "Medium",
-      "score": 30,
-      "verified": false
-    },
-    "schema_version": 2,
-    "sender_events_scanned": 0,
-    "sender_recent": [],
-    "to": "bc1qzuw5nhljn2h0a53annu20l24up7mjqr869shlt",
-    "to_info": null,
-    "to_input": "bc1qzuw5nhljn2h0a53annu20l24up7mjqr869shlt",
-    "transfers": []
-  },
-  {
-    "elapsed_ms": 403,
-    "from": "bc1q2e89s5takfvkaa0nc4xmgx59sewphsqh89prdz5snj4d4ash6glqtx7lrl",
     "from_info": {
-      "address": "bc1q2e89s5takfvkaa0nc4xmgx59sewphsqh89prdz5snj4d4ash6glqtx7lrl",
+      "address": "bc1q3wmx0z8m9udcvqeqmq297cnc62ujn5s85g0eld",
       "balance": "0",
       "extra": {
-        "mempool_tx_count": 2,
+        "mempool_tx_count": 0,
         "pending_delta_sats": 0
       },
       "first_seen": null,
@@ -1094,25 +1034,27 @@
       "tokens": [],
       "tx_count": 2
     },
-    "from_input": "bc1q2e89s5takfvkaa0nc4xmgx59sewphsqh89prdz5snj4d4ash6glqtx7lrl",
-    "generated_at": 1791650868,
-    "max_risk": 0.6460496917809846,
+    "from_input": "bc1q3wmx0z8m9udcvqeqmq297cnc62ujn5s85g0eld",
+    "generated_at": 1791655900,
+    "max_risk": 0.0,
     "mode": "full",
     "network": {
       "chain_id": null,
       "family": "bitcoin",
       "name": "bitcoin"
     },
-    "notes": [],
+    "notes": [
+      "no transfer from sender to receiver found in the fetched history"
+    ],
     "pages_fetched": 1,
     "receiver_provenance": {
-      "counterparty": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
+      "counterparty": "bc1qzuw5nhljn2h0a53annu20l24up7mjqr869shlt",
       "counterparty_info": {
-        "address": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
-        "balance": "0",
+        "address": "bc1qzuw5nhljn2h0a53annu20l24up7mjqr869shlt",
+        "balance": "42203382",
         "extra": {
-          "mempool_tx_count": 1,
-          "pending_delta_sats": 824530
+          "mempool_tx_count": 0,
+          "pending_delta_sats": 0
         },
         "first_seen": null,
         "is_active": true,
@@ -1153,45 +1095,45 @@
     "sender_events_scanned": 2,
     "sender_recent": [
       {
-        "amount": "824672",
-        "amount_units": 0.00824672,
+        "amount": "42324363",
+        "amount_units": 0.42324363,
         "asset_address": null,
         "asset_symbol": "BTC",
-        "counterparty": "bc1qew2d6l42udrg54hvhd0yjj76nfugzu33sau2p0",
-        "counterparty_label": "unconfirmed",
-        "date": null,
+        "counterparty": "13dGsLG17u3ty5ZyJTkubJmCPNGjmBnWZ2",
+        "counterparty_label": null,
+        "date": "2026-10-10T16:50:59Z",
         "decimals": 8,
-        "explorer_url": "https://mempool.space/tx/d136679c9eaa3e917d3fe90f02c661acf7894a82391db8edf3831c2b9b346cba",
-        "fee": 3.39e-6,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": null,
-        "tx_id": "d136679c9eaa3e917d3fe90f02c661acf7894a82391db8edf3831c2b9b346cba"
-      },
-      {
-        "amount": "824672",
-        "amount_units": 0.00824672,
-        "asset_address": null,
-        "asset_symbol": "BTC",
-        "counterparty": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
-        "counterparty_label": "unconfirmed",
-        "date": null,
-        "decimals": 8,
-        "explorer_url": "https://mempool.space/tx/f394b4498ecda4408e53906779fe12ff06ff52ebb90fad03fc0d68ee83809b33",
-        "fee": 1.42e-6,
+        "explorer_url": "https://mempool.space/tx/f4a39585056532ac0d102dd681fb3f6d8a09fc7baf8085f955bda202b68b7c6d",
+        "fee": 4.32e-6,
         "incoming": false,
         "scam_flag": false,
-        "timestamp": null,
-        "tx_id": "f394b4498ecda4408e53906779fe12ff06ff52ebb90fad03fc0d68ee83809b33"
+        "timestamp": 1791651059,
+        "tx_id": "f4a39585056532ac0d102dd681fb3f6d8a09fc7baf8085f955bda202b68b7c6d"
+      },
+      {
+        "amount": "42324363",
+        "amount_units": 0.42324363,
+        "asset_address": null,
+        "asset_symbol": "BTC",
+        "counterparty": "bc1qmcgjuzlh504e8sdcncmva56vfs3y58f6rhe72f",
+        "counterparty_label": null,
+        "date": "2026-10-09T17:43:45Z",
+        "decimals": 8,
+        "explorer_url": "https://mempool.space/tx/c9a16898366f40a3bae0937da1d45149740cb107f5dec4957ad8ed9933ff98fb",
+        "fee": 5.76e-6,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791567825,
+        "tx_id": "c9a16898366f40a3bae0937da1d45149740cb107f5dec4957ad8ed9933ff98fb"
       }
     ],
-    "to": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
+    "to": "bc1qzuw5nhljn2h0a53annu20l24up7mjqr869shlt",
     "to_info": {
-      "address": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
-      "balance": "0",
+      "address": "bc1qzuw5nhljn2h0a53annu20l24up7mjqr869shlt",
+      "balance": "42203382",
       "extra": {
-        "mempool_tx_count": 1,
-        "pending_delta_sats": 824530
+        "mempool_tx_count": 0,
+        "pending_delta_sats": 0
       },
       "first_seen": null,
       "is_active": true,
@@ -1210,6 +1152,152 @@
       "tokens": [],
       "tx_count": 1
     },
+    "to_input": "bc1qzuw5nhljn2h0a53annu20l24up7mjqr869shlt",
+    "transfers": []
+  },
+  {
+    "elapsed_ms": 29051,
+    "from": "bc1q2e89s5takfvkaa0nc4xmgx59sewphsqh89prdz5snj4d4ash6glqtx7lrl",
+    "from_info": {
+      "address": "bc1q2e89s5takfvkaa0nc4xmgx59sewphsqh89prdz5snj4d4ash6glqtx7lrl",
+      "balance": "0",
+      "extra": {
+        "mempool_tx_count": 0,
+        "pending_delta_sats": 0
+      },
+      "first_seen": null,
+      "is_active": true,
+      "is_contract": false,
+      "is_scam": false,
+      "labels": [],
+      "last_active": null,
+      "name": null,
+      "native_decimals": 8,
+      "native_symbol": "BTC",
+      "network": {
+        "chain_id": null,
+        "family": "bitcoin",
+        "name": "bitcoin"
+      },
+      "tokens": [],
+      "tx_count": 2
+    },
+    "from_input": "bc1q2e89s5takfvkaa0nc4xmgx59sewphsqh89prdz5snj4d4ash6glqtx7lrl",
+    "generated_at": 1791655900,
+    "max_risk": 0.8322109288854175,
+    "mode": "full",
+    "network": {
+      "chain_id": null,
+      "family": "bitcoin",
+      "name": "bitcoin"
+    },
+    "notes": [],
+    "pages_fetched": 1,
+    "receiver_provenance": {
+      "counterparty": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
+      "counterparty_info": {
+        "address": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
+        "balance": "0",
+        "extra": {
+          "mempool_tx_count": 0,
+          "pending_delta_sats": 0
+        },
+        "first_seen": null,
+        "is_active": true,
+        "is_contract": false,
+        "is_scam": false,
+        "labels": [],
+        "last_active": null,
+        "name": null,
+        "native_decimals": 8,
+        "native_symbol": "BTC",
+        "network": {
+          "chain_id": null,
+          "family": "bitcoin",
+          "name": "bitcoin"
+        },
+        "tokens": [],
+        "tx_count": 2
+      },
+      "events_checked": 2,
+      "exposure": null,
+      "network": {
+        "chain_id": null,
+        "family": "bitcoin",
+        "name": "bitcoin"
+      },
+      "reasons": [
+        {
+          "code": "PASS_THROUGH",
+          "message": "the counterparty forwards what it receives",
+          "points": 40
+        }
+      ],
+      "risk": "Medium",
+      "score": 40,
+      "verified": true
+    },
+    "schema_version": 2,
+    "sender_events_scanned": 2,
+    "sender_recent": [
+      {
+        "amount": "824672",
+        "amount_units": 0.00824672,
+        "asset_address": null,
+        "asset_symbol": "BTC",
+        "counterparty": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
+        "counterparty_label": null,
+        "date": "2026-10-10T16:54:16Z",
+        "decimals": 8,
+        "explorer_url": "https://mempool.space/tx/f394b4498ecda4408e53906779fe12ff06ff52ebb90fad03fc0d68ee83809b33",
+        "fee": 1.42e-6,
+        "incoming": false,
+        "scam_flag": false,
+        "timestamp": 1791651256,
+        "tx_id": "f394b4498ecda4408e53906779fe12ff06ff52ebb90fad03fc0d68ee83809b33"
+      },
+      {
+        "amount": "824672",
+        "amount_units": 0.00824672,
+        "asset_address": null,
+        "asset_symbol": "BTC",
+        "counterparty": "bc1qew2d6l42udrg54hvhd0yjj76nfugzu33sau2p0",
+        "counterparty_label": null,
+        "date": "2026-10-10T16:50:59Z",
+        "decimals": 8,
+        "explorer_url": "https://mempool.space/tx/d136679c9eaa3e917d3fe90f02c661acf7894a82391db8edf3831c2b9b346cba",
+        "fee": 3.39e-6,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791651059,
+        "tx_id": "d136679c9eaa3e917d3fe90f02c661acf7894a82391db8edf3831c2b9b346cba"
+      }
+    ],
+    "to": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
+    "to_info": {
+      "address": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
+      "balance": "0",
+      "extra": {
+        "mempool_tx_count": 0,
+        "pending_delta_sats": 0
+      },
+      "first_seen": null,
+      "is_active": true,
+      "is_contract": false,
+      "is_scam": false,
+      "labels": [],
+      "last_active": null,
+      "name": null,
+      "native_decimals": 8,
+      "native_symbol": "BTC",
+      "network": {
+        "chain_id": null,
+        "family": "bitcoin",
+        "name": "bitcoin"
+      },
+      "tokens": [],
+      "tx_count": 2
+    },
     "to_input": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
     "transfers": [
       {
@@ -1219,14 +1307,14 @@
           "asset_address": null,
           "asset_symbol": "BTC",
           "counterparty": "bc1pw7ak7uzymtuqpernd04jn2re64ca0zukptkmakezp26gqc0cu97qkw5q5r",
-          "counterparty_label": "unconfirmed",
-          "date": null,
+          "counterparty_label": null,
+          "date": "2026-10-10T16:54:16Z",
           "decimals": 8,
           "explorer_url": "https://mempool.space/tx/f394b4498ecda4408e53906779fe12ff06ff52ebb90fad03fc0d68ee83809b33",
           "fee": 1.42e-6,
           "incoming": false,
           "scam_flag": false,
-          "timestamp": null,
+          "timestamp": 1791651256,
           "tx_id": "f394b4498ecda4408e53906779fe12ff06ff52ebb90fad03fc0d68ee83809b33"
         },
         "funding": [
@@ -1237,22 +1325,22 @@
               "asset_address": null,
               "asset_symbol": "BTC",
               "counterparty": "bc1qew2d6l42udrg54hvhd0yjj76nfugzu33sau2p0",
-              "counterparty_label": "unconfirmed",
-              "date": null,
+              "counterparty_label": null,
+              "date": "2026-10-10T16:50:59Z",
               "decimals": 8,
               "explorer_url": "https://mempool.space/tx/d136679c9eaa3e917d3fe90f02c661acf7894a82391db8edf3831c2b9b346cba",
               "fee": 3.39e-6,
               "incoming": true,
               "scam_flag": false,
-              "timestamp": null,
+              "timestamp": 1791651059,
               "tx_id": "d136679c9eaa3e917d3fe90f02c661acf7894a82391db8edf3831c2b9b346cba"
             },
             "from_info": {
               "address": "bc1qew2d6l42udrg54hvhd0yjj76nfugzu33sau2p0",
-              "balance": "401974",
+              "balance": "0",
               "extra": {
-                "mempool_tx_count": 1,
-                "pending_delta_sats": -401974
+                "mempool_tx_count": 0,
+                "pending_delta_sats": 0
               },
               "first_seen": null,
               "is_active": true,
@@ -1278,7 +1366,7 @@
         "related": [],
         "risk": {
           "band": "Medium",
-          "combined": 0.6460496917809846,
+          "combined": 0.8322109288854175,
           "features": {
             "activity": "low",
             "amount": 0.00824672,
@@ -1292,16 +1380,16 @@
             "cosigned": false,
             "counterparty": null,
             "counterparty_distinct_senders": 1,
-            "counterparty_fan_out_ratio": 0.0,
-            "counterparty_first_seen_age_secs": null,
+            "counterparty_fan_out_ratio": 1.0,
+            "counterparty_first_seen_age_secs": 0,
             "counterparty_in_count": 1,
             "counterparty_is_account": false,
             "counterparty_new_for_sender": true,
-            "counterparty_out_count": 0,
-            "counterparty_pass_through": false,
+            "counterparty_out_count": 1,
+            "counterparty_pass_through": true,
             "counterparty_prior_flags": 0,
             "counterparty_prior_max_severity": null,
-            "counterparty_tx_count": 1,
+            "counterparty_tx_count": 2,
             "dapp_origin": null,
             "decision_latency_secs": null,
             "exceeds_own_limit": false,
@@ -1322,18 +1410,18 @@
               "band": "Medium",
               "exposure_hops": null,
               "reasons": [
-                "SINGLE_USE"
+                "PASS_THROUGH"
               ],
               "risk_accepted": false,
               "sanctions_hit": false,
-              "score": 25
+              "score": 40
             },
             "prior_cancel_rate": 0.0,
             "reciprocal": false,
             "risk_accepted": false,
-            "secs_since_sender_prev_tx": null,
+            "secs_since_sender_prev_tx": 197,
             "secs_since_settings_change": null,
-            "sender_age_secs": 0,
+            "sender_age_secs": 197,
             "sender_distinct_recipients": 0,
             "sender_escape_active": false,
             "sender_in_count": 1,
@@ -1349,55 +1437,50 @@
             "share_of_lifetime_volume": 1.0,
             "signer_kind": "none",
             "step_up": false,
-            "timestamp": 1791650868,
+            "timestamp": 1791651256,
             "velocity_ratio": 0.0,
             "version": 2,
             "via_dapp": false,
             "weekday": 5
           },
-          "heuristic_score": 27,
+          "heuristic_score": 30,
           "model": {
             "above_threshold": true,
             "name": "ferra-risk-v0 (hand-set AML heuristics; replace with weights trained on GET /chain/dataset)",
-            "score": 0.6460496917809846,
+            "score": 0.8322109288854175,
             "top": [
               [
+                "counterparty_pass_through",
+                1.6
+              ],
+              [
                 "policy_band",
-                1.8
+                0.9
               ],
               [
                 "counterparty_new_for_sender",
                 0.7
               ],
               [
-                "share_of_lifetime_volume",
+                "counterparty_fan_out_ratio",
                 0.6
               ],
               [
-                "kind_external",
-                0.3
-              ],
-              [
-                "family_bitcoin",
-                0.2
+                "share_of_lifetime_volume",
+                0.6
               ]
             ]
           },
           "reasons": [
             {
               "code": "PROVENANCE_MEDIUM",
-              "message": "origin-network check: SINGLE_USE",
-              "points": 12
+              "message": "origin-network check: PASS_THROUGH",
+              "points": 20
             },
             {
               "code": "FIRST_OUTGOING",
               "message": "the sender had never sent anything before",
               "points": 10
-            },
-            {
-              "code": "UNCONFIRMED",
-              "message": "not yet confirmed on its network",
-              "points": 5
             }
           ]
         }
@@ -1405,7 +1488,7 @@
     ]
   },
   {
-    "elapsed_ms": 410341,
+    "elapsed_ms": 137833,
     "from": "Gs4cJRoeJq1KbbqD3gzjvs8zYmoXHwSV4AGiDrs7P45G",
     "from_info": {
       "address": "Gs4cJRoeJq1KbbqD3gzjvs8zYmoXHwSV4AGiDrs7P45G",
@@ -1439,7 +1522,7 @@
       "tx_count": null
     },
     "from_input": "Gs4cJRoeJq1KbbqD3gzjvs8zYmoXHwSV4AGiDrs7P45G",
-    "generated_at": 1791650868,
+    "generated_at": 1791655900,
     "max_risk": 0.0,
     "mode": "full",
     "network": {
@@ -1448,22 +1531,22 @@
       "name": "solana"
     },
     "notes": [
-      "stopped after 3 pages of the sender's history",
+      "stopped after 2 pages of the sender's history",
       "no transfer from sender to receiver found in the fetched history"
     ],
-    "pages_fetched": 3,
+    "pages_fetched": 2,
     "receiver_provenance": {
       "counterparty": "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
       "counterparty_info": {
         "address": "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
-        "balance": "705833",
+        "balance": "959092",
         "extra": {},
         "first_seen": null,
         "is_active": true,
         "is_contract": false,
         "is_scam": false,
         "labels": [],
-        "last_active": 1791650903,
+        "last_active": 1791655905,
         "name": null,
         "native_decimals": 9,
         "native_symbol": "SOL",
@@ -1539,7 +1622,7 @@
         ],
         "tx_count": null
       },
-      "events_checked": 4,
+      "events_checked": 6,
       "exposure": null,
       "network": {
         "chain_id": null,
@@ -1552,7 +1635,7 @@
       "verified": true
     },
     "schema_version": 2,
-    "sender_events_scanned": 114,
+    "sender_events_scanned": 21,
     "sender_recent": [
       {
         "amount": "10000",
@@ -1561,14 +1644,14 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-09T10:17:03Z",
+        "date": "2026-10-09T19:43:29Z",
         "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/2mnDsbqtT49DZVvdoh7ydtCk1d9nEWXHvH4guCy2ibmR9hbi3ZQz9gwjvJxN4FxLjdDu41vjq66xCozG6r5jDist",
+        "explorer_url": "https://explorer.solana.com/tx/5kYsiq26Q48QAMtxq8dFu4soJzrXRVn55baDpV92vTPUprpQPBbxph6ebKaYpsu6UrG6xViivfMZZVX5irzLkm7o",
         "fee": 0.00001,
         "incoming": true,
         "scam_flag": false,
-        "timestamp": 1791541023,
-        "tx_id": "2mnDsbqtT49DZVvdoh7ydtCk1d9nEWXHvH4guCy2ibmR9hbi3ZQz9gwjvJxN4FxLjdDu41vjq66xCozG6r5jDist"
+        "timestamp": 1791575009,
+        "tx_id": "5kYsiq26Q48QAMtxq8dFu4soJzrXRVn55baDpV92vTPUprpQPBbxph6ebKaYpsu6UrG6xViivfMZZVX5irzLkm7o"
       },
       {
         "amount": "10000",
@@ -1577,14 +1660,14 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-09T09:33:49Z",
+        "date": "2026-10-09T19:33:43Z",
         "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/4rQ9feVyZHnG1w7Mp7sHTmCp1Kg4M9CYaUMHjZbMHnwqSrFDdbHgHZ968QBvQps41G2oDvNsX1x4mWSHVg1qRPic",
+        "explorer_url": "https://explorer.solana.com/tx/2r4fgMDpbPejjtSRwkasykKmF5yg5LsiEeWfcjKaiZVe8EpXdHCXFm9U6on83c2ZkqUEjEPVJgHS5GJVQfEEyFwX",
         "fee": 0.00001,
         "incoming": true,
         "scam_flag": false,
-        "timestamp": 1791538429,
-        "tx_id": "4rQ9feVyZHnG1w7Mp7sHTmCp1Kg4M9CYaUMHjZbMHnwqSrFDdbHgHZ968QBvQps41G2oDvNsX1x4mWSHVg1qRPic"
+        "timestamp": 1791574423,
+        "tx_id": "2r4fgMDpbPejjtSRwkasykKmF5yg5LsiEeWfcjKaiZVe8EpXdHCXFm9U6on83c2ZkqUEjEPVJgHS5GJVQfEEyFwX"
       },
       {
         "amount": "10000",
@@ -1593,14 +1676,14 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-09T07:53:48Z",
+        "date": "2026-10-09T19:14:44Z",
         "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/4EwWwSHLKKcMeqfu4EbLTmAcT7PbjehVQYNk3do8FYdHPy3xSkBdvDmWrL6qx2gC8NdvDUvB2mSujFjdx5ZeChSz",
+        "explorer_url": "https://explorer.solana.com/tx/3RDQfrsjxyWtmCoLZkLJxJeCrJesBnctNBCczfFBma8FWDzh15B65mwjULVmuQ7ooNdPL1Z8B1XT587YAFL4AG2s",
         "fee": 0.00001,
         "incoming": true,
         "scam_flag": false,
-        "timestamp": 1791532428,
-        "tx_id": "4EwWwSHLKKcMeqfu4EbLTmAcT7PbjehVQYNk3do8FYdHPy3xSkBdvDmWrL6qx2gC8NdvDUvB2mSujFjdx5ZeChSz"
+        "timestamp": 1791573284,
+        "tx_id": "3RDQfrsjxyWtmCoLZkLJxJeCrJesBnctNBCczfFBma8FWDzh15B65mwjULVmuQ7ooNdPL1Z8B1XT587YAFL4AG2s"
       },
       {
         "amount": "10000",
@@ -1609,14 +1692,14 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-09T07:50:32Z",
+        "date": "2026-10-09T19:05:23Z",
         "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/2RiHPfKEu9rLd9KRhCr7PKsMDWZQDFurCREyhddAYZRHWxVqBQUD7VHasn4McPoxB87HPCCqoueY8RcN41f3m4Qg",
+        "explorer_url": "https://explorer.solana.com/tx/5ZC2jgJocyuR5kz9ShWXLketqtwXHiuWfwzruUKairYQUNzLfFVXqzowJb3fPx5Rj4pBmnaYgQKGPvrUoTSm6U7q",
         "fee": 0.00001,
         "incoming": true,
         "scam_flag": false,
-        "timestamp": 1791532232,
-        "tx_id": "2RiHPfKEu9rLd9KRhCr7PKsMDWZQDFurCREyhddAYZRHWxVqBQUD7VHasn4McPoxB87HPCCqoueY8RcN41f3m4Qg"
+        "timestamp": 1791572723,
+        "tx_id": "5ZC2jgJocyuR5kz9ShWXLketqtwXHiuWfwzruUKairYQUNzLfFVXqzowJb3fPx5Rj4pBmnaYgQKGPvrUoTSm6U7q"
       },
       {
         "amount": "10000",
@@ -1625,14 +1708,30 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-09T05:55:40Z",
+        "date": "2026-10-09T18:33:33Z",
         "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/ZwKXZudbogMUunHZwJ8m3rrYvNvkWY1aA1vTX8H5HPdQ2HcJ7XskMvHwfYBrXtjp9GnUUq2X4DPyKRwjLAFKtNH",
+        "explorer_url": "https://explorer.solana.com/tx/4JtKXbL7nwYSRwKX2f2vdWwq7fyfP5XS3waAQ49AySmEr2ztDHhwY6potT7YP7KR84LiZ7JwvqUC6QpZGhFVwGeZ",
         "fee": 0.00001,
         "incoming": true,
         "scam_flag": false,
-        "timestamp": 1791525340,
-        "tx_id": "ZwKXZudbogMUunHZwJ8m3rrYvNvkWY1aA1vTX8H5HPdQ2HcJ7XskMvHwfYBrXtjp9GnUUq2X4DPyKRwjLAFKtNH"
+        "timestamp": 1791570813,
+        "tx_id": "4JtKXbL7nwYSRwKX2f2vdWwq7fyfP5XS3waAQ49AySmEr2ztDHhwY6potT7YP7KR84LiZ7JwvqUC6QpZGhFVwGeZ"
+      },
+      {
+        "amount": "10000",
+        "amount_units": 0.00001,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
+        "counterparty_label": null,
+        "date": "2026-10-09T16:38:48Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/2iobynERartkUfkwB3dCJZEdWZsrQzBJxyWzuc42mYzo3iWm84CAp1M3CKWseVkfyug31b489WESMa8b94iSjRUH",
+        "fee": 0.00001,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791563928,
+        "tx_id": "2iobynERartkUfkwB3dCJZEdWZsrQzBJxyWzuc42mYzo3iWm84CAp1M3CKWseVkfyug31b489WESMa8b94iSjRUH"
       },
       {
         "amount": "10000",
@@ -1673,118 +1772,6 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-08T23:41:45Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/2dh4SvXxfTy6Dz4CJLXqcDcQFS75Tc9JBYSZL4x4JcFHsNTWy94aAcuvRMfqqJpykvoaVJSLDqGUPuGEtmXCfGEM",
-        "fee": 0.00001,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791502905,
-        "tx_id": "2dh4SvXxfTy6Dz4CJLXqcDcQFS75Tc9JBYSZL4x4JcFHsNTWy94aAcuvRMfqqJpykvoaVJSLDqGUPuGEtmXCfGEM"
-      },
-      {
-        "amount": "10000",
-        "amount_units": 0.00001,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
-        "counterparty_label": null,
-        "date": "2026-10-08T23:28:49Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/2Qbx92MiHyQ4Cge8hdW2ESShESAQyuEuqY5E2fRV3Y2843JYbZViEnw8CZa2aJqm8aqkT3yzoUcfiCspmxD6Jb1G",
-        "fee": 0.00001,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791502129,
-        "tx_id": "2Qbx92MiHyQ4Cge8hdW2ESShESAQyuEuqY5E2fRV3Y2843JYbZViEnw8CZa2aJqm8aqkT3yzoUcfiCspmxD6Jb1G"
-      },
-      {
-        "amount": "10000",
-        "amount_units": 0.00001,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
-        "counterparty_label": null,
-        "date": "2026-10-08T22:08:51Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/268acGKxp5iozqLuFrY5MWmS7MCTDTbYawFpaNvLuAaTYoFmCpTobFTcjQvGpc3cAspKMqhg5cbLEQiaYw2qqKLN",
-        "fee": 0.00001,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791497331,
-        "tx_id": "268acGKxp5iozqLuFrY5MWmS7MCTDTbYawFpaNvLuAaTYoFmCpTobFTcjQvGpc3cAspKMqhg5cbLEQiaYw2qqKLN"
-      },
-      {
-        "amount": "10000",
-        "amount_units": 0.00001,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
-        "counterparty_label": null,
-        "date": "2026-10-08T22:02:17Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/4C69T4A7fNQ4E9K7N6e85qXjs6AQozLJrtQMAJdKPdyYMFhnkxAuB5U7fFRdmS2s3mufjz4xdzDBvh1bjTiCRaNL",
-        "fee": 0.00001,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791496937,
-        "tx_id": "4C69T4A7fNQ4E9K7N6e85qXjs6AQozLJrtQMAJdKPdyYMFhnkxAuB5U7fFRdmS2s3mufjz4xdzDBvh1bjTiCRaNL"
-      },
-      {
-        "amount": "10000",
-        "amount_units": 0.00001,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
-        "counterparty_label": null,
-        "date": "2026-10-08T21:25:40Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/64EqsaRoEnmQmgvqssMBYuLrku6FPN71VLHff4FMuTCAupGjioS6xrtGSCGu2VWECFHSi5uSVxxdU9wWGV1RL9XZ",
-        "fee": 0.00001,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791494740,
-        "tx_id": "64EqsaRoEnmQmgvqssMBYuLrku6FPN71VLHff4FMuTCAupGjioS6xrtGSCGu2VWECFHSi5uSVxxdU9wWGV1RL9XZ"
-      },
-      {
-        "amount": "10000",
-        "amount_units": 0.00001,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
-        "counterparty_label": null,
-        "date": "2026-10-08T20:45:25Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/aRpqm6LgMuexy6z6s4MxW1yh1eETgDdYGZVQzFYm3ZQ75dZDyhwEE1qsFep3RGxYun21XSTewej3zEkezzMPn3i",
-        "fee": 0.00001,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791492325,
-        "tx_id": "aRpqm6LgMuexy6z6s4MxW1yh1eETgDdYGZVQzFYm3ZQ75dZDyhwEE1qsFep3RGxYun21XSTewej3zEkezzMPn3i"
-      },
-      {
-        "amount": "10000",
-        "amount_units": 0.00001,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
-        "counterparty_label": null,
-        "date": "2026-10-08T20:31:02Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/29SPqKRvC7DmCvYcPQH3eUxWQkb9ZsTxo2zTMPVzoaYMtxce64C9qXxFnw9u2tyPMXchiaqg7tpcmEmYUnkDz4BL",
-        "fee": 0.00001,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791491462,
-        "tx_id": "29SPqKRvC7DmCvYcPQH3eUxWQkb9ZsTxo2zTMPVzoaYMtxce64C9qXxFnw9u2tyPMXchiaqg7tpcmEmYUnkDz4BL"
-      },
-      {
-        "amount": "10000",
-        "amount_units": 0.00001,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
-        "counterparty_label": null,
         "date": "2026-10-08T20:12:45Z",
         "decimals": 9,
         "explorer_url": "https://explorer.solana.com/tx/4XGiBfogmSwCgm1e8HCaF1D72szVuxdVVP8YmVtFYZSf7Xns7gnh4fM8NwfR4vMLKd2dCEfhVtupcAATPvJoqyNd",
@@ -1801,14 +1788,14 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-08T19:18:48Z",
+        "date": "2026-10-08T16:16:25Z",
         "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/FKunfiGJj2qNiYZEVGifD9SSajFCkq8MBifpZgi5KkWHQnTJ2jpeUq6Bg2MrTcQxiXaL6tUf7iMBBpe3LrBaUAB",
+        "explorer_url": "https://explorer.solana.com/tx/3461fycx6zsNB9kqQsvP7vBtT34CfpEfQNA8crhHi84BfhfiN1SVitQXwoMMKdroYAwCDfJFoZj1YxfLUqjAxvxt",
         "fee": 0.00001,
         "incoming": true,
         "scam_flag": false,
-        "timestamp": 1791487128,
-        "tx_id": "FKunfiGJj2qNiYZEVGifD9SSajFCkq8MBifpZgi5KkWHQnTJ2jpeUq6Bg2MrTcQxiXaL6tUf7iMBBpe3LrBaUAB"
+        "timestamp": 1791476185,
+        "tx_id": "3461fycx6zsNB9kqQsvP7vBtT34CfpEfQNA8crhHi84BfhfiN1SVitQXwoMMKdroYAwCDfJFoZj1YxfLUqjAxvxt"
       },
       {
         "amount": "10000",
@@ -1817,14 +1804,14 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-08T18:57:22Z",
+        "date": "2026-10-08T15:40:05Z",
         "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/4qKcG7xJ5wXiAatbcHMqwJ4xn79UVm1GyMxzm21Dg7T4tLznLnG28FqcTMynK2ykBkYijzVG3susqypdEKAX3Xm",
+        "explorer_url": "https://explorer.solana.com/tx/5dEUuhnG5yLvYWcSz9cLge8qEPHkniDv7RLuKtVXrckG7utrywWbLKfEyNrxcBfd8Bk1GhmH2VTRYTcPd3EGj4oB",
         "fee": 0.00001,
         "incoming": true,
         "scam_flag": false,
-        "timestamp": 1791485842,
-        "tx_id": "4qKcG7xJ5wXiAatbcHMqwJ4xn79UVm1GyMxzm21Dg7T4tLznLnG28FqcTMynK2ykBkYijzVG3susqypdEKAX3Xm"
+        "timestamp": 1791474005,
+        "tx_id": "5dEUuhnG5yLvYWcSz9cLge8qEPHkniDv7RLuKtVXrckG7utrywWbLKfEyNrxcBfd8Bk1GhmH2VTRYTcPd3EGj4oB"
       },
       {
         "amount": "10000",
@@ -1833,14 +1820,14 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-08T18:39:34Z",
+        "date": "2026-10-08T01:56:06Z",
         "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/cjHU26u9YNrDY8yHp2QoSrTVjV8QmvZRkaqntmLGbiurSowjqRiDs7waRqd9zGKs9cHevxASTb4NXuzSj3axSjP",
+        "explorer_url": "https://explorer.solana.com/tx/2xmHKQjDCCFmD61vo8vvtEowYgQbE6TsrWLeaUqtx7NHtL1Z2MjjB6roXF6KpfxQaMnxuXxujpkimNqPzKy7beYe",
         "fee": 0.00001,
         "incoming": true,
         "scam_flag": false,
-        "timestamp": 1791484774,
-        "tx_id": "cjHU26u9YNrDY8yHp2QoSrTVjV8QmvZRkaqntmLGbiurSowjqRiDs7waRqd9zGKs9cHevxASTb4NXuzSj3axSjP"
+        "timestamp": 1791424566,
+        "tx_id": "2xmHKQjDCCFmD61vo8vvtEowYgQbE6TsrWLeaUqtx7NHtL1Z2MjjB6roXF6KpfxQaMnxuXxujpkimNqPzKy7beYe"
       },
       {
         "amount": "10000",
@@ -1849,14 +1836,14 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-08T18:31:20Z",
+        "date": "2026-10-08T01:38:25Z",
         "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/5auM1DYyAuspDtUymZnEdUJ4fHZv6qTyU6ArhfB1fjjrNGp8sLiykpvtxuUgFcCRX6ebVkGGc5mfGXA1h8JX7sg2",
+        "explorer_url": "https://explorer.solana.com/tx/3cSdgLyw678Gmz3ycocAjHRngujUFSePmp9bixvFYVixhwMjcD4BLudV1i8Ws9KAfFLygm7P88EfgpWZ9J8j51d7",
         "fee": 0.00001,
         "incoming": true,
         "scam_flag": false,
-        "timestamp": 1791484280,
-        "tx_id": "5auM1DYyAuspDtUymZnEdUJ4fHZv6qTyU6ArhfB1fjjrNGp8sLiykpvtxuUgFcCRX6ebVkGGc5mfGXA1h8JX7sg2"
+        "timestamp": 1791423505,
+        "tx_id": "3cSdgLyw678Gmz3ycocAjHRngujUFSePmp9bixvFYVixhwMjcD4BLudV1i8Ws9KAfFLygm7P88EfgpWZ9J8j51d7"
       },
       {
         "amount": "10000",
@@ -1865,27 +1852,123 @@
         "asset_symbol": "SOL",
         "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
         "counterparty_label": null,
-        "date": "2026-10-08T18:18:54Z",
+        "date": "2026-10-08T00:37:43Z",
         "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/26nXgPs5dqvJMtfkD6ZmejB1eo4sBp8Xw4a2GJWLdMA8nVu7Q7YSgSJPP1LTLGb81AMoJKisaHcz5TNRXppyRhTf",
+        "explorer_url": "https://explorer.solana.com/tx/mJnZkJGmAJ9fELPVXW4Gt3t8r4Sa6w8bcXeoFutiQV9dAeWzjMAnA5GdnhB3LBPmbZW1LHGHWfnBSTDiiL38ZMh",
         "fee": 0.00001,
         "incoming": true,
         "scam_flag": false,
-        "timestamp": 1791483534,
-        "tx_id": "26nXgPs5dqvJMtfkD6ZmejB1eo4sBp8Xw4a2GJWLdMA8nVu7Q7YSgSJPP1LTLGb81AMoJKisaHcz5TNRXppyRhTf"
+        "timestamp": 1791419863,
+        "tx_id": "mJnZkJGmAJ9fELPVXW4Gt3t8r4Sa6w8bcXeoFutiQV9dAeWzjMAnA5GdnhB3LBPmbZW1LHGHWfnBSTDiiL38ZMh"
+      },
+      {
+        "amount": "10000",
+        "amount_units": 0.00001,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
+        "counterparty_label": null,
+        "date": "2026-10-08T00:02:17Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/2dwQnw4pvt2FsfxAmXj4jgK3R4meejPydoJqGbsGyWeSnsXfz21qHZnjY7RhxUyH1RhJLe8K1BERYB9kYbJHYPZr",
+        "fee": 0.00001,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791417737,
+        "tx_id": "2dwQnw4pvt2FsfxAmXj4jgK3R4meejPydoJqGbsGyWeSnsXfz21qHZnjY7RhxUyH1RhJLe8K1BERYB9kYbJHYPZr"
+      },
+      {
+        "amount": "10000",
+        "amount_units": 0.00001,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
+        "counterparty_label": null,
+        "date": "2026-10-07T22:14:25Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/66FmZ4igMRSwZTzF2yiCGFKGMwrhxWzZcruf7Vvjpvu8DsxGxcxLWPxL4RnJnJHbrR9JYi7MjDAaqZezRJzVDcMR",
+        "fee": 0.00001,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791411265,
+        "tx_id": "66FmZ4igMRSwZTzF2yiCGFKGMwrhxWzZcruf7Vvjpvu8DsxGxcxLWPxL4RnJnJHbrR9JYi7MjDAaqZezRJzVDcMR"
+      },
+      {
+        "amount": "10000",
+        "amount_units": 0.00001,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
+        "counterparty_label": null,
+        "date": "2026-10-07T22:10:13Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/53GrhepkcuQHDSVcwanfcqUa2rDkhe4RCLvZGbdW21enLBEie4sLzjVgSWH7nTzHwLgUysRTLqbYYj464DvkPPUL",
+        "fee": 0.00001,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791411013,
+        "tx_id": "53GrhepkcuQHDSVcwanfcqUa2rDkhe4RCLvZGbdW21enLBEie4sLzjVgSWH7nTzHwLgUysRTLqbYYj464DvkPPUL"
+      },
+      {
+        "amount": "10000",
+        "amount_units": 0.00001,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
+        "counterparty_label": null,
+        "date": "2026-10-07T22:10:03Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/3AfN5h8chHzjzb8epGb1hNaYJGg4hUCHMmnwcyqh4Ex77bNYmhJy1MUi8KybdzLYKGAQA89YHLro2j32rNodbaQc",
+        "fee": 0.00001,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791411003,
+        "tx_id": "3AfN5h8chHzjzb8epGb1hNaYJGg4hUCHMmnwcyqh4Ex77bNYmhJy1MUi8KybdzLYKGAQA89YHLro2j32rNodbaQc"
+      },
+      {
+        "amount": "10000",
+        "amount_units": 0.00001,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
+        "counterparty_label": null,
+        "date": "2026-10-07T22:00:31Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/3QnrZ4c29Cf8ycjBWCbYAdPsTEC3jXLSUChAbxqWvc2nzN2MtYjR4ZrGvXJ7pCiBihaUFLFUF1H622YLvS2ZW2qV",
+        "fee": 0.00001,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791410431,
+        "tx_id": "3QnrZ4c29Cf8ycjBWCbYAdPsTEC3jXLSUChAbxqWvc2nzN2MtYjR4ZrGvXJ7pCiBihaUFLFUF1H622YLvS2ZW2qV"
+      },
+      {
+        "amount": "10000",
+        "amount_units": 0.00001,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "2sYKRWBNVY6UomMBi4juoMrrL98bqizDMn98cJ3cBmye",
+        "counterparty_label": null,
+        "date": "2026-10-07T21:17:42Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/5wBkYdDqLBXV8HhJtecARdhsjHsfV5UyxoH48nfKpPhY39A5bkSraGmMaSHFDCZnw9NEKUhjDBdRN7Bj4sDpt5qo",
+        "fee": 0.00001,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791407862,
+        "tx_id": "5wBkYdDqLBXV8HhJtecARdhsjHsfV5UyxoH48nfKpPhY39A5bkSraGmMaSHFDCZnw9NEKUhjDBdRN7Bj4sDpt5qo"
       }
     ],
     "to": "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
     "to_info": {
       "address": "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
-      "balance": "705833",
+      "balance": "959092",
       "extra": {},
       "first_seen": null,
       "is_active": true,
       "is_contract": false,
       "is_scam": false,
       "labels": [],
-      "last_active": 1791650903,
+      "last_active": 1791655905,
       "name": null,
       "native_decimals": 9,
       "native_symbol": "SOL",
@@ -1965,7 +2048,7 @@
     "transfers": []
   },
   {
-    "elapsed_ms": 55722,
+    "elapsed_ms": 74627,
     "from": "4CxCdcanMeXf6uoNAJ82vHUtTMyAVkicMBQ4wsVmXxqy",
     "from_info": {
       "address": "4CxCdcanMeXf6uoNAJ82vHUtTMyAVkicMBQ4wsVmXxqy",
@@ -1989,8 +2072,8 @@
       "tx_count": null
     },
     "from_input": "4CxCdcanMeXf6uoNAJ82vHUtTMyAVkicMBQ4wsVmXxqy",
-    "generated_at": 1791650868,
-    "max_risk": 0.9495372864426603,
+    "generated_at": 1791655900,
+    "max_risk": 0.0,
     "mode": "full",
     "network": {
       "chain_id": null,
@@ -1998,7 +2081,7 @@
       "name": "solana"
     },
     "notes": [
-      "funding of 66LLBT5jzGPJd1nREL5RcYBLCWyaRSJUC3TVyd6ueuJa9sq1EhTEjLn2JYPh9598vB7G9S65BAEYu5t9sNWN6BEw: more than 5 sources, truncated"
+      "no transfer from sender to receiver found in the fetched history"
     ],
     "pages_fetched": 1,
     "receiver_provenance": {
@@ -2024,7 +2107,7 @@
         "tokens": [],
         "tx_count": null
       },
-      "events_checked": 2,
+      "events_checked": 0,
       "exposure": null,
       "network": {
         "chain_id": null,
@@ -2033,226 +2116,18 @@
       },
       "reasons": [
         {
-          "code": "PASS_THROUGH",
-          "message": "the counterparty forwards what it receives",
-          "points": 40
+          "code": "SINGLE_USE",
+          "message": "the counterparty has no other activity on its network",
+          "points": 25
         }
       ],
       "risk": "Medium",
-      "score": 40,
+      "score": 25,
       "verified": true
     },
     "schema_version": 2,
-    "sender_events_scanned": 28,
+    "sender_events_scanned": 9,
     "sender_recent": [
-      {
-        "amount": "1511597944",
-        "amount_units": 1.511597944,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "2W2tLuZVnEWE6dhi89feYFB63n3gQFmJuwKPNGq1PsgK",
-        "counterparty_label": null,
-        "date": "2026-10-10T16:39:51Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/66LLBT5jzGPJd1nREL5RcYBLCWyaRSJUC3TVyd6ueuJa9sq1EhTEjLn2JYPh9598vB7G9S65BAEYu5t9sNWN6BEw",
-        "fee": 5.3e-6,
-        "incoming": false,
-        "scam_flag": false,
-        "timestamp": 1791650391,
-        "tx_id": "66LLBT5jzGPJd1nREL5RcYBLCWyaRSJUC3TVyd6ueuJa9sq1EhTEjLn2JYPh9598vB7G9S65BAEYu5t9sNWN6BEw"
-      },
-      {
-        "amount": "1513840",
-        "amount_units": 0.00151384,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "9QgtdsezXsXtRgz6xkwTtYYhFr1aNUgHC3UvQxckDtw3",
-        "counterparty_label": null,
-        "date": "2026-10-10T15:51:00Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/ba9w7v31qCis4xdzRuATgxS1gg5Rk6PWy2FGdQMPoshmquzg9ixZcLqZCC4ArkYzbjmJF2QLjsVjve9dtxvxsNz",
-        "fee": 5e-6,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791647460,
-        "tx_id": "ba9w7v31qCis4xdzRuATgxS1gg5Rk6PWy2FGdQMPoshmquzg9ixZcLqZCC4ArkYzbjmJF2QLjsVjve9dtxvxsNz"
-      },
-      {
-        "amount": "730625183",
-        "amount_units": 0.730625183,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "Ar1ivDKb1JoY3nKz5fZpZwDy4VxddQ3qPcF1DjyAwjf3",
-        "counterparty_label": null,
-        "date": "2026-10-10T15:19:27Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/2TrzCqrGKvmNUoCjMjfd93oHLonzxmcfV9qE5Cs3TzCqWfQZJvHH2wkQPyt7KggeJaTDyXN93SYJRsJfKXZNNVgo",
-        "fee": 0.000025,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791645567,
-        "tx_id": "2TrzCqrGKvmNUoCjMjfd93oHLonzxmcfV9qE5Cs3TzCqWfQZJvHH2wkQPyt7KggeJaTDyXN93SYJRsJfKXZNNVgo"
-      },
-      {
-        "amount": "1350033095400",
-        "amount_units": 1350033.0954,
-        "asset_address": "Vs2Tz3Dm3csyWqvrs31hSaFjqGGTQoBxt78axDgpump",
-        "asset_symbol": "Vs2Tz3",
-        "counterparty": "EeFwFZKYayMVvhbLZnPeL2THZg1hTviomjzHQyF68Cvd",
-        "counterparty_label": null,
-        "date": "2026-10-10T15:19:27Z",
-        "decimals": 6,
-        "explorer_url": "https://explorer.solana.com/tx/2TrzCqrGKvmNUoCjMjfd93oHLonzxmcfV9qE5Cs3TzCqWfQZJvHH2wkQPyt7KggeJaTDyXN93SYJRsJfKXZNNVgo",
-        "fee": null,
-        "incoming": false,
-        "scam_flag": false,
-        "timestamp": 1791645567,
-        "tx_id": "2TrzCqrGKvmNUoCjMjfd93oHLonzxmcfV9qE5Cs3TzCqWfQZJvHH2wkQPyt7KggeJaTDyXN93SYJRsJfKXZNNVgo#0"
-      },
-      {
-        "amount": "759519220",
-        "amount_units": 0.75951922,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "Ar1ivDKb1JoY3nKz5fZpZwDy4VxddQ3qPcF1DjyAwjf3",
-        "counterparty_label": null,
-        "date": "2026-10-10T15:18:59Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/4JWoqJec4UaoHQbcAMDevgX6QT8hd5xTZV68YZB7KUcDLWuWKVVPTyuwknVRS3ArmdHdBVke96gNPvWfoVdQgdXW",
-        "fee": 0.000025,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791645539,
-        "tx_id": "4JWoqJec4UaoHQbcAMDevgX6QT8hd5xTZV68YZB7KUcDLWuWKVVPTyuwknVRS3ArmdHdBVke96gNPvWfoVdQgdXW"
-      },
-      {
-        "amount": "1400139225035",
-        "amount_units": 1400139.225035,
-        "asset_address": "Vs2Tz3Dm3csyWqvrs31hSaFjqGGTQoBxt78axDgpump",
-        "asset_symbol": "Vs2Tz3",
-        "counterparty": "EeFwFZKYayMVvhbLZnPeL2THZg1hTviomjzHQyF68Cvd",
-        "counterparty_label": null,
-        "date": "2026-10-10T15:18:59Z",
-        "decimals": 6,
-        "explorer_url": "https://explorer.solana.com/tx/4JWoqJec4UaoHQbcAMDevgX6QT8hd5xTZV68YZB7KUcDLWuWKVVPTyuwknVRS3ArmdHdBVke96gNPvWfoVdQgdXW",
-        "fee": null,
-        "incoming": false,
-        "scam_flag": false,
-        "timestamp": 1791645539,
-        "tx_id": "4JWoqJec4UaoHQbcAMDevgX6QT8hd5xTZV68YZB7KUcDLWuWKVVPTyuwknVRS3ArmdHdBVke96gNPvWfoVdQgdXW#0"
-      },
-      {
-        "amount": "1",
-        "amount_units": 1e-9,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "AggJuuQK94wvUuUBP8SyUUo7rfhHtEx5oS6jnY6X2ZhJ",
-        "counterparty_label": null,
-        "date": "2026-10-10T14:48:50Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/gqZkzhhoHEW83L2pbf25GqWCcRMiH42PF3nnHyDZusXPNPrTByyExdBgEBLhTNiSRt1RMMujcL7TZDK7nxRRT7g",
-        "fee": null,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791643730,
-        "tx_id": "gqZkzhhoHEW83L2pbf25GqWCcRMiH42PF3nnHyDZusXPNPrTByyExdBgEBLhTNiSRt1RMMujcL7TZDK7nxRRT7g"
-      },
-      {
-        "amount": "1037994593",
-        "amount_units": 1.037994593,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "Dw3UgZJj7ykoi1VHaiXz6GuwvkN2yrxBV9ico62m2xs4",
-        "counterparty_label": null,
-        "date": "2026-10-10T14:48:42Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/28cvotcS7SmT6GcG2pNiGucJmuC3xGihMA3LKKNEj3Ub55sgNscacqTX29zUipXaMDCx4iD5yq6Y4YQ7Xrpp12V3",
-        "fee": 5.3e-6,
-        "incoming": false,
-        "scam_flag": false,
-        "timestamp": 1791643722,
-        "tx_id": "28cvotcS7SmT6GcG2pNiGucJmuC3xGihMA3LKKNEj3Ub55sgNscacqTX29zUipXaMDCx4iD5yq6Y4YQ7Xrpp12V3"
-      },
-      {
-        "amount": "143501971",
-        "amount_units": 0.143501971,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "8wDkvhWXMzZbuXzuH6jTo9tvPMtzp7zs7N5A9WTXgqq3",
-        "counterparty_label": null,
-        "date": "2026-10-10T14:44:55Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/2VmVmxeL9DmpQkFmQ7Wmi4rgGnSXRG2xW8Bf8QRRVFpaEgKxpCosqqQAMqYdbURR6Uodr8HA8TbvSoAemBQbT6rh",
-        "fee": 7.978e-6,
-        "incoming": false,
-        "scam_flag": false,
-        "timestamp": 1791643495,
-        "tx_id": "2VmVmxeL9DmpQkFmQ7Wmi4rgGnSXRG2xW8Bf8QRRVFpaEgKxpCosqqQAMqYdbURR6Uodr8HA8TbvSoAemBQbT6rh"
-      },
-      {
-        "amount": "2750172320435",
-        "amount_units": 2750172.320435,
-        "asset_address": "Vs2Tz3Dm3csyWqvrs31hSaFjqGGTQoBxt78axDgpump",
-        "asset_symbol": "Vs2Tz3",
-        "counterparty": "8wDkvhWXMzZbuXzuH6jTo9tvPMtzp7zs7N5A9WTXgqq3",
-        "counterparty_label": null,
-        "date": "2026-10-10T14:44:55Z",
-        "decimals": 6,
-        "explorer_url": "https://explorer.solana.com/tx/2VmVmxeL9DmpQkFmQ7Wmi4rgGnSXRG2xW8Bf8QRRVFpaEgKxpCosqqQAMqYdbURR6Uodr8HA8TbvSoAemBQbT6rh",
-        "fee": null,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791643495,
-        "tx_id": "2VmVmxeL9DmpQkFmQ7Wmi4rgGnSXRG2xW8Bf8QRRVFpaEgKxpCosqqQAMqYdbURR6Uodr8HA8TbvSoAemBQbT6rh#0"
-      },
-      {
-        "amount": "1513840",
-        "amount_units": 0.00151384,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "9SE76yQsHuxoVimXqetWsBKkaXmgi9Ru5P36enbaExdF",
-        "counterparty_label": null,
-        "date": "2026-10-10T08:44:09Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/3kk7joeKZvHJgS81KKqanj2sE9xVuUXPt9cDja7f9iT5AtRyR6k7GQN4a9iWyN7vtPcWGpwA3HySFxrER9pkdCbH",
-        "fee": 5e-6,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791621849,
-        "tx_id": "3kk7joeKZvHJgS81KKqanj2sE9xVuUXPt9cDja7f9iT5AtRyR6k7GQN4a9iWyN7vtPcWGpwA3HySFxrER9pkdCbH"
-      },
-      {
-        "amount": "1000",
-        "amount_units": 1e-6,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "ENpcG7L9KShWARocWMUEDZMGg8pTe9uUE8q1AStE4kgo",
-        "counterparty_label": null,
-        "date": "2026-10-10T07:15:29Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/X7pwCUT4WxhmEkfJEyVHwLnimQf7t1fbhnopQcNBzUjNA5ciLEqhK7tibEMy7b8Y7aRPrSVYNLqwutfUHqQcU4g",
-        "fee": null,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791616529,
-        "tx_id": "X7pwCUT4WxhmEkfJEyVHwLnimQf7t1fbhnopQcNBzUjNA5ciLEqhK7tibEMy7b8Y7aRPrSVYNLqwutfUHqQcU4g"
-      },
-      {
-        "amount": "1",
-        "amount_units": 1e-9,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "DSASqeWBx2pk5RQ8FD2FRKjQvsK6xMBTpwNu9d8Z8xUe",
-        "counterparty_label": null,
-        "date": "2026-10-10T07:15:20Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/iZaaQTigFnrCwt6eeE7BzeaxAEC78ELCE1eH8Ursf5JzhX4Uf7e3b6vzci3wq3grRBKAcc1Zb7Vk5dgUdWq2uJW",
-        "fee": null,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791616520,
-        "tx_id": "iZaaQTigFnrCwt6eeE7BzeaxAEC78ELCE1eH8Ursf5JzhX4Uf7e3b6vzci3wq3grRBKAcc1Zb7Vk5dgUdWq2uJW"
-      },
       {
         "amount": "1",
         "amount_units": 1e-9,
@@ -2270,22 +2145,6 @@
         "tx_id": "5BAoyjmzD6g1wc3AWjxmxMTexwJ3ASJUo4WERaRvak86iikXpGShe18938HtoMC8jVy9qq6x6mETUj5Rn7PZP3Gi"
       },
       {
-        "amount": "525699158",
-        "amount_units": 0.525699158,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "GPEPebTqirB15QTCYsFHKVSSbHj9Kq9bQGFku7xYQ6ck",
-        "counterparty_label": null,
-        "date": "2026-10-10T07:15:12Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/2UGu8vwNpJqKF6cSs9bsPs9mLtvW9kdXmWD8gBrRzfNu511H5ZFgJaSTom2kZhDSTMRPgQn1EFFukFnnMk9jQs5d",
-        "fee": 5.3e-6,
-        "incoming": false,
-        "scam_flag": false,
-        "timestamp": 1791616512,
-        "tx_id": "2UGu8vwNpJqKF6cSs9bsPs9mLtvW9kdXmWD8gBrRzfNu511H5ZFgJaSTom2kZhDSTMRPgQn1EFFukFnnMk9jQs5d"
-      },
-      {
         "amount": "927366393",
         "amount_units": 0.927366393,
         "asset_address": null,
@@ -2300,38 +2159,6 @@
         "scam_flag": false,
         "timestamp": 1791616512,
         "tx_id": "yhb8XLst3bRYS8ar8YcNqeVNm6qFNNnvAKH8cjarz1VLsW5fFLD4o8Y1LNkJfcjvqxzCRg7R1bxunSZ6YNWPHve"
-      },
-      {
-        "amount": "289839781",
-        "amount_units": 0.289839781,
-        "asset_address": null,
-        "asset_symbol": "SOL",
-        "counterparty": "BKjbGbGFmvGEkTmo7GR59c9Bwqo7kPKJ6myaJz9PcYsJ",
-        "counterparty_label": null,
-        "date": "2026-10-10T07:08:46Z",
-        "decimals": 9,
-        "explorer_url": "https://explorer.solana.com/tx/3yBDgGA7Sr75jm7sWoVsMgGmkReLZFNEZcTpjmXzEenpnYZWndkSijfgpV8QvHrpzhLdX1NJQQZnaE5JGFc2gq29",
-        "fee": 5.399e-6,
-        "incoming": true,
-        "scam_flag": false,
-        "timestamp": 1791616126,
-        "tx_id": "3yBDgGA7Sr75jm7sWoVsMgGmkReLZFNEZcTpjmXzEenpnYZWndkSijfgpV8QvHrpzhLdX1NJQQZnaE5JGFc2gq29"
-      },
-      {
-        "amount": "110099511489",
-        "amount_units": 110099.511489,
-        "asset_address": "NVGMjmiPgc39yv7JoMDW4BCsWdrCVBVD5d5Mwyjpump",
-        "asset_symbol": "NVGMjm",
-        "counterparty": "Hs8nz2ZMXPdLdrzpcykZDqNkpBDAcodpfecpgYdejqzD",
-        "counterparty_label": null,
-        "date": "2026-10-10T07:08:46Z",
-        "decimals": 6,
-        "explorer_url": "https://explorer.solana.com/tx/3yBDgGA7Sr75jm7sWoVsMgGmkReLZFNEZcTpjmXzEenpnYZWndkSijfgpV8QvHrpzhLdX1NJQQZnaE5JGFc2gq29",
-        "fee": null,
-        "incoming": false,
-        "scam_flag": false,
-        "timestamp": 1791616126,
-        "tx_id": "3yBDgGA7Sr75jm7sWoVsMgGmkReLZFNEZcTpjmXzEenpnYZWndkSijfgpV8QvHrpzhLdX1NJQQZnaE5JGFc2gq29#0"
       },
       {
         "amount": "283060040",
@@ -2364,6 +2191,86 @@
         "scam_flag": false,
         "timestamp": 1791616109,
         "tx_id": "5k9gnH3FQXdt68WGV6MqH2scNYocZ54tDuJoXPBGWh9v9m7bDxgAqHNyojR839pCxHEH2SWRWybCVkCQgBy3CKS4#0"
+      },
+      {
+        "amount": "10000",
+        "amount_units": 0.00001,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "2eugp91T8J9ExJ5h8GhVP6XkjaXdKpdTY595CEXBG5Xy",
+        "counterparty_label": null,
+        "date": "2026-10-10T06:56:45Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/2SmUBhgujFXD4rTMB6icwKAK5pEb2gc1Axazoc7yaEMGqNwGkSP53aqZFFWR1GnsWhUZ8kfA7u1wF7k9N8V2yz33",
+        "fee": null,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791615405,
+        "tx_id": "2SmUBhgujFXD4rTMB6icwKAK5pEb2gc1Axazoc7yaEMGqNwGkSP53aqZFFWR1GnsWhUZ8kfA7u1wF7k9N8V2yz33"
+      },
+      {
+        "amount": "1",
+        "amount_units": 1e-9,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "67VLJJeNdpd88qMu1UoXszPMFJxBZaref4Le9R1tjPRn",
+        "counterparty_label": null,
+        "date": "2026-10-10T06:55:35Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/4mNdHbjW59od4G3fgrspcsFGejRwRNRqdMqdtZZzrTNSwZ7HcEXCTKD5k7nYCP1nAXs8wabBWtXnxonjN1exz6ds",
+        "fee": null,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791615335,
+        "tx_id": "4mNdHbjW59od4G3fgrspcsFGejRwRNRqdMqdtZZzrTNSwZ7HcEXCTKD5k7nYCP1nAXs8wabBWtXnxonjN1exz6ds"
+      },
+      {
+        "amount": "1446314100",
+        "amount_units": 1.4463141,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "8U7TftwX4MGKZZUmTcRDYPYHRJL6pA2A6DCcKMfGXasx",
+        "counterparty_label": null,
+        "date": "2026-10-10T06:55:07Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/5AynBYvLtJMx3vBPs3xs7Tedrs9xfADnCL8hiuLQ42QmWYZZQikTAdKVnmTNcsuXr7EThg8XYPKRgyMeoSobdm5h",
+        "fee": null,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791615307,
+        "tx_id": "5AynBYvLtJMx3vBPs3xs7Tedrs9xfADnCL8hiuLQ42QmWYZZQikTAdKVnmTNcsuXr7EThg8XYPKRgyMeoSobdm5h"
+      },
+      {
+        "amount": "5219546386",
+        "amount_units": 5.219546386,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "6WqWSixAtKRa4tgwdsDvrsiVqvNBdWREE8TsdM9oZTF5",
+        "counterparty_label": null,
+        "date": "2026-10-10T06:55:04Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/4TTb2Ei5fduYBx7CQRf3zR1RAfSggUTVrwPVk5ohKfPfKgjv3ztBMaCfwn5dVaD99HaydQxbeLBvqioFHbLYgcCu",
+        "fee": null,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791615304,
+        "tx_id": "4TTb2Ei5fduYBx7CQRf3zR1RAfSggUTVrwPVk5ohKfPfKgjv3ztBMaCfwn5dVaD99HaydQxbeLBvqioFHbLYgcCu"
+      },
+      {
+        "amount": "1199978101",
+        "amount_units": 1.199978101,
+        "asset_address": null,
+        "asset_symbol": "SOL",
+        "counterparty": "EZwwehAAh4EBVziQHCQPmHJPYLVXfw82Gf2qoXxA8RPX",
+        "counterparty_label": null,
+        "date": "2026-10-10T06:55:03Z",
+        "decimals": 9,
+        "explorer_url": "https://explorer.solana.com/tx/MzMXjzxSUNv5N3nvsJMQ7dKV2sfaBHQmaP32jCF5AWZBaRXr9t4K1jvPRDTUfV5hKsZfTXQACWVsKa3Y1kjw9Lc",
+        "fee": null,
+        "incoming": true,
+        "scam_flag": false,
+        "timestamp": 1791615303,
+        "tx_id": "MzMXjzxSUNv5N3nvsJMQ7dKV2sfaBHQmaP32jCF5AWZBaRXr9t4K1jvPRDTUfV5hKsZfTXQACWVsKa3Y1kjw9Lc"
       }
     ],
     "to": "2W2tLuZVnEWE6dhi89feYFB63n3gQFmJuwKPNGq1PsgK",
@@ -2389,349 +2296,6 @@
       "tx_count": null
     },
     "to_input": "2W2tLuZVnEWE6dhi89feYFB63n3gQFmJuwKPNGq1PsgK",
-    "transfers": [
-      {
-        "event": {
-          "amount": "1511597944",
-          "amount_units": 1.511597944,
-          "asset_address": null,
-          "asset_symbol": "SOL",
-          "counterparty": "2W2tLuZVnEWE6dhi89feYFB63n3gQFmJuwKPNGq1PsgK",
-          "counterparty_label": null,
-          "date": "2026-10-10T16:39:51Z",
-          "decimals": 9,
-          "explorer_url": "https://explorer.solana.com/tx/66LLBT5jzGPJd1nREL5RcYBLCWyaRSJUC3TVyd6ueuJa9sq1EhTEjLn2JYPh9598vB7G9S65BAEYu5t9sNWN6BEw",
-          "fee": 5.3e-6,
-          "incoming": false,
-          "scam_flag": false,
-          "timestamp": 1791650391,
-          "tx_id": "66LLBT5jzGPJd1nREL5RcYBLCWyaRSJUC3TVyd6ueuJa9sq1EhTEjLn2JYPh9598vB7G9S65BAEYu5t9sNWN6BEw"
-        },
-        "funding": [
-          {
-            "event": {
-              "amount": "1513840",
-              "amount_units": 0.00151384,
-              "asset_address": null,
-              "asset_symbol": "SOL",
-              "counterparty": "9QgtdsezXsXtRgz6xkwTtYYhFr1aNUgHC3UvQxckDtw3",
-              "counterparty_label": null,
-              "date": "2026-10-10T15:51:00Z",
-              "decimals": 9,
-              "explorer_url": "https://explorer.solana.com/tx/ba9w7v31qCis4xdzRuATgxS1gg5Rk6PWy2FGdQMPoshmquzg9ixZcLqZCC4ArkYzbjmJF2QLjsVjve9dtxvxsNz",
-              "fee": 5e-6,
-              "incoming": true,
-              "scam_flag": false,
-              "timestamp": 1791647460,
-              "tx_id": "ba9w7v31qCis4xdzRuATgxS1gg5Rk6PWy2FGdQMPoshmquzg9ixZcLqZCC4ArkYzbjmJF2QLjsVjve9dtxvxsNz"
-            },
-            "from_info": {
-              "address": "9QgtdsezXsXtRgz6xkwTtYYhFr1aNUgHC3UvQxckDtw3",
-              "balance": "0",
-              "extra": {},
-              "first_seen": null,
-              "is_active": true,
-              "is_contract": false,
-              "is_scam": false,
-              "labels": [],
-              "last_active": 1791647460,
-              "name": null,
-              "native_decimals": 9,
-              "native_symbol": "SOL",
-              "network": {
-                "chain_id": null,
-                "family": "solana",
-                "name": "solana"
-              },
-              "tokens": [],
-              "tx_count": null
-            },
-            "share_of_transfer": 0.0010014832356771187
-          },
-          {
-            "event": {
-              "amount": "730625183",
-              "amount_units": 0.730625183,
-              "asset_address": null,
-              "asset_symbol": "SOL",
-              "counterparty": "Ar1ivDKb1JoY3nKz5fZpZwDy4VxddQ3qPcF1DjyAwjf3",
-              "counterparty_label": null,
-              "date": "2026-10-10T15:19:27Z",
-              "decimals": 9,
-              "explorer_url": "https://explorer.solana.com/tx/2TrzCqrGKvmNUoCjMjfd93oHLonzxmcfV9qE5Cs3TzCqWfQZJvHH2wkQPyt7KggeJaTDyXN93SYJRsJfKXZNNVgo",
-              "fee": 0.000025,
-              "incoming": true,
-              "scam_flag": false,
-              "timestamp": 1791645567,
-              "tx_id": "2TrzCqrGKvmNUoCjMjfd93oHLonzxmcfV9qE5Cs3TzCqWfQZJvHH2wkQPyt7KggeJaTDyXN93SYJRsJfKXZNNVgo"
-            },
-            "from_info": {
-              "address": "Ar1ivDKb1JoY3nKz5fZpZwDy4VxddQ3qPcF1DjyAwjf3",
-              "balance": "869735729",
-              "extra": {},
-              "first_seen": null,
-              "is_active": true,
-              "is_contract": false,
-              "is_scam": false,
-              "labels": [],
-              "last_active": 1791649624,
-              "name": null,
-              "native_decimals": 9,
-              "native_symbol": "SOL",
-              "network": {
-                "chain_id": null,
-                "family": "solana",
-                "name": "solana"
-              },
-              "tokens": [],
-              "tx_count": null
-            },
-            "share_of_transfer": 0.483346240248657
-          },
-          {
-            "event": {
-              "amount": "759519220",
-              "amount_units": 0.75951922,
-              "asset_address": null,
-              "asset_symbol": "SOL",
-              "counterparty": "Ar1ivDKb1JoY3nKz5fZpZwDy4VxddQ3qPcF1DjyAwjf3",
-              "counterparty_label": null,
-              "date": "2026-10-10T15:18:59Z",
-              "decimals": 9,
-              "explorer_url": "https://explorer.solana.com/tx/4JWoqJec4UaoHQbcAMDevgX6QT8hd5xTZV68YZB7KUcDLWuWKVVPTyuwknVRS3ArmdHdBVke96gNPvWfoVdQgdXW",
-              "fee": 0.000025,
-              "incoming": true,
-              "scam_flag": false,
-              "timestamp": 1791645539,
-              "tx_id": "4JWoqJec4UaoHQbcAMDevgX6QT8hd5xTZV68YZB7KUcDLWuWKVVPTyuwknVRS3ArmdHdBVke96gNPvWfoVdQgdXW"
-            },
-            "from_info": {
-              "address": "Ar1ivDKb1JoY3nKz5fZpZwDy4VxddQ3qPcF1DjyAwjf3",
-              "balance": "869735729",
-              "extra": {},
-              "first_seen": null,
-              "is_active": true,
-              "is_contract": false,
-              "is_scam": false,
-              "labels": [],
-              "last_active": 1791649624,
-              "name": null,
-              "native_decimals": 9,
-              "native_symbol": "SOL",
-              "network": {
-                "chain_id": null,
-                "family": "solana",
-                "name": "solana"
-              },
-              "tokens": [],
-              "tx_count": null
-            },
-            "share_of_transfer": 0.5024611359222648
-          },
-          {
-            "event": {
-              "amount": "1",
-              "amount_units": 1e-9,
-              "asset_address": null,
-              "asset_symbol": "SOL",
-              "counterparty": "AggJuuQK94wvUuUBP8SyUUo7rfhHtEx5oS6jnY6X2ZhJ",
-              "counterparty_label": null,
-              "date": "2026-10-10T14:48:50Z",
-              "decimals": 9,
-              "explorer_url": "https://explorer.solana.com/tx/gqZkzhhoHEW83L2pbf25GqWCcRMiH42PF3nnHyDZusXPNPrTByyExdBgEBLhTNiSRt1RMMujcL7TZDK7nxRRT7g",
-              "fee": null,
-              "incoming": true,
-              "scam_flag": false,
-              "timestamp": 1791643730,
-              "tx_id": "gqZkzhhoHEW83L2pbf25GqWCcRMiH42PF3nnHyDZusXPNPrTByyExdBgEBLhTNiSRt1RMMujcL7TZDK7nxRRT7g"
-            },
-            "from_info": {
-              "address": "AggJuuQK94wvUuUBP8SyUUo7rfhHtEx5oS6jnY6X2ZhJ",
-              "balance": "4395520",
-              "extra": {},
-              "first_seen": null,
-              "is_active": true,
-              "is_contract": false,
-              "is_scam": false,
-              "labels": [],
-              "last_active": 1791651199,
-              "name": null,
-              "native_decimals": 9,
-              "native_symbol": "SOL",
-              "network": {
-                "chain_id": null,
-                "family": "solana",
-                "name": "solana"
-              },
-              "tokens": [],
-              "tx_count": null
-            },
-            "share_of_transfer": 6.615515745898633e-10
-          },
-          {
-            "event": {
-              "amount": "1513840",
-              "amount_units": 0.00151384,
-              "asset_address": null,
-              "asset_symbol": "SOL",
-              "counterparty": "9SE76yQsHuxoVimXqetWsBKkaXmgi9Ru5P36enbaExdF",
-              "counterparty_label": null,
-              "date": "2026-10-10T08:44:09Z",
-              "decimals": 9,
-              "explorer_url": "https://explorer.solana.com/tx/3kk7joeKZvHJgS81KKqanj2sE9xVuUXPt9cDja7f9iT5AtRyR6k7GQN4a9iWyN7vtPcWGpwA3HySFxrER9pkdCbH",
-              "fee": 5e-6,
-              "incoming": true,
-              "scam_flag": false,
-              "timestamp": 1791621849,
-              "tx_id": "3kk7joeKZvHJgS81KKqanj2sE9xVuUXPt9cDja7f9iT5AtRyR6k7GQN4a9iWyN7vtPcWGpwA3HySFxrER9pkdCbH"
-            },
-            "from_info": {
-              "address": "9SE76yQsHuxoVimXqetWsBKkaXmgi9Ru5P36enbaExdF",
-              "balance": "0",
-              "extra": {},
-              "first_seen": null,
-              "is_active": true,
-              "is_contract": false,
-              "is_scam": false,
-              "labels": [],
-              "last_active": 1791621849,
-              "name": null,
-              "native_decimals": 9,
-              "native_symbol": "SOL",
-              "network": {
-                "chain_id": null,
-                "family": "solana",
-                "name": "solana"
-              },
-              "tokens": [],
-              "tx_count": null
-            },
-            "share_of_transfer": 0.0010014832356771187
-          }
-        ],
-        "funding_coverage": 0.9878103433038278,
-        "related": [],
-        "risk": {
-          "band": "Medium",
-          "combined": 0.9495372864426603,
-          "features": {
-            "activity": "high",
-            "amount": 1.511597944,
-            "amount_vs_mean_out": 1.3003574664826771,
-            "amount_vs_p95_out": 0.42691363451798514,
-            "archetype": "trader",
-            "asset": null,
-            "asset_symbol": "SOL",
-            "balance_before": 0.0,
-            "cancels_24h": 0,
-            "cosigned": false,
-            "counterparty": null,
-            "counterparty_distinct_senders": 1,
-            "counterparty_fan_out_ratio": 1.0,
-            "counterparty_first_seen_age_secs": 0,
-            "counterparty_in_count": 1,
-            "counterparty_is_account": false,
-            "counterparty_new_for_sender": true,
-            "counterparty_out_count": 1,
-            "counterparty_pass_through": true,
-            "counterparty_prior_flags": 0,
-            "counterparty_prior_max_severity": null,
-            "counterparty_tx_count": 2,
-            "dapp_origin": null,
-            "decision_latency_secs": null,
-            "exceeds_own_limit": false,
-            "extra": {},
-            "fee": 5.3e-6,
-            "fraction_of_balance": 0.0,
-            "holding_ratio": 0.0,
-            "hour_utc": 16,
-            "intent_to_submit_secs": null,
-            "is_round_amount": false,
-            "kind": "external",
-            "network": {
-              "chain_id": null,
-              "family": "solana",
-              "name": "solana"
-            },
-            "policy": {
-              "band": "Medium",
-              "exposure_hops": null,
-              "reasons": [
-                "PASS_THROUGH"
-              ],
-              "risk_accepted": false,
-              "sanctions_hit": false,
-              "score": 40
-            },
-            "prior_cancel_rate": 0.0,
-            "reciprocal": false,
-            "risk_accepted": false,
-            "secs_since_sender_prev_tx": 2931,
-            "secs_since_settings_change": null,
-            "sender_age_secs": 35088,
-            "sender_distinct_recipients": 9,
-            "sender_escape_active": false,
-            "sender_in_count": 17,
-            "sender_out_count": 10,
-            "sender_out_count_24h": 10,
-            "sender_out_volume": 8.137136042000002,
-            "sender_out_volume_24h": 8.137136042000002,
-            "sender_prior_flags": 0,
-            "sender_prior_max_severity": null,
-            "sender_rotations": 0,
-            "sender_tx_count": 28,
-            "settings_changes_24h": 0,
-            "share_of_lifetime_volume": 0.15666282708107399,
-            "signer_kind": "none",
-            "step_up": false,
-            "timestamp": 1791650391,
-            "velocity_ratio": 1.0,
-            "version": 2,
-            "via_dapp": false,
-            "weekday": 5
-          },
-          "heuristic_score": 40,
-          "model": {
-            "above_threshold": true,
-            "name": "ferra-risk-v0 (hand-set AML heuristics; replace with weights trained on GET /chain/dataset)",
-            "score": 0.9495372864426603,
-            "top": [
-              [
-                "policy_band",
-                1.8
-              ],
-              [
-                "counterparty_pass_through",
-                1.6
-              ],
-              [
-                "sender_out_count_24h",
-                0.7193685818395111
-              ],
-              [
-                "counterparty_new_for_sender",
-                0.7
-              ],
-              [
-                "counterparty_fan_out_ratio",
-                0.6
-              ]
-            ]
-          },
-          "reasons": [
-            {
-              "code": "PROVENANCE_MEDIUM",
-              "message": "origin-network check: PASS_THROUGH",
-              "points": 20
-            },
-            {
-              "code": "NEW_RECIPIENT",
-              "message": "first transfer from this sender to this counterparty",
-              "points": 20
-            }
-          ]
-        }
-      }
-    ]
+    "transfers": []
   }
 ]

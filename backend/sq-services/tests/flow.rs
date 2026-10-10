@@ -17,6 +17,7 @@ use http_body_util::BodyExt;
 use serde::de::DeserializeOwned;
 use async_trait::async_trait;
 use sq_adapters::{FixedClock, MockChain};
+use sq_connectors::report::TransferReport;
 use sq_connectors::{ConnectorError, NetworkSource, ObservedEvent, Page, SourceRegistry};
 use sq_services::assess::step_up_hash;
 use sq_services::config::Config;
@@ -860,4 +861,72 @@ async fn provenance_checks_the_counterparty_on_its_origin_network() {
     assert_eq!(r.verdict, ReviewVerdict::Suspicious);
     let v: ChainVerification = app.get("/chain/verify").await;
     assert!(v.ok);
+}
+
+#[tokio::test]
+async fn validator_worker_judges_pending_events_and_address_reports_weigh_on_them() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(19);
+    let addr = app.onboard(&owner).await;
+
+    // one Ferra payment and two TON events (one out to EQCsomeone, one in from it)
+    let tx = usdc_tx(addr, Address::repeat_byte(0x55), 10_000_000);
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext::default(), None).await;
+    let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
+    let paid = app.submit(&owner, tx, &prepared, Some(cosignature)).await;
+    let synced: SyncResponse = app.post("/chain/sync", SyncRequest { wallet: addr, network: "ton-testnet".into(), address_raw: "EQCalice".into(), limit: None, cursor: None }).await;
+    let before: ValidationStatus = app.get("/chain/validation").await;
+    assert_eq!((before.validatable, before.validated), (3, 0), "{synced:?}");
+
+    // nobody has reported anything yet
+    let none: Vec<ReportedAddress> = app.get("/reports/address").await;
+    assert!(none.is_empty());
+
+    // a user reports the TON counterparty: the chain gets an attested event, past events a flag
+    let (s, e) = app.post_err("/reports/address", AddressReportRequest { network: "ton-testnet".into(), address: "EQCsomeone".into(), category: Some("nonsense".into()), reason: "x".into() }).await;
+    assert_eq!((s, e.code.as_str()), (StatusCode::BAD_REQUEST, "BAD_REQUEST"));
+    let r: AddressReportResponse = app.post("/reports/address", AddressReportRequest { network: "ton-testnet".into(), address: "EQCsomeone".into(), category: None, reason: "drained my friend's wallet".into() }).await;
+    assert_eq!(r.tx.kind, TxKind::AddressReport);
+    assert_eq!(r.report.reporter, "SQ-100001");
+    assert_eq!((r.total_reports, r.events_involved, r.events_flagged), (1, 2, 2));
+    let listed: Vec<ReportedAddress> = app.get("/reports/address").await;
+    assert_eq!((listed.len(), listed[0].count, listed[0].categories.clone()), (1, 1, vec!["scam".to_string()]));
+    let detail: Vec<AddressReport> = app.get("/reports/address/ton-testnet/EQCsomeone").await;
+    assert_eq!(detail.len(), 1);
+    let v: ChainVerification = app.get("/chain/verify").await;
+    assert!(v.ok, "{v:?}");
+
+    // one validator pass: every pending event gets a verdict, the reported one a REPORTED flag
+    let pass: ValidationPass = app.post("/validator/run?batch=8", serde_json::json!({})).await;
+    assert_eq!((pass.checked, pass.failed), (3, 0));
+    assert!(pass.flags_written >= 3, "{pass:?}");
+    assert_eq!(pass.validation.percent, 100.0);
+    assert!(pass.validation.next.is_empty());
+    let history: HistoryResponse = app.get(&format!("/chain/history/{addr}")).await;
+    let ferra = history.txs.iter().find(|t| t.hash == paid.tx_hash).unwrap();
+    assert!(ferra.flags.iter().any(|f| f.source == FlagSource::Model && (f.code == "VALIDATED" || f.code == "MODEL_RISK")), "{:?}", ferra.flags);
+    let ton_out = history.txs.iter().find(|t| t.kind == TxKind::External && t.from == addr).unwrap();
+    let codes: Vec<&str> = ton_out.flags.iter().map(|f| f.code.as_str()).collect();
+    assert!(codes.contains(&"REPORTED_ADDRESS") && codes.contains(&"REPORTED_COUNTERPARTY"), "{codes:?}");
+    // report (60) + pass-through + fresh address: the provenance verdict is Critical
+    assert!(matches!(ton_out.reviewed_risk, Some(RiskBand::High | RiskBand::Critical)), "{:?}", ton_out.flags);
+
+    // a second pass finds nothing to do; the status endpoint is public and counts passes
+    let again: ValidationPass = app.post("/validator/run", serde_json::json!({})).await;
+    assert_eq!(again.checked, 0);
+    let status: ValidatorStatus = App::new().get("/validator").await;
+    assert_eq!(status.passes, 0, "a fresh server has its own counters");
+    let status: ValidatorStatus = app.get("/validator").await;
+    assert_eq!((status.passes, status.events_checked), (2, 3));
+
+    // a new payment to the reported address carries the count in its features and the preview reason
+    let t2: ChainTx = app.get(&format!("/chain/tx/{}", ton_out.hash)).await;
+    assert_eq!(t2.features.unwrap().counterparty_reports, 0, "features are computed at commit, before the report");
+    let r2: AddressReportResponse = app.post("/reports/address", AddressReportRequest { network: "ton-testnet".into(), address: "EQCsomeone".into(), category: Some("phishing".into()), reason: "again".into() }).await;
+    assert_eq!(r2.total_reports, 2);
+    let _: SyncResponse = app.post("/chain/sync", SyncRequest { wallet: addr, network: "ton-testnet".into(), address_raw: "EQCalice".into(), limit: None, cursor: None }).await;
+    let report: TransferReport = app.post(&format!("/report/event/{}", ton_out.hash), serde_json::json!({})).await;
+    let risk = report.transfers[0].risk.as_ref().unwrap();
+    assert!(risk.reasons.iter().any(|r| r.code == "REPORTED_COUNTERPARTY"), "{:?}", risk.reasons);
+    assert_eq!(risk.features.counterparty_reports, 2);
 }

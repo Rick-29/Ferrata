@@ -14,8 +14,8 @@ use super::behaviour::{Intent, IntentOutcome, IntentOutcomeKind, WalletProfile, 
 use super::features::SubmitMeta;
 use super::model::DatasetRow;
 use super::{
-    AccountView, Block, BlockWithTxs, ChainError, ChainInfo, ChainTx, ChainVerification, EscapeStatus, ExternalRef, Flag,
-    OwnerKey, OwnerSignature, PreparedOp, SignedUserOp, SubmitResult, Tamper,
+    AccountView, AddressReport, Block, BlockWithTxs, ChainError, ChainInfo, ChainTx, ChainVerification, EscapeStatus,
+    ExternalRef, Flag, OwnerKey, OwnerSignature, PreparedOp, ReportedAddress, SignedUserOp, SubmitResult, Tamper,
 };
 
 /// Everything the Swissquote services need from a settlement layer.
@@ -76,6 +76,14 @@ pub trait ChainBackend: Send + Sync {
     fn flag(&mut self, flag: Flag, now: u64) -> Result<Option<SubmitResult>, ChainError>;
     fn verify(&self) -> ChainVerification;
     fn validation(&self, next_limit: usize) -> super::ValidationStatus;
+
+    // ----- community / compliance reports about addresses on any network -----
+    fn report_hash(&self, report: &AddressReport) -> B256;
+    fn report_address(&mut self, report: AddressReport, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
+    fn reports_of(&self, network: &str, address: &str) -> Vec<AddressReport>;
+    fn reported_addresses(&self) -> Vec<ReportedAddress>;
+    /// Validatable events whose counterparty is `address` on `network`.
+    fn events_involving(&self, network: &str, address: &str) -> Vec<ChainTx>;
     /// Demo-only corruption of live state. Backends that cannot be tampered return `ReadOnly`.
     fn tamper(&mut self, _t: &Tamper) -> Result<(), ChainError> {
         Err(ChainError::ReadOnly)
@@ -254,6 +262,21 @@ impl ChainBackend for super::MockChain {
     }
     fn validation(&self, next_limit: usize) -> super::ValidationStatus {
         super::MockChain::validation(self, next_limit)
+    }
+    fn report_hash(&self, report: &AddressReport) -> B256 {
+        super::MockChain::report_hash(self, report)
+    }
+    fn report_address(&mut self, report: AddressReport, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::report_address(self, report, cosignature, now)
+    }
+    fn reports_of(&self, network: &str, address: &str) -> Vec<AddressReport> {
+        super::MockChain::reports_of(self, network, address)
+    }
+    fn reported_addresses(&self) -> Vec<ReportedAddress> {
+        super::MockChain::reported_addresses(self)
+    }
+    fn events_involving(&self, network: &str, address: &str) -> Vec<ChainTx> {
+        super::MockChain::events_involving(self, network, address)
     }
     fn tamper(&mut self, t: &Tamper) -> Result<(), ChainError> {
         super::MockChain::tamper(self, t)

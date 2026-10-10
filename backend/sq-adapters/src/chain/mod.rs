@@ -266,6 +266,45 @@ pub enum TxKind {
     Intent,
     /// What became of an intent (`extra.outcome`), Swissquote-attested.
     IntentOutcome,
+    /// Someone reported an address (on any network) as a scam / fraud; Swissquote-attested
+    /// (`extra.report`). Reports are append-only evidence, never a verdict by themselves.
+    AddressReport,
+}
+
+/// One report about an address. Who reported is a client id or a free label, never a wallet key.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AddressReport {
+    /// Network name as registered (`ferra`, `ton`, `bitcoin`, `solana`, `ethereum`, …).
+    pub network: String,
+    /// Canonical address string for that network (lower-cased 0x… for EVM / Ferra).
+    pub address: String,
+    /// `scam`, `phishing`, `hack`, `mixer`, `other`.
+    pub category: String,
+    pub reason: String,
+    pub reporter: String,
+    #[ts(type = "number")]
+    pub at: u64,
+}
+
+/// Aggregate view: every address that has at least one report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ReportedAddress {
+    pub network: String,
+    pub address: String,
+    #[ts(type = "number")]
+    pub count: u64,
+    pub categories: Vec<String>,
+    #[ts(type = "number")]
+    pub first_at: u64,
+    #[ts(type = "number")]
+    pub last_at: u64,
+}
+
+/// Key under which reports are indexed: network + address, case-insensitive.
+pub fn report_key(network: &str, address: &str) -> String {
+    format!("{}:{}", network.trim().to_ascii_lowercase(), address.trim().to_ascii_lowercase())
 }
 
 /// Who raised a flag.
@@ -289,6 +328,9 @@ pub enum FlagSource {
     Provenance,
     /// A human.
     Manual,
+    /// A report filed by a user or by compliance about an address (`AddressReport` events).
+    /// Evidence, not a verdict: it does not count as validation.
+    Report,
 }
 
 /// A finding about one event. Extensible: unknown `data` keys are kept, new fields default.

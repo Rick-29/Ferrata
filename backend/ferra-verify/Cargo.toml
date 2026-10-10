@@ -12,6 +12,10 @@ path = "src/main.rs"
 name = "ferra-report"
 path = "src/report_main.rs"
 
+[[bin]]
+name = "ferra-seed"
+path = "src/seed_main.rs"
+
 [dependencies]
 sq-adapters.workspace = true
 sq-connectors.workspace = true
@@ -23,6 +27,9 @@ serde_json.workspace = true
 serde.workspace = true
 tokio.workspace = true
 clap.workspace = true
+hex.workspace = true
+ed25519-dalek.workspace = true
+alloy-primitives.workspace = true
 
 [lints]
 workspace = true

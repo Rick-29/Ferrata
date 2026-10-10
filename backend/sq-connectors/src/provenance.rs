@@ -52,11 +52,24 @@ pub struct Watchlists {
     pub sanctioned: BTreeSet<String>,
     /// Mixers, hacks, drainers: used by the exposure trace.
     pub flagged: BTreeSet<String>,
+    /// Community / compliance reports from the Ferra chain: `report_key(network, address)` -> count.
+    pub reported: std::collections::BTreeMap<String, u64>,
 }
 
 impl Watchlists {
     pub fn from_raw(sanctioned: &[String], flagged: &[String]) -> Self {
-        Self { sanctioned: sanctioned.iter().cloned().collect(), flagged: flagged.iter().cloned().collect() }
+        Self { sanctioned: sanctioned.iter().cloned().collect(), flagged: flagged.iter().cloned().collect(), reported: Default::default() }
+    }
+
+    pub fn with_reported(mut self, reported: impl IntoIterator<Item = (String, String, u64)>) -> Self {
+        for (network, address, count) in reported {
+            self.reported.insert(sq_adapters::report_key(&network, &address), count);
+        }
+        self
+    }
+
+    pub fn report_count(&self, network: &str, address: &str) -> u64 {
+        self.reported.get(&sq_adapters::report_key(network, address)).copied().unwrap_or(0)
     }
 }
 
@@ -100,6 +113,10 @@ pub fn judge(e: &Evidence<'_>) -> ProvenanceAssessment {
 
     if e.lists.sanctioned.contains(e.counterparty) {
         push("SANCTIONED_ADDRESS", 100, format!("{} is on the sanctions list", e.counterparty));
+    }
+    let reports = e.lists.report_count(&e.network.name, e.counterparty);
+    if reports > 0 {
+        push("REPORTED_ADDRESS", if reports >= 3 { 90 } else { 60 }, format!("reported {reports} time(s) as a scam or fraud by Swissquote users"));
     }
     if !e.verified {
         push("UNVERIFIED", 30, "origin network could not be queried; counterparty unknown".into());
