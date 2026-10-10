@@ -11,7 +11,7 @@ type Props = {
 /** `checked`: the user went through the face check. `skipped`: they chose not to. */
 export type FaceCheckResult = 'checked' | 'skipped';
 
-type Phase = 'intro' | 'scanning' | 'done';
+type Phase = 'intro' | 'opening' | 'scanning' | 'done';
 
 /** Guided liveness prompts, as a real check would ask; each is shown for STEP_MS. */
 const LIVENESS_STEPS = [
@@ -36,6 +36,7 @@ export function FaceCheck({ onDone }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const [phase, setPhase] = useState<Phase>('intro');
   const [stepIndex, setStepIndex] = useState(0);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const sweep = useRef(new Animated.Value(0)).current;
 
   // Advance through the liveness prompts while scanning.
@@ -66,7 +67,9 @@ export function FaceCheck({ onDone }: Props) {
     const granted = permission?.granted ?? (await requestPermission()).granted;
     if (!granted) return;
     setStepIndex(0);
-    setPhase('scanning');
+    setCameraError(null);
+    // Liveness prompts start only once the camera actually streams (onCameraReady).
+    setPhase('opening');
   };
 
   const isDenied = permission !== null && !permission.granted && !permission.canAskAgain;
@@ -83,23 +86,33 @@ export function FaceCheck({ onDone }: Props) {
             Un contrôle de présence avec la caméra, en plus de la clé de ce téléphone et de l'identification. La caméra
             est réelle ; l'analyse est simulée dans cette démo. Aucune image n'est enregistrée ni envoyée.
           </Body>
+          {cameraError ? <Body muted>La caméra n'a pas pu démarrer : {cameraError}</Body> : null}
           {isDenied ? (
             <Body muted>L'accès à la caméra est refusé dans les réglages. Vous pouvez continuer sans cette étape.</Body>
           ) : (
-            <Button label="Démarrer la vérification faciale" onPress={() => void start()} />
+            <Button label={cameraError ? 'Réessayer' : 'Démarrer la vérification faciale'} onPress={() => void start()} />
           )}
           <Button label="Continuer sans" variant="secondary" onPress={() => onDone('skipped')} />
         </>
       )}
-      {phase === 'scanning' && (
+      {(phase === 'opening' || phase === 'scanning') && (
         <>
           <View style={styles.frame}>
-            <CameraView style={StyleSheet.absoluteFill} facing="front" />
+            <CameraView
+              style={styles.camera}
+              facing="front"
+              active
+              onCameraReady={() => setPhase((current) => (current === 'opening' ? 'scanning' : current))}
+              onMountError={(e) => {
+                setCameraError(e.message);
+                setPhase('intro');
+              }}
+            />
             <View pointerEvents="none" style={[styles.oval, { borderColor: t.accent }]} />
             <Animated.View pointerEvents="none" style={[styles.sweep, { backgroundColor: t.accent, transform: [{ translateY: sweepY }] }]} />
           </View>
           <Text accessibilityLiveRegion="polite" style={[styles.prompt, { color: t.text }]}>
-            {prompt}
+            {phase === 'opening' ? 'Ouverture de la caméra…' : prompt}
           </Text>
           <View style={[styles.track, { backgroundColor: t.border }]}>
             <View style={[styles.fill, { width: `${Math.round(progress * 100)}%`, backgroundColor: t.accent }]} />
@@ -132,6 +145,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  camera: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   oval: { width: 180, height: 240, borderRadius: 120, borderWidth: 3 },
   sweep: { position: 'absolute', top: 0, left: 24, right: 24, height: 2, opacity: 0.85 },
   prompt: { fontSize: 17, fontWeight: '600', textAlign: 'center' },
