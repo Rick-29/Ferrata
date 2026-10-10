@@ -77,7 +77,7 @@ export function WaitingStep({ recovery, isBusy, onExecute }: Props) {
         <Text style={[styles.alertBody, { color: t.muted }]}>Vos autres appareils ont été informés de cette demande.</Text>
       </Card>
       <Button
-        label={isUnlocked ? 'Finaliser la récupération' : 'En attente du délai…'}
+        label={isUnlocked ? 'Finaliser (Face ID, empreinte ou code)' : 'En attente du délai…'}
         isBusy={isBusy}
         isDisabled={!isUnlocked}
         onPress={onExecute}

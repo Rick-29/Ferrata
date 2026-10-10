@@ -27,7 +27,8 @@
         {
           "cameraPermission": "La caméra sert uniquement à la vérification faciale simulée. Aucune image n'est enregistrée ni envoyée."
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }

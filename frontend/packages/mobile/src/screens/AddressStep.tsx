@@ -17,10 +17,10 @@ export function AddressStep({ displayName, isBusy, onSubmit }: Props) {
       </Body>
       <Field label="Adresse du wallet" value={address} onChangeText={setAddress} placeholder="0x…" mono />
       <Body muted>
-        Une nouvelle passkey va être créée sur ce téléphone. Elle remplacera l'ancienne une fois la récupération terminée.
-        Passkey simulée dans cette démo : Expo Go ne donne pas accès aux vraies passkeys (il faut une appli compilée).
+        Une nouvelle clé va être créée et rangée dans le coffre sécurisé de ce téléphone. Elle remplacera l'ancienne une
+        fois la récupération terminée. Confirmez avec Face ID, votre empreinte ou votre code.
       </Body>
-      <Button label="Créer ma nouvelle passkey" isBusy={isBusy} isDisabled={address.trim() === ''} onPress={() => onSubmit(address)} />
+      <Button label="Créer la clé de ce téléphone" isBusy={isBusy} isDisabled={address.trim() === ''} onPress={() => onSubmit(address)} />
     </>
   );
 }
