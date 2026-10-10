@@ -8,4 +8,12 @@ export type ExternalRef = { network: Network, tx_id: string, block: number | nul
 /**
  * Amount in base units of that network's asset, as a decimal string.
  */
-amount: string, fee: number | null, explorer_url: string | null, };
+amount: string, fee: number | null, explorer_url: string | null, 
+/**
+ * When it happened on the origin network (the Ferra block timestamp is when it was recorded).
+ */
+timestamp: number | null, 
+/**
+ * Token contract / jetton master / mint, when the asset is not the network's native coin.
+ */
+asset_address: string | null, };

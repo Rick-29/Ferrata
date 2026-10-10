@@ -12,7 +12,7 @@ pub use chain::{
     AccountView, Block, BlockStore, BlockWithTxs, ChainBackend, ChainConfig, ChainError, ChainFamily, ChainRegistry, ChainTx,
     ChainVerification, DatasetRow, EscapeStatus, ExternalRef, Flag, FlagSource, JsonlBlockStore, LinearModel, MockChain, ModelInfo,
     Network, NullBlockStore, OwnerKey, OwnerSignature, PolicySnapshot, PreparedOp, RiskModel, SignedUserOp, SubmitMeta,
-    SubmitResult, Tamper, TokenInfo, TxFeatures, TxKind,
+    SubmitResult, Tamper, TokenInfo, TxFeatures, TxKind, ValidationStatus,
 };
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use log_store::{InMemoryLogStore, LogStore};

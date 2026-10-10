@@ -4,11 +4,11 @@
 //! the outbound transfers the wallet signed.
 
 use async_trait::async_trait;
-use base64::Engine;
 use serde::{Deserialize, Deserializer, Serialize};
-use sq_adapters::{ChainFamily, ExternalRef, Network};
+use sq_adapters::{ExternalRef, Network};
+use sq_connectors::{ConnectorError, NetworkSource, ObservedEvent, Page, post_json};
 
-use crate::{ConnectorError, NetworkSource, ObservedEvent, Page};
+use crate::address::{normalize, to_raw};
 
 const MAINNET: &str = "https://toncenter.com/api/v2/jsonRPC";
 const TESTNET: &str = "https://testnet.toncenter.com/api/v2/jsonRPC";
@@ -24,7 +24,7 @@ pub struct TonCenterSource {
 
 impl TonCenterSource {
     pub fn new(testnet: bool, api_key: Option<String>) -> Self {
-        Self { client: crate::http(), url: if testnet { TESTNET } else { MAINNET }.into(), api_key, testnet }
+        Self { client: sq_connectors::http(), url: if testnet { TESTNET } else { MAINNET }.into(), api_key, testnet }
     }
 
     pub fn with_url(mut self, url: impl Into<String>) -> Self {
@@ -33,13 +33,13 @@ impl TonCenterSource {
     }
 
     fn network_of(testnet: bool) -> Network {
-        Network { family: ChainFamily::Ton, name: if testnet { "ton-testnet" } else { "ton" }.into(), chain_id: None }
+        crate::network(testnet)
     }
 
     /// Pure: toncenter result → events for `wallet`. Public so it can be tested offline.
     pub fn extract(testnet: bool, wallet: &str, txs: &[ExtTransaction]) -> Vec<ObservedEvent> {
         let network = Self::network_of(testnet);
-        let wallet_norm = normalize_address(wallet);
+        let wallet_norm = to_raw(wallet).unwrap_or_else(|| normalize(wallet));
         let explorer = |hash: &str| Some(format!("https://{}tonviewer.com/transaction/{hash}", if testnet { "testnet." } else { "" }));
         let mut out = Vec::new();
         for tx in txs {
@@ -50,16 +50,20 @@ impl TonCenterSource {
                         network: network.clone(),
                         tx_id: tx.transaction_id.hash.clone(),
                         block: None,
-                        from_raw: normalize_address(src),
+                        from_raw: to_raw(src).unwrap_or_else(|| normalize(src)),
                         to_raw: wallet_norm.clone(),
                         asset_symbol: "TON".into(),
                         decimals: 9,
                         amount: in_msg.value.to_string(),
                         fee: Some(tx.fee as f64 / 1e9),
                         explorer_url: explorer(&tx.transaction_id.hash),
+                        timestamp: Some(tx.utime),
+                        asset_address: None,
                     },
                     incoming: true,
                     counterparty: None,
+                    counterparty_label: None,
+                    scam_flag: false,
                 }),
                 Some(_) => {}
                 None => {
@@ -70,15 +74,19 @@ impl TonCenterSource {
                                 tx_id: if i == 0 { tx.transaction_id.hash.clone() } else { format!("{}#{i}", tx.transaction_id.hash) },
                                 block: None,
                                 from_raw: wallet_norm.clone(),
-                                to_raw: normalize_address(&m.destination),
+                                to_raw: to_raw(&m.destination).unwrap_or_else(|| normalize(&m.destination)),
                                 asset_symbol: "TON".into(),
                                 decimals: 9,
                                 amount: m.value.to_string(),
                                 fee: Some(tx.fee as f64 / 1e9),
                                 explorer_url: explorer(&tx.transaction_id.hash),
+                                timestamp: Some(tx.utime),
+                                asset_address: None,
                             },
                             incoming: false,
                             counterparty: None,
+                            counterparty_label: None,
+                            scam_flag: false,
                         });
                     }
                 }
@@ -94,6 +102,10 @@ impl NetworkSource for TonCenterSource {
         Self::network_of(self.testnet)
     }
 
+    fn canonical(&self, address_raw: &str) -> String {
+        to_raw(address_raw).unwrap_or_else(|| address_raw.to_string())
+    }
+
     async fn fetch(&self, address_raw: &str, cursor: Option<&str>, limit: u32) -> Result<Page, ConnectorError> {
         let page_size = limit.clamp(1, PAGE_SIZE);
         let (lt, hash) = match cursor.and_then(|c| c.split_once(':')) {
@@ -104,19 +116,11 @@ impl NetworkSource for TonCenterSource {
             "jsonrpc": "2.0", "id": 1, "method": "getTransactions",
             "params": { "address": address_raw, "limit": page_size, "archival": true, "lt": lt, "hash": hash }
         });
-        let mut req = self.client.post(&self.url).json(&body);
-        if let Some(k) = &self.api_key {
-            req = req.header("X-API-Key", k);
-        }
-        let resp = req.send().await?;
-        let status = resp.status().as_u16();
-        let text = resp.text().await?;
-        if !(200..300).contains(&status) {
-            return Err(ConnectorError::Upstream { network: self.network().name, status, body: text.chars().take(200).collect() });
-        }
+        let headers: Vec<(&str, String)> = self.api_key.iter().map(|k| ("X-API-Key", k.clone())).collect();
+        let text = post_json(&self.client, &self.network().name, &self.url, &body, &headers).await?;
         let parsed: RpcResponse = serde_json::from_str(&text).map_err(|e| ConnectorError::Parse(e.to_string()))?;
         if !parsed.ok {
-            return Err(ConnectorError::Upstream { network: self.network().name, status, body: "ok=false".into() });
+            return Err(ConnectorError::Upstream { network: self.network().name, status: 200, body: "ok=false".into() });
         }
         // Pages after the first repeat the cursor transaction as their first element.
         let txs: &[ExtTransaction] = if cursor.is_some() && !parsed.result.is_empty() { &parsed.result[1..] } else { &parsed.result };
@@ -175,38 +179,6 @@ pub struct ExtMessage {
     pub value: u64,
 }
 
-/// Canonical bounceable (`EQ…`) form of any user-friendly TON address; input unchanged on failure.
-pub fn normalize_address(addr: &str) -> String {
-    let normalized = addr.replace('-', "+").replace('_', "/");
-    let padding = match normalized.len() % 4 {
-        0 => String::new(),
-        n => "=".repeat(4 - n),
-    };
-    let Ok(raw) = base64::engine::general_purpose::STANDARD.decode(format!("{normalized}{padding}")) else {
-        return addr.to_string();
-    };
-    if raw.len() != 36 {
-        return addr.to_string();
-    }
-    let mut bytes = vec![0x11u8, raw[1]];
-    bytes.extend_from_slice(&raw[2..34]);
-    let crc = crc16(&bytes);
-    bytes.push((crc >> 8) as u8);
-    bytes.push((crc & 0xff) as u8);
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&bytes)
-}
-
-fn crc16(data: &[u8]) -> u16 {
-    let mut crc: u16 = 0;
-    for &b in data {
-        crc ^= u16::from(b) << 8;
-        for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 { (crc << 1) ^ 0x1021 } else { crc << 1 };
-        }
-    }
-    crc
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -228,7 +200,7 @@ mod tests {
         assert_eq!(ev.len(), 2);
         assert!(!ev[0].incoming);
         assert_eq!(ev[0].external.amount, "1500000000");
-        assert_eq!(ev[0].external.network.family, ChainFamily::Ton);
+        assert_eq!(ev[0].external.network.family, sq_adapters::ChainFamily::Ton);
         assert_eq!(ev[0].external.network.name, "ton-testnet");
         assert!((ev[0].external.fee.unwrap() - 0.003).abs() < 1e-12);
         assert!(ev[1].incoming);
@@ -236,12 +208,4 @@ mod tests {
         assert_eq!(ev[1].external.decimals, 9);
     }
 
-    #[test]
-    fn normalizes_friendly_addresses_to_bounceable() {
-        // non-bounceable testnet form and its bounceable mainnet form of the same account
-        let non_bounceable = "0QBbtZtF0cYG5xj7A_hTJWF5tHOGtcQgCHJOV-cGKoh1Rnp1";
-        let n = normalize_address(non_bounceable);
-        assert!(n.starts_with("EQ") || n.starts_with("kQ") || n.len() == 48, "{n}");
-        assert_eq!(normalize_address("not-an-address"), "not-an-address");
-    }
 }

@@ -169,9 +169,11 @@ impl NetworkSource for FakeTon {
         if address_raw == "EQCsomeone" {
             // the counterparty's own history: received 3 TON from a third party and forwarded it at once
             let mk = |from: &str, to: &str, amount: &str, incoming: bool| ObservedEvent {
-                external: ExternalRef { network: self.network(), tx_id: format!("{from}>{to}"), block: Some(10), from_raw: from.into(), to_raw: to.into(), asset_symbol: "TON".into(), decimals: 9, amount: amount.into(), fee: None, explorer_url: None },
+                external: ExternalRef { network: self.network(), tx_id: format!("{from}>{to}"), block: Some(10), from_raw: from.into(), to_raw: to.into(), asset_symbol: "TON".into(), decimals: 9, amount: amount.into(), fee: None, explorer_url: None, timestamp: None, asset_address: None },
                 incoming,
                 counterparty: None,
+                counterparty_label: None,
+                scam_flag: false,
             };
             return Ok(Page { events: vec![mk("EQCthird", "EQCsomeone", "3000000000", true), mk("EQCsomeone", "EQCalice", "3000000000", false)], next_cursor: None });
         }
@@ -187,9 +189,13 @@ impl NetworkSource for FakeTon {
                 amount: amount.into(),
                 fee: Some(0.002),
                 explorer_url: None,
+                timestamp: None,
+                asset_address: None,
             },
             incoming,
             counterparty: None,
+            counterparty_label: None,
+            scam_flag: false,
         };
         Ok(Page { events: vec![ev("ton-1", true, "3000000000"), ev("ton-2", false, "1000000000")], next_cursor: Some("older".into()) })
     }
@@ -662,6 +668,8 @@ async fn events_carry_features_network_and_feed_the_dataset_and_model() {
         amount: "250000".into(),
         fee: Some(0.000003),
         explorer_url: Some("https://mempool.space/testnet/tx/deadbeef".into()),
+        timestamp: None,
+        asset_address: None,
     };
     let r: SubmitResult = app.post("/chain/ingest", IngestRequest { chain_id: None, wallet: addr, counterparty: None, incoming: true, event: ext }).await;
     assert_eq!(r.kind, TxKind::External);

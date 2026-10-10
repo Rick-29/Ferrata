@@ -23,7 +23,7 @@ use super::auth::OwnerSignature;
 use super::ledger::MockChain;
 use super::{ChainTx, Network, TxKind};
 
-pub const FEATURES_VERSION: u32 = 2;
+pub const FEATURES_VERSION: u32 = 3;
 const DAY: u64 = 86_400;
 
 /// What the policy engine concluded when Swissquote co-signed. Recorded for learning, never
@@ -202,12 +202,12 @@ impl TxFeatures {
             v.insert(k.to_string(), x);
         };
         let b = |x: bool| if x { 1.0 } else { 0.0 };
+        // `Low` is "checked, nothing found": it must not count as a step of severity.
         let sev = |s: Option<RiskBand>| match s {
-            None => 0.0,
-            Some(RiskBand::Low) => 1.0,
-            Some(RiskBand::Medium) => 2.0,
-            Some(RiskBand::High) => 3.0,
-            Some(RiskBand::Critical) => 4.0,
+            None | Some(RiskBand::Low) => 0.0,
+            Some(RiskBand::Medium) => 1.0,
+            Some(RiskBand::High) => 2.0,
+            Some(RiskBand::Critical) => 3.0,
         };
         put(&format!("family_{}", self.network.family.tag()), 1.0);
         put(&format!("kind_{}", kind_tag(self.kind)), 1.0);

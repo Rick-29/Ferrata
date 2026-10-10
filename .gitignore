@@ -3,3 +3,5 @@ node_modules/
 frontend/packages/core-wasm/
 *.snapshot.json
 .env
+ferra-chain.jsonl
+backend-server.log

@@ -7,7 +7,7 @@ use api_types::{
     AccountView, BlockWithTxs, BlocksQuery, CancelEscapeRequest, ChainInfo, ChainQuery, ChainTx, ChainVerification,
     CreateAccountRequest, DatasetRow, EscapeHashRequest, EscapeResponse, FaucetRequest, HashResponse, HistoryResponse,
     IngestRequest, ModelInfo, Network, PreparedOp, SignedUserOp, SimulateRequest, SimulateResponse, StartEscapeRequest,
-    SubmitResult, SyncRequest, SyncResponse,
+    SubmitResult, SyncRequest, SyncResponse, ValidationStatus,
 };
 use axum::extract::{Path, Query, State};
 use axum::routing::{get, post};
@@ -19,7 +19,18 @@ use crate::state::SharedState;
 
 /// Top-level, cross-chain routes.
 pub fn wallet_routes() -> Router<SharedState> {
-    Router::new().route("/chains", get(chains)).route("/model", get(model)).route("/networks", get(networks))
+    Router::new()
+        .route("/chains", get(chains))
+        .route("/model", get(model))
+        .route("/networks", get(networks))
+        .route("/networks/{name}/account/{address}", get(network_account))
+}
+
+/// What a connected network's indexer knows about an address: balance, tokens, labels, scam flag.
+async fn network_account(State(state): State<SharedState>, Path((name, address)): Path<(String, String)>) -> ApiResult<sq_connectors::AccountInfo> {
+    let source = state.sources.get(&name).map_err(|e| ServiceError::BadRequest(e.to_string()))?;
+    let info = source.account_info(&address).await.map_err(|e| ServiceError::Upstream { provider: "connector", msg: e.to_string() })?;
+    Ok(Json(info))
 }
 
 /// Networks the Ferra chain can pull history from.
@@ -35,6 +46,7 @@ pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/info", get(info))
         .route("/verify", get(verify))
+        .route("/validation", get(validation))
         .route("/accounts", post(create_account))
         .route("/accounts/{address}", get(account))
         .route("/faucet", post(faucet))
@@ -59,6 +71,11 @@ async fn chains(State(state): State<SharedState>) -> ApiResult<Vec<ChainInfo>> {
 
 async fn info(State(state): State<SharedState>, Query(q): Query<ChainQuery>) -> ApiResult<ChainInfo> {
     Ok(Json(state.chain_for(q.chain_id)?.info()))
+}
+
+/// Share of validatable events with a validator verdict, and the next ones to look at.
+async fn validation(State(state): State<SharedState>, Query(q): Query<ChainQuery>) -> ApiResult<ValidationStatus> {
+    Ok(Json(state.chain_for(q.chain_id)?.validation(20)))
 }
 
 /// Replays the whole chain and re-checks every hash, signature and state root.

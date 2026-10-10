@@ -1,0 +1,22 @@
+[package]
+name = "sq-conn-ton"
+version.workspace = true
+edition.workspace = true
+description = "TON connector for the Ferra chain: tonapi.io events, accounts and jettons, toncenter fallback. After NetView."
+
+[dependencies]
+sq-connectors.workspace = true
+sq-adapters.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+base64.workspace = true
+hex.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

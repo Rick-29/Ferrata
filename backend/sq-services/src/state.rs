@@ -57,14 +57,22 @@ impl AppState {
         Self::build_with(config, clock, sources)
     }
 
-    /// Public testnet indexers; no keys needed. `SQ_TONCENTER_API_KEY` raises TON rate limits.
+    /// Public indexers; no keys needed. `SQ_TONAPI_KEY` / `SQ_TONCENTER_API_KEY` raise TON rate limits.
     fn sources_from_env() -> SourceRegistry {
-        let ton_key = std::env::var("SQ_TONCENTER_API_KEY").ok();
-        let ton_testnet = std::env::var("SQ_TON_NETWORK").map(|v| v != "mainnet").unwrap_or(true);
-        SourceRegistry::new()
-            .register(Box::new(sq_connectors::ton::TonCenterSource::new(ton_testnet, ton_key)))
-            .register(Box::new(sq_connectors::bitcoin::EsploraSource::new(true)))
-            .register(Box::new(sq_connectors::evm::BlockscoutSource::base_sepolia()))
+        let tonapi = std::env::var("SQ_TONAPI_KEY").ok();
+        let toncenter = std::env::var("SQ_TONCENTER_API_KEY").ok();
+        let sol_rpc = std::env::var("SQ_SOLANA_RPC").ok();
+        let mut reg = SourceRegistry::new()
+            .register(Box::new(sq_conn_ton::TonSource::new(true, tonapi.clone(), toncenter.clone())))
+            .register(Box::new(sq_conn_ton::TonSource::new(false, tonapi, toncenter)))
+            .register(Box::new(sq_conn_btc::EsploraBitcoinSource::testnet()))
+            .register(Box::new(sq_conn_btc::EsploraBitcoinSource::mainnet()))
+            .register(Box::new(sq_conn_sol::SolanaSource::new(true, sol_rpc.clone())))
+            .register(Box::new(sq_conn_sol::SolanaSource::new(false, sol_rpc)));
+        for s in sq_conn_evm::well_known() {
+            reg = reg.register(Box::new(s));
+        }
+        reg
     }
 
     pub fn build_with(config: Config, clock: Arc<dyn Clock>, sources: SourceRegistry) -> anyhow::Result<SharedState> {

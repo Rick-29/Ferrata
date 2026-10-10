@@ -1,31 +1,41 @@
-//! Standalone verifier over a Ferra chain file.
-//!
-//! ```text
-//! ferra-verify chain.jsonl                 integrity: rebuild, re-check every hash, signature, state root
-//! ferra-verify chain.jsonl --events        … plus one line per event (wallet risk, reviewed risk, flags)
-//! ferra-verify chain.jsonl --behaviour     … plus each account's profile and behaviour findings (offline)
-//! ferra-verify chain.jsonl --provenance    … plus, for external events, the counterparty's standing
-//!                                          on its origin network (needs the network; TON, Bitcoin, Base Sepolia)
-//! ```
-//! Exit code 0 = intact, 1 = tampered, 2 = usage / read error.
+//! `ferra-verify`: standalone verifier over a Ferra chain file. Exit code 0 = intact, 1 = tampered,
+//! 2 = usage / read error.
 
 #![allow(clippy::print_stdout, clippy::print_stderr, clippy::print_literal)]
 
 use std::collections::BTreeSet;
 use std::io::BufReader;
+use std::path::PathBuf;
 use std::process::ExitCode;
 
+use clap::Parser;
 use sq_adapters::chain::{JsonlBlockStore, MockChain, TxKind};
-use sq_connectors::{SourceRegistry, provenance};
+use sq_connectors::SourceRegistry;
+use sq_connectors::provenance::{self, Watchlists};
 
-struct Opts {
+/// Verify a Ferra chain file with nothing but the file: rebuild it, re-check every hash,
+/// signature and state root, and optionally explain what is on it.
+#[derive(Parser, Debug)]
+#[command(name = "ferra-verify", version, about)]
+struct Cli {
+    /// The NDJSON chain file written by the service (`SQ_CHAIN_FILE`).
+    chain: PathBuf,
+    /// One line per event: kind, network, the wallet's risk level, the reviewed risk, flags.
+    #[arg(long)]
     events: bool,
+    /// Each account's profile and behaviour findings (offline).
+    #[arg(long)]
     behaviour: bool,
+    /// For every external event, the counterparty's standing on its origin network (needs the network).
+    #[arg(long)]
     provenance: bool,
+    /// Use TON mainnet instead of testnet for `--provenance`.
+    #[arg(long)]
+    ton_mainnet: bool,
 }
 
-fn run(path: &str, o: &Opts) -> Result<bool, String> {
-    let file = std::fs::File::open(path).map_err(|e| format!("{path}: {e}"))?;
+fn run(cli: &Cli) -> Result<bool, String> {
+    let file = std::fs::File::open(&cli.chain).map_err(|e| format!("{}: {e}", cli.chain.display()))?;
     let loaded = JsonlBlockStore::parse(BufReader::new(file)).map_err(|e| e.to_string())?;
     let header = loaded.header.clone().ok_or("no header record: not a self-contained ferra-chain file")?;
     println!("ferra-chain v{}  chain_id={}  network={}  blocks={}", header.format_version, header.chain_id, header.network.name, loaded.blocks.len());
@@ -41,10 +51,12 @@ fn run(path: &str, o: &Opts) -> Result<bool, String> {
     };
     let head = chain.latest();
     println!("OK  head={}  state_root={}", head.hash, head.state_root);
+    let v = chain.validation(5);
+    println!("validated {}/{} events ({:.0}%), {} pending", v.validated, v.validatable, v.percent, v.pending);
     let now = head.timestamp;
     let events = chain.events();
 
-    if o.events {
+    if cli.events {
         println!("\n{:>5}  {:<16} {:<16} {:<9} {:<9} {}", "block", "kind", "network", "wallet", "reviewed", "flags");
         for tx in &events {
             println!(
@@ -59,7 +71,7 @@ fn run(path: &str, o: &Opts) -> Result<bool, String> {
         }
     }
 
-    if o.behaviour {
+    if cli.behaviour {
         let accounts: BTreeSet<_> = events.iter().filter(|t| t.kind == TxKind::AccountCreated).map(|t| t.from).collect();
         for a in accounts {
             let p = chain.profile(a, now);
@@ -73,11 +85,20 @@ fn run(path: &str, o: &Opts) -> Result<bool, String> {
         }
     }
 
-    if o.provenance {
-        let sources = SourceRegistry::new()
-            .register(Box::new(sq_connectors::ton::TonCenterSource::new(true, std::env::var("SQ_TONCENTER_API_KEY").ok())))
-            .register(Box::new(sq_connectors::bitcoin::EsploraSource::new(true)))
-            .register(Box::new(sq_connectors::evm::BlockscoutSource::base_sepolia()));
+    if cli.provenance {
+        let tonapi = std::env::var("SQ_TONAPI_KEY").ok();
+        let toncenter = std::env::var("SQ_TONCENTER_API_KEY").ok();
+        let mut sources = SourceRegistry::new()
+            .register(Box::new(sq_conn_ton::TonSource::new(!cli.ton_mainnet, tonapi.clone(), toncenter.clone())))
+            .register(Box::new(sq_conn_ton::TonSource::new(cli.ton_mainnet, tonapi, toncenter)))
+            .register(Box::new(sq_conn_btc::EsploraBitcoinSource::testnet()))
+            .register(Box::new(sq_conn_btc::EsploraBitcoinSource::mainnet()))
+            .register(Box::new(sq_conn_sol::SolanaSource::new(true, None)))
+            .register(Box::new(sq_conn_sol::SolanaSource::new(false, None)));
+        for s in sq_conn_evm::well_known() {
+            sources = sources.register(Box::new(s));
+        }
+        let lists = Watchlists::default();
         let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
         println!("\nprovenance (origin-network check of each external event's counterparty)");
         for tx in events.iter().filter(|t| t.kind == TxKind::External) {
@@ -85,16 +106,17 @@ fn run(path: &str, o: &Opts) -> Result<bool, String> {
                 println!("  block {:>4}  {:<16} no connector for this network", tx.block_number, tx.network.name);
                 continue;
             };
-            match rt.block_on(provenance::assess(source, tx, &[], 50)) {
+            match rt.block_on(provenance::assess(source, tx, &lists, 50)) {
                 Ok(a) => println!(
-                    "  block {:>4}  {:<16} {:<9} score={:<3} checked={:<3} {} {}",
+                    "  block {:>4}  {:<16} {:<9} score={:<3} checked={:<3} {} {}{}",
                     tx.block_number,
                     a.network.name,
                     format!("{:?}", a.risk),
                     a.score,
                     a.events_checked,
                     a.counterparty.chars().take(24).collect::<String>(),
-                    a.reasons.iter().map(|r| r.code.as_str()).collect::<Vec<_>>().join(",")
+                    a.reasons.iter().map(|r| r.code.as_str()).collect::<Vec<_>>().join(","),
+                    a.counterparty_info.as_ref().and_then(|i| i.name.clone()).map(|n| format!("  ({n})")).unwrap_or_default()
                 ),
                 Err(e) => println!("  block {:>4}  error: {e}", tx.block_number),
             }
@@ -104,14 +126,8 @@ fn run(path: &str, o: &Opts) -> Result<bool, String> {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let Some(path) = args.iter().find(|a| !a.starts_with("--")) else {
-        eprintln!("usage: ferra-verify <chain.jsonl> [--events] [--behaviour] [--provenance]");
-        return ExitCode::from(2);
-    };
-    let has = |f: &str| args.iter().any(|a| a == f);
-    let opts = Opts { events: has("--events"), behaviour: has("--behaviour"), provenance: has("--provenance") };
-    match run(path, &opts) {
+    let cli = Cli::parse();
+    match run(&cli) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::from(1),
         Err(e) => {

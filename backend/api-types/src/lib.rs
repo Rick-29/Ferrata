@@ -11,7 +11,7 @@ pub use sq_adapters::chain::{
     ActivityLevel, Archetype, Intent, IntentOutcome, IntentOutcomeKind, WalletProfile, WalletSettings,
     AccountView, AssetBalance, Block, BlockWithTxs, ChainFamily, ChainInfo, ChainTx, ChainVerification, DatasetRow,
     EscapeStatus, ExternalRef, Flag, FlagSource, ModelInfo, Network, OwnerKey, OwnerSignature, PolicySnapshot, PreparedOp,
-    SignedUserOp, SubmitMeta, SubmitResult, Tamper, TokenInfo, TxFeatures, TxKind,
+    SignedUserOp, SubmitMeta, SubmitResult, Tamper, TokenInfo, TxFeatures, TxKind, ValidationStatus,
 };
 
 /// An event Swissquote observed on another network, to be recorded on the Ferra chain.
@@ -108,6 +108,22 @@ pub struct SettingsResponse {
 pub struct IntentState {
     pub intent: Intent,
     pub outcome: Option<IntentOutcomeKind>,
+}
+
+/// Pre-transaction risk: "how risky is paying `counterparty` on `network`, for this wallet".
+/// `wallet` lets the service fill the sender side from the Ferra chain profile; `sender` overrides it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RiskPreviewRequest {
+    pub network: String,
+    pub counterparty: String,
+    #[ts(type = "string | null")]
+    #[serde(default)]
+    pub wallet: Option<Address>,
+    #[serde(default)]
+    pub amount: Option<sq_connectors::preview::AmountSpec>,
+    #[serde(default)]
+    pub sender: Option<sq_connectors::preview::SenderContext>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

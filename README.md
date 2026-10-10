@@ -27,11 +27,13 @@ Ideas for the chain visualiser and the real-chain connector live in `future_impl
 
 ```sh
 cd backend
-cargo run -p sq-services                       # http://localhost:8787, in-memory chain
+./dev.sh   # or .\dev.ps1 on Windows: http://localhost:8787, stable key, mock passkeys, chain persisted at ../ferra-chain.jsonl
+cargo run -p sq-services                       # same, in-memory chain and a random key
 SQ_CHAIN_FILE=../chain.jsonl cargo run -p sq-services   # persisted, replayed + verified on start
 cargo test --workspace                         # 147 tests; also regenerates frontend/packages/types/src
 cargo run -p sq-connectors --bin ferra-verify -- ../chain.jsonl --events --behaviour   # verify a chain file with nothing else
 cargo run -p sq-connectors --bin ferra-verify -- ../chain.jsonl --provenance           # … and check external counterparties on their networks
+cargo run -p ferra-verify --bin ferra-report -- ton:EQ…:EQ… eth-sepolia:0x…:0x… --out r.json   # transfer reports from live indexers
 cargo clippy --workspace --all-targets -- -D warnings
 wasm-pack build wallet-wasm --target web --release --out-dir ../../frontend/packages/core-wasm
 ```
@@ -98,6 +100,10 @@ GET  /chains                         every chain: id, head, state_root, cosigner
 GET  /chain/blocks?from=&limit=      blocks with their events (newest page when from is omitted)
 GET  /chain/blocks/{n}  /chain/tx/{hash}  /chain/history/{address}  /chain/accounts/{address}
 GET  /chain/verify                   replay the whole chain: { ok, blocks_checked, first_bad_block, reason, head, state_root }
+GET  /chain/validation               { validatable, validated, percent, pending, next[] }: how much of the chain has a verdict
+POST /report/event/{tx_hash}         one-sided TransferReport for an external event: counterparty researched, risk predicted
+POST /risk/preview                   { network, counterparty, amount?, wallet?, sender? } → RiskPreview before signing:
+                                     odds vs a typical transfer and per-factor multipliers with readable messages
 POST /log/{address}/anchor           Swissquote co-signs the audit-log head onto the chain
 POST /reconcile/{address}            chain-vs-log diff: unlogged txs, escape exits, anchor mismatches
 POST /review/{address}               full account review → { verdict: clean|suspicious|blocked, score, flags[], chain }
@@ -148,10 +154,25 @@ POST /chain/sync                     { wallet, network, address_raw, limit?, cur
                                      public indexer and record every new event as a Swissquote-attested "external" event
 ```
 
-Connectors live in `backend/sq-connectors` behind one `NetworkSource` trait: TON via toncenter
-(ported from NetView), Bitcoin via Esplora, EVM via Blockscout. Adding Solana, TON mainnet or Sui is
-one struct that turns an indexer's rows into `ObservedEvent`s. `SQ_TONCENTER_API_KEY` raises TON
-rate limits; `SQ_TON_NETWORK=mainnet` switches TON.
+### Transfer reports (`ferra-report`)
+
+`ferra-report <network>:<from>:<to> …` or `--file pairs.json` writes one `TransferReport` per
+pair, the same JSON shape on every network: both parties as the indexer sees them (name, labels,
+balance, tokens, scam flag), every transfer from → to with date, amount, asset, fee and the other
+events of the same transaction, where the sender got the money (inbound events of the same asset
+before the transfer, newest first, with each funder's account info), the sender's recent activity,
+and a provenance verdict on the receiver. A sample over TON mainnet, TON testnet, Ethereum and
+Sepolia is in `fixtures/samples/transfer_report.json`; the TypeScript type is `TransferReport`.
+
+Connectors sit behind one `NetworkSource` trait (`backend/sq-connectors`: traits, registry,
+exposure tracer, provenance judge, transfer report, risk scorer) with one crate per family:
+`sq-conn-ton` (tonapi.io with toncenter fallback, after NetView), `sq-conn-evm` (Blockscout v2;
+`eth-sepolia`, `base-sepolia`, `ethereum`), `sq-conn-btc` (Esplora, `bitcoin`, `bitcoin-testnet`)
+and `sq-conn-sol` (JSON-RPC, `solana`, `solana-devnet`). Every source can also answer
+`GET /networks/{name}/account/{address}` with balance, tokens, labels and scam flags. Adding Solana
+or Sui is one crate implementing the trait. `SQ_TONAPI_KEY` / `SQ_TONCENTER_API_KEY` raise TON rate
+limits. Provenance combines the counterparty's own history, the indexer's labels and an exposure
+trace against `fixtures/exposure-graph.json: raw_flagged`.
 
 Every event carries `network` (family, name, chain id) and `features`: ~45 numbers describing
 amount, timing, velocity, sender history, counterparty graph shape and the co-signer's verdict,

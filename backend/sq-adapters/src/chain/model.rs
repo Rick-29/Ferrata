@@ -20,6 +20,8 @@ pub trait RiskModel: Send + Sync {
     /// Top contributions, for explanations in the UI.
     fn explain(&self, features: &TxFeatures, top: usize) -> Vec<(String, f64)>;
     fn describe(&self) -> ModelInfo;
+    /// Probability the model assigns when nothing is known: the "typical transfer" to compare against.
+    fn baseline(&self) -> f64;
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -96,6 +98,10 @@ impl RiskModel for LinearModel {
 
     fn describe(&self) -> ModelInfo {
         ModelInfo { name: self.name.clone(), kind: "logistic_regression".into(), feature_count: self.weights.len() as u64, threshold: self.threshold }
+    }
+
+    fn baseline(&self) -> f64 {
+        1.0 / (1.0 + (-self.bias).exp())
     }
 }
 

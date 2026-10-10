@@ -1,0 +1,28 @@
+[package]
+name = "ferra-verify"
+version.workspace = true
+edition.workspace = true
+description = "Standalone verifier for Ferra chain files: integrity, events, behaviour, provenance."
+
+[[bin]]
+name = "ferra-verify"
+path = "src/main.rs"
+
+[[bin]]
+name = "ferra-report"
+path = "src/report_main.rs"
+
+[dependencies]
+sq-adapters.workspace = true
+sq-connectors.workspace = true
+sq-conn-ton.workspace = true
+sq-conn-evm.workspace = true
+sq-conn-btc.workspace = true
+sq-conn-sol.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+tokio.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true

@@ -75,6 +75,7 @@ pub trait ChainBackend: Send + Sync {
     /// Append a flag event; `None` when an identical `(target, source, code)` flag already exists.
     fn flag(&mut self, flag: Flag, now: u64) -> Result<Option<SubmitResult>, ChainError>;
     fn verify(&self) -> ChainVerification;
+    fn validation(&self, next_limit: usize) -> super::ValidationStatus;
     /// Demo-only corruption of live state. Backends that cannot be tampered return `ReadOnly`.
     fn tamper(&mut self, _t: &Tamper) -> Result<(), ChainError> {
         Err(ChainError::ReadOnly)
@@ -250,6 +251,9 @@ impl ChainBackend for super::MockChain {
     }
     fn verify(&self) -> ChainVerification {
         super::MockChain::verify(self)
+    }
+    fn validation(&self, next_limit: usize) -> super::ValidationStatus {
+        super::MockChain::validation(self, next_limit)
     }
     fn tamper(&mut self, t: &Tamper) -> Result<(), ChainError> {
         super::MockChain::tamper(self, t)

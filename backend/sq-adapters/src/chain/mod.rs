@@ -167,6 +167,13 @@ pub struct ExternalRef {
     pub amount: String,
     pub fee: Option<f64>,
     pub explorer_url: Option<String>,
+    /// When it happened on the origin network (the Ferra block timestamp is when it was recorded).
+    #[serde(default)]
+    #[ts(type = "number | null")]
+    pub timestamp: Option<u64>,
+    /// Token contract / jetton master / mint, when the asset is not the network's native coin.
+    #[serde(default)]
+    pub asset_address: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -442,6 +449,24 @@ pub struct ChainVerification {
     pub head: B256,
     #[ts(type = "string")]
     pub state_root: B256,
+}
+
+/// How much of the chain the validator tools have looked at.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ValidationStatus {
+    /// Events that call for a verdict: co-signed, escape exits, external.
+    #[ts(type = "number")]
+    pub validatable: u64,
+    /// Of those, events carrying at least one flag from a validator source (review, provenance, model, behaviour).
+    #[ts(type = "number")]
+    pub validated: u64,
+    pub percent: f64,
+    #[ts(type = "number")]
+    pub pending: u64,
+    /// Hashes of the oldest unvalidated events, for a worker to pick up.
+    #[ts(type = "string[]")]
+    pub next: Vec<B256>,
 }
 
 /// What the account must sign before submitting.

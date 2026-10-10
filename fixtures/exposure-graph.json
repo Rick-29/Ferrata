@@ -1,6 +1,9 @@
 {
   "_comment": "Synthetic fund-flow graph. 0x..c0ffee is 2 hops from the mock mixer 0x..01e3; sending to it is High.",
   "flagged": ["0x0000000000000000000000000000000000c01e30"],
+  "raw_flagged": [
+    "0:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  ],
   "edges": [
     ["0x0000000000000000000000000000000000c01e30", "0x00000000000000000000000000000000000000b1"],
     ["0x00000000000000000000000000000000000000b1", "0x0000000000000000000000000000000000c0ffee"]

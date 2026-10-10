@@ -168,6 +168,26 @@ impl MockChain {
         })
     }
 
+    /// Share of validatable events that carry a validator verdict.
+    pub fn validation(&self, next_limit: usize) -> super::ValidationStatus {
+        let validator_sources = [super::FlagSource::Review, super::FlagSource::Provenance, super::FlagSource::Model, super::FlagSource::Behaviour, super::FlagSource::Manual];
+        let mut validatable = 0u64;
+        let mut validated = 0u64;
+        let mut next = Vec::new();
+        for tx in self.events() {
+            if !matches!(tx.kind, TxKind::Cosigned | TxKind::EscapeExit | TxKind::External) {
+                continue;
+            }
+            validatable += 1;
+            if tx.flags.iter().any(|f| validator_sources.contains(&f.source)) {
+                validated += 1;
+            } else if next.len() < next_limit {
+                next.push(tx.hash);
+            }
+        }
+        super::ValidationStatus { validatable, validated, percent: if validatable == 0 { 100.0 } else { validated as f64 * 100.0 / validatable as f64 }, pending: validatable - validated, next }
+    }
+
     /// Every event in chain order, with derived fields filled.
     pub fn events(&self) -> Vec<ChainTx> {
         self.order.iter().filter_map(|h| self.view_tx(*h)).collect()
@@ -1489,6 +1509,8 @@ mod tests {
             amount: "150000".into(),
             fee: Some(0.0000021),
             explorer_url: None,
+            timestamp: None,
+            asset_address: None,
         };
         assert_eq!(chain.ingest_external(addr, ext.clone(), None, true, &Bytes::from(vec![0u8; 64]), 1_800).unwrap_err(), ChainError::BadCosignature);
         let h = chain.external_hash(addr, &ext);
@@ -1565,7 +1587,7 @@ mod tests {
         // then: two cancels, a big payment to a stranger, against the own 20 % limit
         let big = submit(&mut chain, &mut t, Address::repeat_byte(0x99), 200_000_000, 2);
         let f = chain.tx(big.tx_hash).unwrap().features.unwrap();
-        assert_eq!(f.version, 2);
+        assert_eq!(f.version, super::super::features::FEATURES_VERSION);
         assert_eq!(f.archetype, "holder");
         assert!(f.amount_vs_mean_out > 30.0, "{}", f.amount_vs_mean_out);
         assert_eq!(f.cancels_24h, 2);

@@ -3,13 +3,13 @@
 Status of everything in `backend/`, kept current by P1. The frontend has its own file.
 Legend: ✅ done and tested · 🟡 work in progress · ⬜ not started · ❌ dropped.
 
-Last update: 2026-10-10, step 15 (B1: no hold; warn + accept + second signature; regulatory refusal only).
+Last update: 2026-10-10, step 19 (pre-transaction risk preview with multiplicative factors, Solana batched RPC, transport retries).
 
 ## Verification snapshot
 
 | Check | Result |
 | --- | --- |
-| `cargo test --workspace` | 168 green (core 39, adapters 50, connectors 8, api-types 51 binding exports, services 20 end-to-end) |
+| `cargo test --workspace` | 181 green (core 39, adapters 50, connectors 10, conn-ton 5, conn-evm 3, api-types 54 binding exports, services 20 end-to-end); live tonapi + Sepolia tests behind `SQ_LIVE=1` |
 | `cargo clippy --workspace --all-targets -- -D warnings` | clean; `unwrap`/`expect`/`panic` denied outside tests |
 | `cargo build -p wallet-wasm --target wasm32-unknown-unknown` | ok |
 | TypeScript bindings | regenerated into `frontend/packages/types/src` by `cargo test`, no `bigint` |
@@ -25,8 +25,12 @@ Last update: 2026-10-10, step 15 (B1: no hold; warn + accept + second signature;
 | `api-types` | HTTP DTOs → TS | ✅ |
 | `wallet-wasm` | `WalletCore { assess, build_entry, verify_log, rule_ids }` | ✅ builds · ⬜ not packaged with `wasm-pack` yet |
 | `sq-services` | Axum API, one module per capability | ✅ |
-| `sq-connectors` | `NetworkSource` trait + TON (toncenter, ported from NetView), Bitcoin (Esplora), EVM (Blockscout) | ✅ parsing unit-tested offline; live calls best-effort |
-| `ferra-verify` (bin in `sq-adapters`) | standalone verifier over the chain file | ✅ |
+| `sq-connectors` | `NetworkSource` + `AccountInfo` traits, registry, exposure tracer (bounded BFS, hub skipping), provenance judge, Bitcoin (Esplora) | ✅ |
+| `sq-conn-ton` | tonapi.io events (TON + jetton transfers, counterparty names, scam flags), account + jettons, toncenter fallback, raw/friendly addresses | ✅ offline tests; live test behind `SQ_LIVE=1` |
+| `sq-conn-evm` | Blockscout txlist/tokentx + v2 address, token balances, counters; eth-sepolia, base-sepolia, ethereum | ✅ |
+| `sq-conn-btc` | Esplora with real address validation (`bitcoin` crate), mempool-then-chain cursor, stats-based account info; testnet + mainnet | ✅ offline tests; live testnet test behind `SQ_LIVE=1` |
+| `sq-conn-sol` | JSON-RPC: signatures → parsed transactions (concurrent), SOL and SPL deltas with counterparties, balances and token accounts; devnet + mainnet (`SQ_SOLANA_RPC`) | ✅ offline tests; live mainnet test behind `SQ_LIVE=1` |
+| `ferra-verify` (own crate, clap) | `ferra-verify`: integrity, validation %, `--events`, `--behaviour`, `--provenance`; `ferra-report`: transfer reports with `--model` | ✅ |
 
 ## Tamper-evident chain
 
@@ -58,7 +62,8 @@ Last update: 2026-10-10, step 15 (B1: no hold; warn + accept + second signature;
 | `GET /chain/dataset`: rows `{ features, label, label_codes }` | ✅ |
 | `RiskModel` trait, `LinearModel` from `fixtures/model.json`, `GET /model`, `MODEL_RISK` flag with top contributions | ✅ hand-set weights · ⬜ trained weights |
 | Connectors: `POST /chain/sync` pulls a page from TON / Bitcoin / Base Sepolia public indexers, dedupes per (network, tx id), attests each event | ✅ |
-| Solana, Sui, TON mainnet jettons, Ethereum mainnet sources | ⬜ one `NetworkSource` each |
+| TON mainnet + jettons, Ethereum mainnet, Sepolia | ✅ registered |
+| Solana, Sui | ⬜ one crate each (`sq-conn-sol`) |
 | Background sync (poll every N seconds per registered wallet) | ⬜ |
 | Price feed for fiat-normalised amounts | ⬜ |
 | Device / IP / geo in `SubmitMeta` | ⬜ |
@@ -82,10 +87,24 @@ Last update: 2026-10-10, step 15 (B1: no hold; warn + accept + second signature;
 
 | Item | Status |
 | --- | --- |
-| `sq-connectors::provenance`: counterparty history on its network → freshness, pass-through, fan-in, single use, round trip, sanctions (raw list in `fixtures/sanctions.json`) | ✅ |
+| `sq-connectors::provenance`: counterparty history → pass-through, fan-in, single use, round trip; indexer info → scam label (decisive), known service (lowers), named, fresh, unlabelled contract; exposure trace to `raw_flagged`; sanctions raw list | ✅ |
+| `GET /networks/{name}/account/{address}`: balance, tokens, labels per connected network | ✅ |
+| `TransferReport` v2 (`sq-connectors::report`): parties, transfers with date / amount / fee / related events, funding sources with their account info, sender activity, receiver provenance, **predicted risk per transfer** (auditable reasons + the validator's model on a feature vector built from indexer data), `elapsed_ms`, `max_risk` | ✅ live on TON, Ethereum, Sepolia (`fixtures/samples/transfer_report.json`) |
+| Concurrency: sender pages ∥ both account infos ∥ receiver history ∥ exposure trace; funders' infos in parallel; Solana `getTransaction` sent as JSON-RPC batches of 10 (2 in flight); per-network in-flight limit of 4 so public indexers are not burst into 429s; connect / timeout errors retried twice | ✅ |
+| **Risk preview before signing** (`sq-connectors::preview`, `POST /risk/preview`): input = network + counterparty (+ amount, + our wallet or an explicit `SenderContext`), output = `RiskPreview { probability, baseline_probability, odds_vs_baseline, band, reasons[], factors[] { code, odds_multiplier, contribution, value, message }, summary, counterparty_info, provenance, features }`. Factors are the logistic model's own terms (`exp(w·x)`), so the product of the multipliers **is** the odds shift, and the UI can print "3.2× riskier than a typical transfer: first payment to this address (×2.0), moves 83 % of your balance (×4.5); in its favour, your wallet is 231 days old (×0.4)". The sender side comes from the Ferra profile + balances + allowlist + past recipients when `wallet` is given; unknown sender features are neutralised, never guessed. Live: Bitcoin counterparty in ~1 s, Solana in ~16 s (`fixtures/samples/risk_preview_{btc,sol}.json`) | ✅ |
+| `TxFeatures` v3: `Low` bands encode as 0 (checked, nothing found), so a clean provenance check no longer raises the model score | ✅ |
+| `report_for_event` (counterparty-only) + `POST /report/event/{hash}`: one wallet per transfer, the Ferra side is known | ✅ |
+| `GET /chain/validation` + `ferra-verify` header line: validatable events, validated share, next hashes to pick up | ✅ |
+| Automatic validation worker that walks `validation.next` and writes flags | ⬜ next |
+| Model weights are hand-set for Ferra-chain features; on external transfers `policy_band` (provenance) and `counterparty_pass_through` dominate and most transfers score above threshold. Needs training on `GET /chain/dataset` | ⬜ known |
+| `ObservedEvent` now carries the origin timestamp and the token address | ✅ |
+| EVM history moved to the Blockscout **v2** API (`/addresses/{hash}/transactions` + `/token-transfers`, page-params cursor, native pseudo-token `0xffff…fffe` merged into the native tx, pending rows skipped); the legacy `?module=account` API throttled within minutes | ✅ |
+| Deep history on public Blockscout still rate-limits (3 pages per address per run is safe); a key or a paid endpoint is needed for more | ⬜ |
+| `POST /report/transfer` service endpoint (same JSON) | ⬜ small |
 | `POST /provenance/{tx_hash}` → `PROVENANCE` flag with reasons; `POST /review/{address}?provenance=true` (cap 5) | ✅ |
 | `ferra-verify --behaviour` (offline profiles + findings) and `--provenance` (online) | ✅ |
-| Timestamped freshness (sources expose block only) and 2-hop tracing | ⬜ |
+| Timestamped freshness (sources expose block only) | ⬜ |
+| DEX pools / routers without indexer labels score `PASS_THROUGH` (seen live on a STON.fi pool): needs a pool / known-contract list per network | ⬜ known false positive |
 
 ## Account review (validation system)
 

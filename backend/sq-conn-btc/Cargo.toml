@@ -1,0 +1,21 @@
+[package]
+name = "sq-conn-btc"
+version.workspace = true
+edition.workspace = true
+description = "Bitcoin connector for the Ferra chain: Esplora HTTP API (mempool.space, Blockstream, electrs) with real address validation."
+
+[dependencies]
+sq-connectors.workspace = true
+sq-adapters.workspace = true
+bitcoin.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,11 @@
+[
+  { "network": "ton", "from": "UQBeZOa5QMUEvMdb3GKSuttJgkQY7z0-Ddm_7WG-bwNXAUyX", "to": "UQBn3-AvFRtT1dUsj5M4oGD-y-SJalVTPtoYQ2Jx4YF5Jp-l" },
+  { "network": "ton", "from": "UQAAB-51K7H0-iqK6vHIw8zN1UIYXcFYk7jEeYAD2jbwUO0J", "to": "UQAymrOKwmwDdGSTjIYJRReSlo76FWMHJSh91zZoc3GjqvP9" },
+  { "network": "ton-testnet", "from": "kQDMo9xJIt6qMhYJg5luhIK18XkRJVKUPeOgrA0ORJoTgewC", "to": "0QD6a-uyjiAX8gRmtPi2ztdeBEliw6GrBa6dQBeM8wlQfJ5K" },
+  { "network": "ton-testnet", "from": "0QA6oEoI7UaSejc-igtDQibuo4CNXDRqRdyup_B7JTr-COj8", "to": "0QA6oEoI7UaSejc-igtDQibuo4CNXDRqRdyup_B7JTr-COj8" },
+  { "network": "ethereum", "from": "0x2CfF890f0378a11913B6129B2E97417a2c302680", "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
+  { "network": "ethereum", "from": "0x64a23502c4d3313481409467d8DF0Fc12f8e59e3", "to": "0x62cb5ffaA0C907cDb02EE5ea50E7DeBD67C45143" },
+  { "network": "ethereum", "from": "0x241BC500a768DCec2163015e4b62CF89cE9c3D94", "to": "0x34C8ABa501f5ABd6cEFbA0BBAf7E4fD83154311E" },
+  { "network": "eth-sepolia", "from": "0x56E2269d4B304790aaCB97d5FB55aED39bf03DDD", "to": "0x9cb7Fd7F7a60A7F0C35cF63A2Df1c3966c267Fa1" },
+  { "network": "eth-sepolia", "from": "0x03eEb73365BEEDEdB0b643Ffe67d11309b1c08D5", "to": "0x04485542eE9f8975f1Be6f5220C3d075bE8D3AB6" }
+]

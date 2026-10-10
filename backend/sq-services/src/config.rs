@@ -63,6 +63,14 @@ pub struct Config {
     pub kyc_scripts: Vec<KycScript>,
     /// Sanctioned addresses on other networks, as raw strings (`fixtures/sanctions.json: raw_addresses`).
     pub sanctioned_raw: Vec<String>,
+    /// Mixers / hacks on other networks (`fixtures/exposure-graph.json: raw_flagged`), for exposure tracing.
+    pub flagged_raw: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ExposureFile {
+    #[serde(default)]
+    raw_flagged: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -100,6 +108,7 @@ impl Config {
         let accounts: AccountsFile = read_json(&fixtures_dir.join("accounts.json"))?;
         let kyc: KycFile = read_json(&fixtures_dir.join("kyc-scripts.json"))?;
         let sanctions: SanctionsFile = read_json(&fixtures_dir.join("sanctions.json"))?;
+        let exposure: ExposureFile = read_json(&fixtures_dir.join("exposure-graph.json"))?;
         Ok(Self {
             port,
             fixtures_dir,
@@ -114,6 +123,7 @@ impl Config {
             clients: accounts.clients,
             kyc_scripts: kyc.scripts,
             sanctioned_raw: sanctions.raw_addresses,
+            flagged_raw: exposure.raw_flagged,
         })
     }
 }
