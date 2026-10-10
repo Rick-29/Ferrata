@@ -67,6 +67,10 @@ export function dispatch(bridge: UiBridge, request: BridgeRequest): Promise<Resu
       return bridge.getSettings();
     case 'saveSettings':
       return isAcceptableSettings(a) ? bridge.saveSettings(a) : rejected();
+    case 'getTestnetWallets':
+      return bridge.getTestnetWallets();
+    case 'requestAirdrop':
+      return a === 'solana-devnet' ? bridge.requestAirdrop(a) : rejected();
   }
 }
 

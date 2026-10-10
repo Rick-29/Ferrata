@@ -12,13 +12,17 @@ import { err, ok } from '../ui/core/result';
 import { isValidSettings } from '../ui/core/settings';
 import type {
   ActivityFeed,
+  AirdropOutcome,
   ConfirmOptions,
   SendDraft,
   SendOutcome,
   SendPreview,
   SessionView,
+  TestnetNetwork,
+  TestnetWallet,
   UiBridge,
 } from '../ui/services/UiBridge';
+import type { TestnetWallets } from './testnet/TestnetWallets';
 import { toUiError } from './bridge-errors';
 import {
   EMPTY_STATE,
@@ -41,6 +45,7 @@ const UNAUTHORIZED = uiError('SQ_UNAUTHORIZED');
 const NO_WALLET = uiError('SQ_NOT_FOUND');
 /** The backend answers 401 both for an expired token and for a step-up signature that does not verify. */
 const BAD_STEP_UP = uiError('SQ_CHAIN_BAD_OWNER_SIGNATURE');
+const TESTNET_OFF = uiError('TESTNET_UNAVAILABLE');
 
 export interface SwissquoteBridgeDeps {
   readonly api: SwissquoteApi;
@@ -52,6 +57,8 @@ export interface SwissquoteBridgeDeps {
   readonly onSession: (session: Session | null) => void;
   /** Which passkey owns the client's wallet. Default: one per Swissquote client. */
   readonly passkeyNameFor?: (clientId: string) => string;
+  /** Test-network addresses and faucets (P3). Absent: those calls answer "unavailable". */
+  readonly testnet?: TestnetWallets;
 }
 
 const defaultPasskeyName = (clientId: string): string => `passkey-${clientId}`;
@@ -116,6 +123,21 @@ export class SwissquoteBridge implements UiBridge {
 
   saveSettings(settings: WalletSettings): UiResult<WalletSettings> {
     return this.#serial(() => this.#saveSettings(settings));
+  }
+
+  async getTestnetWallets(): UiResult<readonly TestnetWallet[]> {
+    const { session, wallet } = await this.#serial(() => this.#load());
+    if (!session) return err(UNAUTHORIZED);
+    if (!wallet) return err(NO_WALLET);
+    return this.#deps.testnet ? this.#deps.testnet.list(wallet.address) : err(TESTNET_OFF);
+  }
+
+  /** Not serialised: the faucet can take tens of seconds and touches no bridge state. */
+  async requestAirdrop(network: TestnetNetwork): UiResult<AirdropOutcome> {
+    const { session, wallet } = await this.#serial(() => this.#load());
+    if (!session) return err(UNAUTHORIZED);
+    if (!wallet) return err(NO_WALLET);
+    return this.#deps.testnet ? this.#deps.testnet.airdrop(network, wallet.address) : err(TESTNET_OFF);
   }
 
   async #login(credentials: LoginRequest): UiResult<SessionView> {

@@ -27,13 +27,26 @@ import {
 } from './fake-world';
 import type {
   ActivityFeed,
+  AirdropOutcome,
   ConfirmOptions,
   SendDraft,
   SendOutcome,
   SendPreview,
   SessionView,
+  TestnetNetwork,
+  TestnetWallet,
   UiBridge,
 } from './UiBridge';
+
+/** Mock devnet wallet for offline demos and UI tests (labelled fake, never a real address). */
+const FAKE_SOLANA_WALLET: Omit<TestnetWallet, 'balance'> = {
+  network: 'solana-devnet',
+  label: 'Solana devnet',
+  address: 'FakeDevnetAddress1111111111111111111111111',
+  symbol: 'SOL',
+  decimals: 9,
+  explorerUrl: 'https://explorer.solana.com/?cluster=devnet',
+};
 
 export interface FakeBridgeOptions {
   /** Simulated network latency, so loading states are visible. 0 in tests. */
@@ -56,6 +69,7 @@ export class FakeBridge implements UiBridge {
   #receiptHashes: readonly string[] = [];
   #settings: WalletSettings = DEFAULT_SETTINGS;
   #head = GENESIS_HEAD;
+  #solLamports = 0n;
   #nextSeq = 0;
   #counter = 0;
 
@@ -206,6 +220,27 @@ export class FakeBridge implements UiBridge {
     if (!isValidSettings(settings)) return err(uiError('UI_INVALID_SETTINGS'));
     this.#settings = settings;
     return ok(settings);
+  }
+
+  async getTestnetWallets(): Promise<Result<readonly TestnetWallet[], UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    return ok([{ ...FAKE_SOLANA_WALLET, balance: this.#solLamports.toString() }]);
+  }
+
+  async requestAirdrop(network: TestnetNetwork): Promise<Result<AirdropOutcome, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    const amount = 1_000_000_000n;
+    this.#solLamports += amount;
+    const signature = `fakeAirdrop${this.#nextId()}`;
+    return ok({
+      network,
+      signature,
+      amount: amount.toString(),
+      explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=devnet`,
+      recordedOnFerra: 1,
+    });
   }
 
   #record(event: Omit<ChainEvent, 'block'>): void {

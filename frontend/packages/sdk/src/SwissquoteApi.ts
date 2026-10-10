@@ -20,6 +20,8 @@ import type { SetSettingsRequest } from '@sqw/types/SetSettingsRequest';
 import type { SettingsResponse } from '@sqw/types/SettingsResponse';
 import type { SignedUserOp } from '@sqw/types/SignedUserOp';
 import type { SubmitResult } from '@sqw/types/SubmitResult';
+import type { SyncRequest } from '@sqw/types/SyncRequest';
+import type { SyncResponse } from '@sqw/types/SyncResponse';
 import type { WalletOverview } from '@sqw/types/WalletOverview';
 import type { WalletSettings } from '@sqw/types/WalletSettings';
 import type { Result, SdkError } from './errors';
@@ -50,6 +52,8 @@ export interface SwissquoteApi {
 
   log(address: string): Call<LogResponse>;
   history(address: string): Call<HistoryResponse>;
+  /** Pull one page of another network's history for `address_raw` onto the Ferra chain. Public endpoint. */
+  sync(request: SyncRequest): Call<SyncResponse>;
 
   settings(address: string): Call<SettingsResponse>;
   settingsHash(address: string, settings: WalletSettings): Call<HashResponse>;

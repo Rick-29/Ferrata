@@ -13,7 +13,10 @@
   },
   "dependencies": {
     "@lit/context": "^1.1.6",
-    "lit": "^3.3.3"
+    "@noble/curves": "^1.9.1",
+    "@scure/base": "^1.2.6",
+    "lit": "^3.3.3",
+    "viem": "^2.57.4"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^3.0.0",

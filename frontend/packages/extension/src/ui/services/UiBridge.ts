@@ -57,6 +57,31 @@ export type SendOutcome =
   | { readonly kind: 'confirmation_required'; readonly previewId: string; readonly level: ConfirmationLevel }
   | { readonly kind: 'refused'; readonly reason: 'regulatory' };
 
+/** Public test networks the wallet holds an address on (testnet_plan M3, M8). */
+export type TestnetNetwork = 'solana-devnet';
+
+/** The wallet's address on a test network. Created by the background on first use, key never exposed. */
+export interface TestnetWallet {
+  readonly network: TestnetNetwork;
+  readonly label: string;
+  readonly address: string;
+  readonly symbol: string;
+  readonly decimals: number;
+  /** Base units as a decimal string; null when the network could not be read. */
+  readonly balance: string | null;
+  readonly explorerUrl: string;
+}
+
+export interface AirdropOutcome {
+  readonly network: TestnetNetwork;
+  readonly signature: string;
+  /** Base units as a decimal string. */
+  readonly amount: string;
+  readonly explorerUrl: string;
+  /** Events the Ferra chain recorded from that network right after the airdrop (0 if the sync failed). */
+  readonly recordedOnFerra: number;
+}
+
 /**
  * The only door from the UI to the rest of the system (Frontend Spec: P2 never calls the chain,
  * Rust or Swissquote directly). FakeBridge implements it for now; the real one wraps
@@ -81,4 +106,9 @@ export interface UiBridge {
   getSettings(): Promise<Result<WalletSettings, UiError>>;
   /** Signed with the passkey; returns the settings as now recorded on-chain. */
   saveSettings(settings: WalletSettings): Promise<Result<WalletSettings, UiError>>;
+
+  /** The wallet's test-network addresses and balances (P3). */
+  getTestnetWallets(): Promise<Result<readonly TestnetWallet[], UiError>>;
+  /** Asks that network's public faucet for test coins, then records the transfer on the Ferra chain. */
+  requestAirdrop(network: TestnetNetwork): Promise<Result<AirdropOutcome, UiError>>;
 }

@@ -30,6 +30,10 @@ const MESSAGES: Readonly<Record<string, string>> = {
   SQ_CHAIN_BAD_OWNER_SIGNATURE: 'Signature de la passkey refusée.',
   SQ_CHAIN_BAD_COSIGNATURE: 'Co-signature Swissquote invalide.',
   SQ_CORE_SEQ_GAP: "Le journal d'audit n'est pas synchronisé. Recommencez l'envoi.",
+  TESTNET_FAUCET_LIMIT:
+    'Le faucet public de Solana devnet refuse pour le moment (limite atteinte). Réessayez plus tard ou utilisez faucet.solana.com.',
+  TESTNET_UNAVAILABLE: 'Le réseau de test ne répond pas. Réessayez dans un instant.',
+  TESTNET_RPC_ERROR: 'Le réseau de test a refusé la demande.',
 };
 
 const FALLBACK = 'Une erreur inattendue est survenue.';

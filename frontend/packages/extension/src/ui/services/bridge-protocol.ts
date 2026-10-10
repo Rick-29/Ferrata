@@ -23,6 +23,8 @@ const METHODS: ReadonlySet<string> = new Set<BridgeMethod>([
   'getActivity',
   'getSettings',
   'saveSettings',
+  'getTestnetWallets',
+  'requestAirdrop',
 ]);
 
 export function isBridgeRequest(message: unknown): message is BridgeRequest {

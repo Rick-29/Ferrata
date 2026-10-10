@@ -9,6 +9,7 @@ import '../../widgets/asset-list/AssetList';
 import '../../widgets/balance-card/BalanceCard';
 import '../../widgets/button/Button';
 import '../../widgets/gasless-badge/GaslessBadge';
+import './TestnetWalletsPanel';
 
 /** Balance, assets and the way into Send. Reloads the wallet every time it opens. */
 @customElement('sq-home-screen')
@@ -58,6 +59,7 @@ export class HomeScreen extends Screen {
         <span class="eyebrow">Actifs</span>
         <sq-asset-list .state=${assetsState(this.wallet)}></sq-asset-list>
       </section>
+      ${isReady ? html`<sq-testnet-wallets></sq-testnet-wallets>` : ''}
     `;
   }
 

@@ -20,6 +20,8 @@ import type { SetSettingsRequest } from '@sqw/types/SetSettingsRequest';
 import type { SettingsResponse } from '@sqw/types/SettingsResponse';
 import type { SignedUserOp } from '@sqw/types/SignedUserOp';
 import type { SubmitResult } from '@sqw/types/SubmitResult';
+import type { SyncRequest } from '@sqw/types/SyncRequest';
+import type { SyncResponse } from '@sqw/types/SyncResponse';
 import type { WalletOverview } from '@sqw/types/WalletOverview';
 import type { WalletSettings } from '@sqw/types/WalletSettings';
 import type { Result, SdkError } from './errors';
@@ -83,6 +85,10 @@ export class HttpSwissquoteApi implements SwissquoteApi {
 
   history(address: string): Call<HistoryResponse> {
     return this.#http.get(`/chain/history/${seg(address)}`);
+  }
+
+  sync(request: SyncRequest): Call<SyncResponse> {
+    return this.#http.post('/chain/sync', request);
   }
 
   settings(address: string): Call<SettingsResponse> {

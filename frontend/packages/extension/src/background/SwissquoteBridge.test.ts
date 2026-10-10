@@ -71,6 +71,9 @@ function scriptedApi(overrides: Partial<SwissquoteApi> = {}): SwissquoteApi {
     submit: vi.fn(async () => ok({ tx_hash: '0xtx', block_number: 2, kind: 'cosigned' as const })),
     log: vi.fn(async () => ok({ address: ADDRESS, head: `0x${'7'.repeat(64)}`, next_seq: 7, entries: [] })),
     history: vi.fn(async () => ok({ address: ADDRESS, txs: [] })),
+    sync: vi.fn(async () =>
+      ok({ network: { family: 'solana', name: 'solana-devnet', chain_id: null }, fetched: 0, recorded: 0, skipped_existing: 0, next_cursor: null } as never),
+    ),
     settings: vi.fn(async () => err(sdkError('NOT_FOUND', 'swissquote', 'n/a', 404))),
     settingsHash: vi.fn(async () => ok({ hash: '0xh', nonce: 0 })),
     setSettings: vi.fn(async () => err(sdkError('NOT_FOUND', 'swissquote', 'n/a', 404))),

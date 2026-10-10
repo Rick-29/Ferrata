@@ -6,11 +6,14 @@ import { err, type Result } from '../core/result';
 import { BRIDGE_CHANNEL, type BridgeMethod, type BridgeRequest } from './bridge-protocol';
 import type {
   ActivityFeed,
+  AirdropOutcome,
   ConfirmOptions,
   SendDraft,
   SendOutcome,
   SendPreview,
   SessionView,
+  TestnetNetwork,
+  TestnetWallet,
   UiBridge,
 } from './UiBridge';
 
@@ -61,6 +64,14 @@ export class RuntimeBridge implements UiBridge {
 
   saveSettings(settings: WalletSettings): UiResult<WalletSettings> {
     return call('saveSettings', settings);
+  }
+
+  getTestnetWallets(): UiResult<readonly TestnetWallet[]> {
+    return call('getTestnetWallets');
+  }
+
+  requestAirdrop(network: TestnetNetwork): UiResult<AirdropOutcome> {
+    return call('requestAirdrop', network);
   }
 }
 
