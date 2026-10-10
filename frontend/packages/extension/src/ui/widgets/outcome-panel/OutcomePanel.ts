@@ -30,37 +30,71 @@ export class OutcomePanel extends Widget<FinalOutcome> {
     textStyles,
     surfaceStyles,
     css`
-      .card {
-        display: grid;
-        gap: var(--sq-space-3);
-        justify-items: start;
+      section {
+        min-height: 520px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: stretch;
+        gap: 14px;
+        text-align: center;
       }
-      .icon {
+      .orb {
+        position: relative;
+        width: 94px;
+        height: 94px;
+        margin: 0 auto 13px;
+        border-radius: 35px;
         display: grid;
         place-items: center;
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
         color: var(--tone);
-        background: color-mix(in srgb, var(--tone) 14%, transparent);
+        background: linear-gradient(145deg, color-mix(in srgb, var(--tone) 22%, transparent), rgba(123, 92, 255, 0.16));
+        border: 1px solid color-mix(in srgb, var(--tone) 20%, transparent);
+        box-shadow: 0 0 45px color-mix(in srgb, var(--tone) 18%, transparent);
       }
-      svg {
-        width: 26px;
-        height: 26px;
+      .orb::before {
+        content: '';
+        position: absolute;
+        inset: 15px;
+        border-radius: 23px;
+        background: color-mix(in srgb, var(--tone) 10%, transparent);
+      }
+      .orb svg {
+        position: relative;
+        width: 38px;
+        height: 38px;
+      }
+      .eyebrow {
+        letter-spacing: 0.12em;
+      }
+      h1 {
+        font-size: 28px;
       }
       p {
-        font-size: 14px;
-        line-height: 1.45;
+        max-width: 285px;
+        margin: 0 auto;
+        font-size: 11px;
+        line-height: 1.5;
       }
       .details {
-        width: 100%;
-        box-sizing: border-box;
+        margin-top: 10px;
         display: grid;
-        gap: 4px;
-        font-size: 12px;
+        gap: 8px;
+        padding: 12px;
+        border-radius: 18px;
+        border: 1px solid var(--sq-border);
+        background: var(--sq-surface);
+        font-size: 10px;
+      }
+      .receipt {
+        justify-self: center;
+        padding: 5px 9px;
+        border-radius: 999px;
+        color: var(--sq-risk-low);
+        background: rgba(46, 213, 152, 0.08);
       }
       sq-button {
-        width: 100%;
+        margin-top: 10px;
       }
     `,
   ];
@@ -68,13 +102,13 @@ export class OutcomePanel extends Widget<FinalOutcome> {
   protected override renderReady(outcome: FinalOutcome): TemplateResult {
     const copy = COPY[outcome.kind];
     return html`
-      <section class="card" role="status" style="--tone: var(--sq-risk-${copy.tone})" data-outcome=${outcome.kind}>
-        <span class="icon" aria-hidden="true">
+      <section role="status" style="--tone: var(--sq-risk-${copy.tone})" data-outcome=${outcome.kind}>
+        <span class="orb" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
             ${copy.icon}
           </svg>
         </span>
-        <h1>${copy.title}</h1>
+        <span class="eyebrow">${copy.title}</span>
         ${this.#body(outcome)}
         <sq-button variant="secondary" @click=${() => this.emit('done', undefined)}>Retour à l'accueil</sq-button>
       </section>
@@ -85,15 +119,17 @@ export class OutcomePanel extends Widget<FinalOutcome> {
     switch (outcome.kind) {
       case 'confirmed':
         return html`
-          <p class="muted">Co-signée par Swissquote et inscrite au journal d'audit.</p>
-          <div class="inset details">
-            <span>Reçu n° ${outcome.receipt.seq} · signé par Swissquote</span>
-            <span class="mono">Tx ${shortAddress(outcome.txHash)}</span>
+          <h1>Co-signée par Swissquote</h1>
+          <p class="muted">La transaction est exécutée et inscrite au journal d'audit.</p>
+          <div class="details">
+            <span class="receipt">Reçu n° ${outcome.receipt.seq} · signé par Swissquote</span>
+            <span class="mono muted">Tx ${shortAddress(outcome.txHash)}</span>
           </div>
         `;
       case 'refused':
         // No reasons on purpose: a regulatory refusal must not disclose what was flagged.
         return html`
+          <h1>Co-signature indisponible</h1>
           <p class="muted">
             Cette transaction ne peut pas être co-signée pour des raisons réglementaires. Vos fonds n'ont pas bougé.
           </p>

@@ -28,18 +28,28 @@ export class BalanceDelta extends Widget<readonly DeltaRow[]> {
         gap: 6px;
       }
       li {
-        display: grid;
-        grid-template-columns: auto 1fr auto;
+        display: flex;
+        justify-content: space-between;
         align-items: baseline;
         gap: var(--sq-space-2);
-        font-size: 13px;
+        font-size: 10px;
         font-variant-numeric: tabular-nums;
       }
       .symbol {
-        font-weight: 650;
+        color: var(--sq-text-muted);
+      }
+      .flow {
+        font: 600 12px var(--sq-font-display);
+        margin-left: auto;
+      }
+      .flow i {
+        font-style: normal;
+        color: var(--sq-pink);
+        margin: 0 2px;
       }
       .change {
-        font-weight: 650;
+        font-weight: 600;
+        min-width: 52px;
         text-align: right;
       }
       .out {
@@ -60,7 +70,7 @@ export class BalanceDelta extends Widget<readonly DeltaRow[]> {
           const abs = change < 0n ? -change : change;
           return html`<li>
             <span class="symbol">${row.symbol}</span>
-            <span class="muted">${formatUnits(row.before, row.decimals, EXACT)} → ${formatUnits(row.after, row.decimals, EXACT)}</span>
+            <span class="flow">${formatUnits(row.before, row.decimals, EXACT)}<i> → </i>${formatUnits(row.after, row.decimals, EXACT)}</span>
             <span class="change ${change < 0n ? 'out' : 'in'}">${sign}${formatUnits(toHexUnits(abs), row.decimals, EXACT)}</span>
           </li>`;
         })}

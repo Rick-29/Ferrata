@@ -20,26 +20,31 @@ export class TxSummary extends Widget<TxSummaryData> {
     css`
       :host {
         display: grid;
-        gap: var(--sq-space-2);
-      }
-      .amount {
-        display: flex;
-        align-items: baseline;
-        gap: var(--sq-space-2);
+        justify-items: center;
+        gap: 5px;
+        text-align: center;
       }
       .value {
-        font-size: 30px;
-        font-weight: 700;
-        letter-spacing: -0.03em;
+        font: 600 26px var(--sq-font-display);
+        letter-spacing: -0.04em;
         font-variant-numeric: tabular-nums;
       }
       .symbol {
-        font-weight: 650;
+        font-size: 15px;
         color: var(--sq-text-muted);
       }
       .to {
-        display: grid;
-        gap: 2px;
+        display: flex;
+        align-items: flex-start;
+        gap: 5px;
+        font-size: 10px;
+        color: var(--sq-text-muted);
+        text-align: left;
+      }
+      .mono {
+        font-size: 9px;
+        color: #b4b9c8;
+        line-height: 1.35;
       }
     `,
   ];

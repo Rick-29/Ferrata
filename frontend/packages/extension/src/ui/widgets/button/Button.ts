@@ -30,22 +30,31 @@ export class Button extends LitElement {
       display: inline-block;
     }
     button {
+      position: relative;
+      overflow: hidden;
       width: 100%;
+      min-height: 46px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: var(--sq-space-2);
+      gap: 8px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 14px;
       font: inherit;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 650;
-      padding: 12px 16px;
-      border-radius: var(--sq-radius-md);
-      border: 1px solid transparent;
+      letter-spacing: -0.01em;
+      color: #fff;
       cursor: pointer;
       transition:
-        background var(--sq-duration) var(--sq-ease),
-        border-color var(--sq-duration) var(--sq-ease),
-        transform var(--sq-duration) var(--sq-ease);
+        transform var(--sq-duration) var(--sq-ease),
+        filter var(--sq-duration) var(--sq-ease),
+        opacity var(--sq-duration) var(--sq-ease);
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      filter: brightness(1.08);
     }
     button:active:not(:disabled) {
       transform: scale(0.98);
@@ -56,40 +65,56 @@ export class Button extends LitElement {
     }
     button:disabled {
       cursor: not-allowed;
-      opacity: 0.5;
+      opacity: 0.36;
+      filter: saturate(0.5);
+      box-shadow: none;
     }
     button[aria-busy='true'] {
       cursor: progress;
       opacity: 0.85;
     }
     .primary {
-      background: var(--sq-accent);
-      color: var(--sq-accent-text);
+      background: var(--sq-brand-gradient);
+      box-shadow:
+        0 12px 30px rgba(255, 75, 31, 0.24),
+        inset 0 1px rgba(255, 255, 255, 0.18);
     }
-    .primary:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--sq-accent) 88%, black);
+    /* Light sweep on hover (design: .button-primary:after). */
+    .primary::after {
+      content: '';
+      position: absolute;
+      top: -70%;
+      left: -25%;
+      width: 28%;
+      height: 240%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+      transform: rotate(20deg);
+      transition: left 0.55s ease;
+    }
+    .primary:hover:not(:disabled)::after {
+      left: 105%;
     }
     .secondary {
-      background: var(--sq-surface);
+      background: var(--sq-surface-high);
+      border: 1px solid var(--sq-border-strong);
       color: var(--sq-text);
-      border-color: var(--sq-border);
-    }
-    .secondary:hover:not(:disabled) {
-      border-color: color-mix(in srgb, var(--sq-text) 35%, var(--sq-border));
     }
     .ghost {
       width: auto;
-      padding: 6px 8px;
+      min-height: 30px;
+      padding: 4px 10px;
       background: transparent;
       color: var(--sq-text-muted);
+      font-size: 11px;
+      font-weight: 500;
     }
     .ghost:hover:not(:disabled) {
       color: var(--sq-text);
-      background: var(--sq-surface-sunken);
+      transform: none;
     }
     .danger {
-      background: var(--sq-risk-critical);
-      color: #fff;
+      background: linear-gradient(120deg, #ff7a3d, #ff4d6a);
+      box-shadow: 0 10px 24px rgba(255, 77, 106, 0.18);
     }
     .spinner {
       width: 14px;
@@ -107,6 +132,9 @@ export class Button extends LitElement {
     @media (prefers-reduced-motion: reduce) {
       .spinner {
         animation-duration: 2s;
+      }
+      .primary::after {
+        display: none;
       }
     }
   `;

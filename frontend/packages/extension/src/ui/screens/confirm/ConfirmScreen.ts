@@ -3,6 +3,7 @@ import { css, html, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { UiError } from '../../core/errors';
 import type { WidgetEvent } from '../../core/events';
+import { screenHeader } from '../../core/header';
 import { Screen } from '../../core/Screen';
 import { screenStyles, surfaceStyles, textStyles } from '../../core/styles';
 import { ready } from '../../core/Widget';
@@ -70,13 +71,20 @@ export class ConfirmScreen extends Screen {
     textStyles,
     surfaceStyles,
     css`
+      :host {
+        gap: 13px;
+      }
+      .risk {
+        display: flex;
+        justify-content: center;
+      }
       .card {
         display: grid;
-        gap: var(--sq-space-4);
+        gap: 10px;
       }
       .block {
         display: grid;
-        gap: var(--sq-space-2);
+        gap: 6px;
       }
       hr {
         width: 100%;
@@ -101,8 +109,8 @@ export class ConfirmScreen extends Screen {
     const { assessment, signals } = this.preview.assessment;
     const highRisk = this.phase.kind === 'confirm-again' && this.phase.level === 'high_risk';
     return html`
-      <div class="topbar">
-        <span class="eyebrow">Confirmer l'envoi</span>
+      ${screenHeader({ title: 'Confirmer', onBack: this.#cancel, backDisabled: this.busy })}
+      <div class="risk">
         <sq-risk-badge .state=${ready({ band: assessment.band, score: assessment.score })}></sq-risk-badge>
       </div>
       <section class="card">
@@ -121,7 +129,7 @@ export class ConfirmScreen extends Screen {
         </div>
         <hr />
         <div class="block">
-          <span class="eyebrow">Analyse de risque</span>
+          <span class="eyebrow">Pourquoi ce niveau ?</span>
           <sq-reason-list .state=${ready(assessment.reasons)}></sq-reason-list>
         </div>
       </section>

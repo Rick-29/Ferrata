@@ -1,6 +1,7 @@
 import { html, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { toActivityRows, type ActivityRow } from '../../core/activity';
+import { screenHeader } from '../../core/header';
 import { Screen } from '../../core/Screen';
 import { screenStyles, textStyles } from '../../core/styles';
 import { failed, loading, ready, type WidgetState } from '../../core/Widget';
@@ -21,11 +22,13 @@ export class ActivityScreen extends Screen {
 
   override render(): TemplateResult {
     return html`
-      <div class="topbar">
-        <sq-button variant="ghost" @click=${() => this.router.go('home', undefined)}>← Retour</sq-button>
-        <span class="eyebrow">Activité</span>
-        <sq-button variant="ghost" ?disabled=${this.rows.kind === 'loading'} @click=${this.#load}>Actualiser</sq-button>
-      </div>
+      ${screenHeader({
+        title: 'Activité',
+        onBack: () => this.router.go('home', undefined),
+        action: html`<sq-button variant="ghost" ?disabled=${this.rows.kind === 'loading'} @click=${this.#load}>
+          Actualiser
+        </sq-button>`,
+      })}
       <sq-activity-list .state=${this.rows} @retry=${this.#load}></sq-activity-list>
     `;
   }

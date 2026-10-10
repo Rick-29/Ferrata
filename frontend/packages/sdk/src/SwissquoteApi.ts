@@ -13,12 +13,14 @@ import type { LoginRequest } from '@sqw/types/LoginRequest';
 import type { LogResponse } from '@sqw/types/LogResponse';
 import type { OwnerKey } from '@sqw/types/OwnerKey';
 import type { OwnerSignature } from '@sqw/types/OwnerSignature';
+import type { RecoveryState } from '@sqw/types/RecoveryState';
 import type { RegisterWalletRequest } from '@sqw/types/RegisterWalletRequest';
 import type { RegisterWalletResponse } from '@sqw/types/RegisterWalletResponse';
 import type { Session } from '@sqw/types/Session';
 import type { SetSettingsRequest } from '@sqw/types/SetSettingsRequest';
 import type { SettingsResponse } from '@sqw/types/SettingsResponse';
 import type { SignedUserOp } from '@sqw/types/SignedUserOp';
+import type { StartRecoveryRequest } from '@sqw/types/StartRecoveryRequest';
 import type { SubmitResult } from '@sqw/types/SubmitResult';
 import type { WalletOverview } from '@sqw/types/WalletOverview';
 import type { WalletSettings } from '@sqw/types/WalletSettings';
@@ -54,6 +56,12 @@ export interface SwissquoteApi {
   settings(address: string): Call<SettingsResponse>;
   settingsHash(address: string, settings: WalletSettings): Call<HashResponse>;
   setSettings(address: string, request: SetSettingsRequest): Call<SettingsResponse>;
+
+  /** Device recovery: new passkey + simulated KYC → timelock → execute (or cancel from an existing device). */
+  startRecovery(request: StartRecoveryRequest): Call<RecoveryState>;
+  recovery(id: string): Call<RecoveryState>;
+  cancelRecovery(id: string, signature: OwnerSignature): Call<RecoveryState>;
+  executeRecovery(id: string): Call<RecoveryState>;
 
   /** Mock passkeys under `/dev` until WebAuthn is wired. Deterministic per name, labelled dev. */
   devPasskey(name: string): Call<DevPasskey>;
