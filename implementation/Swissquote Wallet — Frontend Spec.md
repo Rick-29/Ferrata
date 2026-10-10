@@ -92,11 +92,12 @@ Nine screens built from about fifteen reusable widgets; build in the priority or
 | 1 | Onboarding | `sq-login-form`, `sq-passkey-prompt`, `sq-step-progress` | Create wallet |
 | 1 | Home | `sq-balance-card`, `sq-asset-list`, `sq-gasless-badge` | Show USDC / ETH |
 | 1 | Send | `sq-address-input`, `sq-amount-input`, `sq-asset-picker` | Send USDC |
-| 1 | Confirm (popup + approval window) | `sq-tx-summary`, `sq-balance-delta`, `sq-risk-badge`, `sq-reason-list`, `sq-passkey-prompt` | Low / High / Critical |
-| 2 | Hold | `sq-hold-banner`, `sq-justification-form`, `sq-countdown` | High-risk hold |
+| 1 | Confirm (popup + approval window) | `sq-tx-summary`, `sq-balance-delta`, `sq-risk-badge`, `sq-reason-list`, `sq-passkey-prompt`, `sq-risk-warning`, `sq-legal-notice` | Low / Medium / High warning / regulatory refusal |
 | 2 | Recovery start (new device) | `sq-kyc-mock-call`, `sq-guardian-status`, `sq-countdown` | Attacker / real recovery |
 | 2 | Security alert (existing device) | `sq-alert-banner`, `sq-cancel-recovery-button` | Real user cancels |
 | 3 | Activity | `sq-activity-list` (log entries + receipt check mark), `sq-risk-badge` | Reconciliation finding |
 | 3 | Settings | `sq-signer-list`, `sq-escape-hatch-panel` | Escape hatch |
 
-Shared primitives: `sq-button`, `sq-skeleton`, `sq-error-panel`, `sq-copy-address`. Mock KYC call is a scripted screen, clearly labelled "Simulated video identification".
+Shared primitives: `sq-button`, `sq-skeleton`, `sq-error-panel`, `sq-copy-address`, `sq-consent-checkbox`. Mock KYC call is a scripted screen, clearly labelled "Simulated video identification".
+
+**Risk never blocks.** Swissquote warns and asks for a second confirmation; the user decides. High-risk transactions show `sq-risk-warning` and need the user to tick "I understand the risks" before confirming again. The only refusal is regulatory (sanctions), shown without its reason. There is no Hold screen. Wording and rationale: `Swissquote Wallet — Positionnement légal du blocage.md`.

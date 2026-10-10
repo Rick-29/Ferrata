@@ -1,0 +1,7 @@
+{
+  "name": "sqw-frontend",
+  "private": true,
+  "workspaces": [
+    "packages/extension"
+  ]
+}
