@@ -8,6 +8,21 @@ Everything the extension side (P2 UI, P3 middleware) has to do to reach the test
 Server: `http://localhost:8787`. Every non-public call carries `Authorization: Bearer <token>`.
 Public: `/auth/session`, `/chains`, `/networks`, `/model`, `/chain/*`, `/dev/*`.
 
+## Status (2026-10-10)
+
+| § | Item | State |
+| --- | --- | --- |
+| 1 | SDK `frontend/packages/sdk`: `HttpSwissquoteApi` for every endpoint the backend serves | ✅ |
+| 1 | `linkAddress` (B2), `ingest` with `linked` (B4), `assessExternal` (B6) | ⏳ blocked on backend |
+| 2 | Background worker: token in `chrome.storage.session`, real `UiBridge` over `chrome.runtime`, sender check, arg validation | ✅ |
+| 4 | Send flow: assess → cosign → step-up (`standard` / `high_risk` + `accepted_risk`) → submit; cancel → `/intents/…/cancel`; local audit log | ✅ against the real backend (`npm run test:e2e`) |
+| 6 | Activity screen, Settings screen (owner-signed), Home links | ✅ |
+| 6 | Linked addresses, notifications/SSE (B8), approval window | ⏳ needs B2 / B8 / §5 |
+| 3, 5 | Network keys, WebAuthn, dApp providers, Solana | ⏳ next |
+
+`popup/main.ts` picks the bridge with `VITE_BRIDGE` (`fake` = offline demo world, else real backend).
+Dev passkeys (`/dev/passkeys`) stand in for WebAuthn until §3.
+
 ## 0. Keep what exists
 
 - `UiBridge` stays the only door from screens to the world. Add methods, do not bypass it.

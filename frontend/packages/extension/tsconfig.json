@@ -16,8 +16,9 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "paths": {
-      "@sqw/types/*": ["../types/src/*"]
+      "@sqw/types/*": ["../types/src/*"],
+      "@sqw/sdk": ["../sdk/src/index.ts"]
     }
   },
-  "include": ["src", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "../sdk/src", "vite.config.ts", "vitest.config.ts"]
 }

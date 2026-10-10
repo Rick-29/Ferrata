@@ -26,6 +26,11 @@ export class HomeScreen extends Screen {
         display: grid;
         gap: var(--sq-space-2);
       }
+      .secondary {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--sq-space-2);
+      }
     `,
   ];
 
@@ -44,6 +49,10 @@ export class HomeScreen extends Screen {
       <sq-balance-card .state=${this.wallet} @retry=${this.#load}></sq-balance-card>
       <div class="actions">
         <sq-button ?disabled=${!isReady} @click=${() => this.router.go('send', undefined)}>Envoyer</sq-button>
+        <div class="secondary">
+          <sq-button variant="secondary" @click=${() => this.router.go('activity', undefined)}>Activité</sq-button>
+          <sq-button variant="secondary" @click=${() => this.router.go('settings', undefined)}>Réglages</sq-button>
+        </div>
       </div>
       <section>
         <span class="eyebrow">Actifs</span>

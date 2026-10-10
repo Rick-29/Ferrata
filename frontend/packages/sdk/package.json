@@ -1,0 +1,7 @@
+{
+  "name": "@sqw/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed client for the Swissquote wallet service. Consumed from source by the extension (alias @sqw/sdk)."
+}

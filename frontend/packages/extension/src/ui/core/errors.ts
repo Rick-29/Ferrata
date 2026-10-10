@@ -21,6 +21,15 @@ const MESSAGES: Readonly<Record<string, string>> = {
   CHAIN_UNAVAILABLE: 'Réseau indisponible.',
   UI_INVALID_ADDRESS: 'Adresse invalide.',
   UI_INVALID_AMOUNT: 'Montant invalide.',
+  UI_BAD_REQUEST: 'La demande est invalide.',
+  UI_FORBIDDEN: 'Action non autorisée.',
+  UI_INTERNAL: "Erreur interne de l'extension.",
+  UI_BACKGROUND_UNAVAILABLE: "Le service de l'extension ne répond pas. Rechargez l'extension.",
+  UI_INVALID_SETTINGS: 'Réglages invalides : les pourcentages doivent être entre 0 et 100.',
+  SQ_UNREACHABLE: 'Le service Swissquote est injoignable.',
+  SQ_CHAIN_BAD_OWNER_SIGNATURE: 'Signature de la passkey refusée.',
+  SQ_CHAIN_BAD_COSIGNATURE: 'Co-signature Swissquote invalide.',
+  SQ_CORE_SEQ_GAP: "Le journal d'audit n'est pas synchronisé. Recommencez l'envoi.",
 };
 
 const FALLBACK = 'Une erreur inattendue est survenue.';

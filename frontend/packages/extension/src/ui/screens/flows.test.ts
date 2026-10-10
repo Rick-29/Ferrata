@@ -7,10 +7,12 @@ import { DEMO_ADDRESSES, USDC } from '../services/fake-world';
 import { FakeBridge } from '../services/FakeBridge';
 import type { SendDraft } from '../services/UiBridge';
 import { deepQuery, deepText, mount, settle } from '../testing/dom';
+import './activity/ActivityScreen';
 import './confirm/ConfirmScreen';
 import './home/HomeScreen';
 import './onboarding/OnboardingScreen';
 import './send/SendScreen';
+import './settings/SettingsScreen';
 
 // End-to-end through the real shell, router and screens, against the FakeBridge with no latency.
 
@@ -23,6 +25,8 @@ function popupRouter(): Router {
       home: () => html`<sq-home-screen></sq-home-screen>`,
       send: () => html`<sq-send-screen></sq-send-screen>`,
       confirm: ({ preview, asset }) => html`<sq-confirm-screen .preview=${preview} .asset=${asset}></sq-confirm-screen>`,
+      activity: () => html`<sq-activity-screen></sq-activity-screen>`,
+      settings: () => html`<sq-settings-screen></sq-settings-screen>`,
     },
     'onboarding',
   );
@@ -237,5 +241,63 @@ describe('Confirm', () => {
     emitWidgetEvent(panel, 'done', undefined);
     await settle();
     expect(router.current).toBe('home');
+  });
+});
+
+describe('Activity', () => {
+  it('shows a co-signed send with its Swissquote receipt', async () => {
+    const bridge = await signedInBridge();
+    const preview = await bridge.previewSend({ to: DEMO_ADDRESSES.knownMerchant, asset: USDC, amount: usdc(50n) });
+    if (!preview.ok) throw new Error('setup failed');
+    await bridge.confirmSend(preview.value.id, { stepUp: false, acceptedRisk: false });
+    const router = popupRouter();
+    router.go('activity', undefined);
+    const shell = await mount(new AppShell(bridge, router));
+    await settle();
+
+    const text = deepText(shell);
+    expect(text).toContain('Envoi co-signé');
+    expect(text).toContain('−50 USDC');
+    expect(text).toContain('✓ Reçu');
+    expect(text).toContain('Fonds de démo reçus');
+  });
+});
+
+describe('Settings', () => {
+  async function openSettings(): Promise<{ shell: AppShell; bridge: FakeBridge }> {
+    const bridge = await signedInBridge();
+    const router = popupRouter();
+    router.go('settings', undefined);
+    const shell = await mount(new AppShell(bridge, router));
+    await settle();
+    return { shell, bridge };
+  }
+
+  function typeInto(shell: AppShell, id: string, value: string): void {
+    const input = deepQuery<HTMLInputElement>(shell, `#${id}`);
+    if (!input) throw new Error(`no #${id}`);
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+  }
+
+  it('refuses a percentage above 100 before anything is signed', async () => {
+    const { shell } = await openSettings();
+    typeInto(shell, 'f-stepUpPct', '150');
+    await settle();
+    expect(deepText(shell)).toContain('Entre 0 et 100.');
+    const save = deepQuery(deepQuery(shell, 'sq-settings-form') ?? shell, 'sq-button');
+    expect(save?.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('saves signed settings and confirms it', async () => {
+    const { shell, bridge } = await openSettings();
+    typeInto(shell, 'f-stepUpPct', '30');
+    await settle();
+    deepQuery(deepQuery(shell, 'sq-settings-form') ?? shell, 'sq-button')?.click();
+    await settle();
+
+    expect(deepText(shell)).toContain('Réglages enregistrés et signés.');
+    const stored = await bridge.getSettings();
+    expect(stored.ok && stored.value.step_up_above_pct).toBe(30);
   });
 });

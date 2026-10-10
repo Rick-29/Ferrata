@@ -1,4 +1,8 @@
 import type { AccountView } from '@sqw/types/AccountView';
+import type { ChainTx } from '@sqw/types/ChainTx';
+import type { TokenInfo } from '@sqw/types/TokenInfo';
+import type { TxKind } from '@sqw/types/TxKind';
+import type { WalletSettings } from '@sqw/types/WalletSettings';
 import type { DecodedAction } from '@sqw/types/DecodedAction';
 import type { OutcomeKind } from '@sqw/types/OutcomeKind';
 import type { Reason } from '@sqw/types/Reason';
@@ -31,6 +35,56 @@ const BAND_THRESHOLDS = { medium: 25, high: 50, critical: 80 } as const;
 /** Reasons that trigger a regulatory refusal. Everything else only warns: Swissquote never blocks on risk alone. */
 const REGULATORY_REASONS: ReadonlySet<Reason['code']> = new Set(['SANCTIONED']);
 
+export const CHAIN_ID = 84532;
+export const DEMO_TOKENS: readonly TokenInfo[] = [{ address: USDC, symbol: 'USDC', decimals: USDC_DECIMALS }];
+
+export const DEFAULT_SETTINGS: WalletSettings = {
+  version: 1,
+  per_tx_limit_pct: 0,
+  daily_limit: 0,
+  step_up_above_pct: 0,
+  intent_timeout_secs: 600,
+  hold_timeout_secs: 0,
+  allowlist: [],
+  extra: {},
+};
+
+export interface ChainEvent {
+  readonly kind: TxKind;
+  readonly from: string;
+  readonly to: string;
+  readonly action: DecodedAction;
+  readonly band: RiskBand | null;
+  readonly userOpHash: string;
+  readonly block: number;
+}
+
+/** A Ferra chain event as `/chain/history` returns it, for the fake Activity screen. */
+export function chainTx(event: ChainEvent): ChainTx {
+  return {
+    version: 1,
+    hash: fakeHash(500 + event.block),
+    block_number: event.block,
+    timestamp: nowSecs(),
+    kind: event.kind,
+    from: event.from,
+    to: event.to,
+    value: '0x0',
+    data: '0x',
+    nonce: event.block,
+    user_op_hash: event.userOpHash,
+    action: event.action,
+    risk_level: event.band,
+    reviewed_risk: null,
+    owner_signature: null,
+    cosignature: null,
+    extra: {},
+    flags: [],
+    network: { family: 'ferra', name: 'ferra', chain_id: CHAIN_ID },
+    features: null,
+  };
+}
+
 export const GENESIS_HEAD = `0x${'0'.repeat(64)}`;
 
 export const toHex = (value: bigint): string => `0x${value.toString(16)}`;
@@ -52,6 +106,7 @@ export function newDemoAccount(ownerKey: string): AccountView {
     ],
     escape: { state: 'inactive' },
     created_block: 1,
+    flags: [],
   };
 }
 
@@ -106,13 +161,21 @@ export type FakeDecision =
   | { readonly kind: 'refuse_regulatory' };
 
 /**
- * Swissquote's co-signer: refuses only for a regulatory reason; otherwise asks for a double
- * confirmation on Medium and above (with an explicit risk warning from High), then co-signs.
+ * Swissquote's co-signer, same rules as backend `assess.rs::cosign`: refuses only for a regulatory
+ * reason; Medium co-signs after a second passkey confirmation; High and Critical only once the
+ * user also explicitly accepted the risk.
  */
-export function decide(assessment: RiskAssessment, stepUp: boolean): FakeDecision {
+export function decide(assessment: RiskAssessment, stepUp: boolean, acceptedRisk: boolean): FakeDecision {
   if (assessment.reasons.some((r) => REGULATORY_REASONS.has(r.code))) return { kind: 'refuse_regulatory' };
-  if (assessment.band === 'Low' || stepUp) return { kind: 'cosign' };
-  return { kind: 'confirm', level: assessment.band === 'Medium' ? 'standard' : 'high_risk' };
+  switch (assessment.band) {
+    case 'Low':
+      return { kind: 'cosign' };
+    case 'Medium':
+      return stepUp ? { kind: 'cosign' } : { kind: 'confirm', level: 'standard' };
+    case 'High':
+    case 'Critical':
+      return stepUp && acceptedRisk ? { kind: 'cosign' } : { kind: 'confirm', level: 'high_risk' };
+  }
 }
 
 export function loggedOutcome(decision: FakeDecision): OutcomeKind {
@@ -134,6 +197,7 @@ export interface EntryInput {
   readonly assessment: RiskAssessment;
   readonly outcome: OutcomeKind;
   readonly stepUp: boolean;
+  readonly riskAccepted: boolean;
 }
 
 export function signedEntry(input: EntryInput): SignedEntry {
@@ -148,6 +212,7 @@ export function signedEntry(input: EntryInput): SignedEntry {
       assessment: input.assessment,
       outcome: input.outcome,
       step_up: input.stepUp,
+      risk_accepted: input.riskAccepted,
       warnings: [],
       timestamp,
     },

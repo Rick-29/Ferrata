@@ -163,7 +163,10 @@ export class ConfirmScreen extends Screen {
     if (confirmingAgain && phase.level === 'high_risk' && !this.riskAccepted) return;
     this.busy = true;
     this.error = null;
-    const result = await this.bridge.confirmSend(this.preview.id, { stepUp: confirmingAgain });
+    const result = await this.bridge.confirmSend(this.preview.id, {
+      stepUp: confirmingAgain,
+      acceptedRisk: confirmingAgain && phase.level === 'high_risk' && this.riskAccepted,
+    });
     this.busy = false;
     if (!this.isConnected) return;
     if (!result.ok) {
@@ -177,8 +180,13 @@ export class ConfirmScreen extends Screen {
         : { kind: 'done', outcome };
   };
 
-  readonly #cancel = (): void => {
-    this.router.go('send', undefined);
+  readonly #cancel = async (): Promise<void> => {
+    if (this.busy) return;
+    this.busy = true;
+    // Recording the cancel is best effort: a failure must never keep the user on this screen.
+    await this.bridge.cancelSend(this.preview.id);
+    this.busy = false;
+    if (this.isConnected) this.router.go('send', undefined);
   };
 }
 

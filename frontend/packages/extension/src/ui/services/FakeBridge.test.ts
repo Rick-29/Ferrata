@@ -16,7 +16,7 @@ async function loggedInWithWallet(): Promise<FakeBridge> {
 async function send(bridge: FakeBridge, draft: SendDraft, stepUp = false) {
   const preview = await bridge.previewSend(draft);
   if (!preview.ok) throw new Error(preview.error.code);
-  const outcome = await bridge.confirmSend(preview.value.id, { stepUp });
+  const outcome = await bridge.confirmSend(preview.value.id, { stepUp, acceptedRisk: false });
   return { preview: preview.value, outcome };
 }
 
@@ -59,9 +59,9 @@ describe('FakeBridge risk scenarios (README demo table)', () => {
     if (!preview.ok) throw new Error('expected preview');
 
     expect(preview.value.assessment.assessment).toMatchObject({ band: 'Medium', score: 45 });
-    const first = await bridge.confirmSend(preview.value.id, { stepUp: false });
+    const first = await bridge.confirmSend(preview.value.id, { stepUp: false, acceptedRisk: false });
     expect(first.ok && first.value).toEqual({ kind: 'confirmation_required', previewId: preview.value.id, level: 'standard' });
-    const second = await bridge.confirmSend(preview.value.id, { stepUp: true });
+    const second = await bridge.confirmSend(preview.value.id, { stepUp: true, acceptedRisk: false });
     expect(second.ok && second.value.kind).toBe('confirmed');
   });
 
@@ -71,7 +71,9 @@ describe('FakeBridge risk scenarios (README demo table)', () => {
 
     expect(preview.assessment.assessment.band).toBe('High');
     expect(outcome.ok && outcome.value).toMatchObject({ kind: 'confirmation_required', level: 'high_risk' });
-    const second = await bridge.confirmSend(preview.id, { stepUp: true });
+    const withoutAcceptance = await bridge.confirmSend(preview.id, { stepUp: true, acceptedRisk: false });
+    expect(withoutAcceptance.ok && withoutAcceptance.value).toMatchObject({ kind: 'confirmation_required', level: 'high_risk' });
+    const second = await bridge.confirmSend(preview.id, { stepUp: true, acceptedRisk: true });
     expect(second.ok && second.value.kind).toBe('confirmed');
   });
 
@@ -108,13 +110,23 @@ describe('FakeBridge validation', () => {
     expect(!result.ok && result.error.code).toBe('SQ_CHAIN_INSUFFICIENT_BALANCE');
   });
 
+  it('cancels a preview so it can no longer be confirmed', async () => {
+    const bridge = await loggedInWithWallet();
+    const preview = await bridge.previewSend({ to: DEMO_ADDRESSES.knownMerchant, asset: USDC, amount: usdc(1n) });
+    if (!preview.ok) throw new Error('expected preview');
+
+    expect(await bridge.cancelSend(preview.value.id)).toEqual({ ok: true, value: undefined });
+    const after = await bridge.confirmSend(preview.value.id, { stepUp: false, acceptedRisk: false });
+    expect(!after.ok && after.error.code).toBe('SQ_NOT_FOUND');
+  });
+
   it('cannot confirm the same preview twice', async () => {
     const bridge = await loggedInWithWallet();
     const preview = await bridge.previewSend({ to: DEMO_ADDRESSES.knownMerchant, asset: USDC, amount: usdc(1n) });
     if (!preview.ok) throw new Error('expected preview');
 
-    await bridge.confirmSend(preview.value.id, { stepUp: false });
-    const again = await bridge.confirmSend(preview.value.id, { stepUp: false });
+    await bridge.confirmSend(preview.value.id, { stepUp: false, acceptedRisk: false });
+    const again = await bridge.confirmSend(preview.value.id, { stepUp: false, acceptedRisk: false });
     expect(!again.ok && again.error.code).toBe('SQ_NOT_FOUND');
   });
 });

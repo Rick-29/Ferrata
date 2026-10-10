@@ -1,12 +1,20 @@
 import type { AccountView } from '@sqw/types/AccountView';
 import type { LoginRequest } from '@sqw/types/LoginRequest';
+import type { ChainTx } from '@sqw/types/ChainTx';
 import type { Session } from '@sqw/types/Session';
+import type { WalletSettings } from '@sqw/types/WalletSettings';
 import { uiError, type UiError } from '../core/errors';
 import { isAddress } from '../core/format';
+import { isValidSettings } from '../core/settings';
 import { err, ok, type Result } from '../core/result';
 import {
+  DEFAULT_SETTINGS,
   DEMO_CLIENTS,
   DEMO_PASSWORD,
+  DEMO_TOKENS,
+  USDC,
+  chainTx,
+  type ChainEvent,
   GENESIS_HEAD,
   actionFor,
   decide,
@@ -17,7 +25,15 @@ import {
   signedEntry,
   toHex,
 } from './fake-world';
-import type { SendDraft, SendOutcome, SendPreview, UiBridge } from './UiBridge';
+import type {
+  ActivityFeed,
+  ConfirmOptions,
+  SendDraft,
+  SendOutcome,
+  SendPreview,
+  SessionView,
+  UiBridge,
+} from './UiBridge';
 
 export interface FakeBridgeOptions {
   /** Simulated network latency, so loading states are visible. 0 in tests. */
@@ -36,6 +52,9 @@ export class FakeBridge implements UiBridge {
   #session: Session | null = null;
   #account: AccountView | null = null;
   #previews: ReadonlyMap<string, SendPreview> = new Map();
+  #history: readonly ChainTx[] = [];
+  #receiptHashes: readonly string[] = [];
+  #settings: WalletSettings = DEFAULT_SETTINGS;
   #head = GENESIS_HEAD;
   #nextSeq = 0;
   #counter = 0;
@@ -44,7 +63,7 @@ export class FakeBridge implements UiBridge {
     this.#delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
   }
 
-  async login(credentials: LoginRequest): Promise<Result<Session, UiError>> {
+  async login(credentials: LoginRequest): Promise<Result<SessionView, UiError>> {
     await this.#latency();
     const client = DEMO_CLIENTS[credentials.username];
     if (!client || credentials.password !== DEMO_PASSWORD) return err(UNAUTHORIZED);
@@ -53,13 +72,25 @@ export class FakeBridge implements UiBridge {
       client_id: client.clientId,
       display_name: client.displayName,
     };
-    return ok(this.#session);
+    return ok({ client_id: this.#session.client_id, display_name: this.#session.display_name });
   }
 
   async createWallet(): Promise<Result<AccountView, UiError>> {
     await this.#latency();
     if (!this.#session) return err(UNAUTHORIZED);
-    this.#account = this.#account ?? newDemoAccount(fakeHash(this.#nextId()));
+    if (!this.#account) {
+      const account = newDemoAccount(fakeHash(this.#nextId()));
+      this.#account = account;
+      // The demo faucet, as the real bridge funds a new account.
+      this.#record({
+        kind: 'faucet',
+        from: account.address,
+        to: account.address,
+        action: { kind: 'erc20_transfer', token: USDC, to: account.address, amount: account.balances[1]?.amount ?? '0x0' },
+        band: null,
+        userOpHash: fakeHash(this.#nextId()),
+      });
+    }
     return ok(this.#account);
   }
 
@@ -89,6 +120,7 @@ export class FakeBridge implements UiBridge {
       id: `preview-${this.#nextId()}`,
       draft,
       assessment: {
+        intent_id: `intent-${this.#nextId()}`,
         action,
         assessment,
         signals: {
@@ -107,7 +139,7 @@ export class FakeBridge implements UiBridge {
     return ok(preview);
   }
 
-  async confirmSend(previewId: string, options: { readonly stepUp: boolean }): Promise<Result<SendOutcome, UiError>> {
+  async confirmSend(previewId: string, options: ConfirmOptions): Promise<Result<SendOutcome, UiError>> {
     await this.#latency();
     if (!this.#session || !this.#account) return err(UNAUTHORIZED);
     const preview = this.#previews.get(previewId);
@@ -115,7 +147,7 @@ export class FakeBridge implements UiBridge {
     if (!preview || !prepared) return err(uiError('SQ_NOT_FOUND'));
 
     const { assessment, action } = preview.assessment;
-    const decision = decide(assessment, options.stepUp);
+    const decision = decide(assessment, options.stepUp, options.acceptedRisk);
     if (decision.kind === 'confirm') return ok({ kind: 'confirmation_required', previewId, level: decision.level });
 
     const entry = signedEntry({
@@ -126,15 +158,58 @@ export class FakeBridge implements UiBridge {
       assessment,
       outcome: loggedOutcome(decision),
       stepUp: options.stepUp,
+      riskAccepted: decision.kind === 'cosign' && options.stepUp && options.acceptedRisk,
     });
     // Every final outcome is logged, so the hash chain advances and the preview is spent.
     this.#head = entry.entry_hash;
     this.#nextSeq += 1;
     this.#previews = new Map([...this.#previews].filter(([id]) => id !== previewId));
 
+    this.#receiptHashes = [...this.#receiptHashes, prepared.user_op_hash];
     if (decision.kind === 'refuse_regulatory') return ok({ kind: 'refused', reason: 'regulatory' });
     this.#applyTransfer(preview.draft);
+    this.#record({
+      kind: 'cosigned',
+      from: this.#account.address,
+      to: preview.draft.to,
+      action,
+      band: assessment.band,
+      userOpHash: prepared.user_op_hash,
+    });
     return ok({ kind: 'confirmed', txHash: fakeHash(this.#nextId()), receipt: entry.receipt });
+  }
+
+  async cancelSend(previewId: string): Promise<Result<void, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    if (!this.#previews.has(previewId)) return err(uiError('SQ_NOT_FOUND'));
+    this.#previews = new Map([...this.#previews].filter(([id]) => id !== previewId));
+    return ok(undefined);
+  }
+
+  async getActivity(): Promise<Result<ActivityFeed, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    if (!this.#account) return err(uiError('SQ_NOT_FOUND'));
+    return ok({ address: this.#account.address, txs: this.#history, receiptHashes: this.#receiptHashes, tokens: DEMO_TOKENS });
+  }
+
+  async getSettings(): Promise<Result<WalletSettings, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    return ok(this.#settings);
+  }
+
+  async saveSettings(settings: WalletSettings): Promise<Result<WalletSettings, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    if (!isValidSettings(settings)) return err(uiError('UI_INVALID_SETTINGS'));
+    this.#settings = settings;
+    return ok(settings);
+  }
+
+  #record(event: Omit<ChainEvent, 'block'>): void {
+    this.#history = [...this.#history, chainTx({ ...event, block: this.#history.length + 1 })];
   }
 
   #applyTransfer(draft: SendDraft): void {

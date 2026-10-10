@@ -1,4 +1,5 @@
 import type { LoginRequest } from '@sqw/types/LoginRequest';
+import type { WalletSettings } from '@sqw/types/WalletSettings';
 
 // Every event a widget can emit, with its payload. Adding an event means adding it here,
 // so a typo in a name or a wrong payload fails compilation.
@@ -13,6 +14,7 @@ export interface WidgetEvents {
   /** Asset contract address, `null` for the native asset. */
   'asset-selected': string | null;
   'consent-changed': boolean;
+  'settings-submitted': WalletSettings;
   confirm: undefined;
   reject: undefined;
   done: undefined;

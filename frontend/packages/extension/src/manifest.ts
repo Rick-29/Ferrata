@@ -5,6 +5,7 @@ export default defineManifest({
   name: 'Swissquote Wallet',
   version: '0.1.0',
   action: { default_popup: 'src/popup/index.html' },
+  background: { service_worker: 'src/background/index.ts', type: 'module' },
   permissions: ['storage'],
   host_permissions: ['http://localhost:8787/*'],
   content_security_policy: {

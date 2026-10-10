@@ -21,6 +21,7 @@ export const REASON_LABELS: Readonly<Record<ReasonCode, string>> = {
   SANCTIONED: 'Motif réglementaire',
   MIXER_EXPOSURE: 'Destinataire lié à un service de mixage',
   SIMULATED_DRAIN: 'La simulation vide votre compte',
+  OWN_LIMIT_EXCEEDED: 'Au-dessus de la limite que vous avez fixée',
 };
 
 export const bandColor = (band: RiskBand): string => `var(--sq-risk-${band.toLowerCase()})`;
