@@ -1,0 +1,49 @@
+[package]
+name = "ferra-visualizer"
+version = "0.1.0"
+edition = "2024"
+description = "Ferra Visualizer: Swissquote compliance desktop app over Ferra chain files"
+default-run = "ferra-visualizer"
+
+# Standalone package: the Swissquote backend workspace stays untouched, we depend on its crates by path.
+[workspace]
+
+[lib]
+name = "ferra_visualizer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+
+sq-adapters = { path = "../../backend/sq-adapters" }
+sq-connectors = { path = "../../backend/sq-connectors" }
+sq-conn-ton = { path = "../../backend/sq-conn-ton" }
+sq-conn-evm = { path = "../../backend/sq-conn-evm" }
+sq-conn-btc = { path = "../../backend/sq-conn-btc" }
+sq-conn-sol = { path = "../../backend/sq-conn-sol" }
+wallet-core = { path = "../../backend/wallet-core" }
+api-types = { path = "../../backend/api-types" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+hex = "0.4"
+alloy-primitives = { version = "1", features = ["serde"] }
+ed25519-dalek = "2"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
