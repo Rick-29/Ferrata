@@ -5,6 +5,7 @@ import '@fontsource/inter/latin-700.css';
 import '@fontsource/space-grotesk/latin-500.css';
 import '@fontsource/space-grotesk/latin-600.css';
 import { APP_NAME } from '@sqw/brand';
+import { startPasskeyResponder } from '../passkey/responder';
 import { html } from 'lit';
 import { AppShell } from '../ui/core/AppShell';
 import { Router } from '../ui/core/Router';
@@ -39,3 +40,6 @@ const router = new Router(
 document.body.append(new AppShell(bridge, router));
 
 document.title = APP_NAME;
+
+// This page runs the passkey ceremonies the background asks for (WebAuthn is unavailable in the worker).
+startPasskeyResponder();

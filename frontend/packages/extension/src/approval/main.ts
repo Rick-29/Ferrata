@@ -5,6 +5,7 @@ import '@fontsource/inter/latin-700.css';
 import '@fontsource/space-grotesk/latin-500.css';
 import '@fontsource/space-grotesk/latin-600.css';
 import { APP_NAME } from '@sqw/brand';
+import { startPasskeyResponder } from '../passkey/responder';
 import { LitElement, html } from 'lit';
 import { customElement } from 'lit/decorators.js';
 
@@ -17,3 +18,6 @@ export class ApprovalApp extends LitElement {
 }
 
 document.title = APP_NAME;
+
+// This page runs the passkey ceremonies the background asks for (WebAuthn is unavailable in the worker).
+startPasskeyResponder();
