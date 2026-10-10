@@ -9,12 +9,16 @@
 
 pub mod auth;
 pub mod backend;
+pub mod features;
 mod ledger;
+pub mod model;
 mod store;
 
 pub use auth::{OwnerKey, OwnerSignature};
 pub use backend::{ChainBackend, ChainGuard, ChainRegistry};
+pub use features::{PolicySnapshot, SubmitMeta, TxFeatures};
 pub use ledger::{ChainConfig, MockChain, Tamper};
+pub use model::{DatasetRow, LinearModel, ModelInfo, RiskModel};
 pub use store::{BlockStore, JsonlBlockStore, NullBlockStore};
 
 use std::collections::BTreeMap;
@@ -99,6 +103,70 @@ impl ChainError {
     }
 }
 
+/// Which settlement layer an event belongs to. The Ferra chain records its own events and
+/// mirrors of events observed on other networks (`TxKind::External`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ChainFamily {
+    Ferra,
+    Evm,
+    Bitcoin,
+    Solana,
+    Ton,
+    Sui,
+    Other,
+}
+
+impl ChainFamily {
+    pub fn tag(self) -> &'static str {
+        match self {
+            ChainFamily::Ferra => "ferra",
+            ChainFamily::Evm => "evm",
+            ChainFamily::Bitcoin => "bitcoin",
+            ChainFamily::Solana => "solana",
+            ChainFamily::Ton => "ton",
+            ChainFamily::Sui => "sui",
+            ChainFamily::Other => "other",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Network {
+    pub family: ChainFamily,
+    /// Human name: `"ferra"`, `"base-sepolia"`, `"bitcoin-testnet"`, `"solana-devnet"`, …
+    pub name: String,
+    /// EVM chain id when the family is `evm` (or the Ferra id).
+    #[ts(type = "number | null")]
+    pub chain_id: Option<u64>,
+}
+
+impl Network {
+    pub fn ferra(chain_id: u64) -> Self {
+        Self { family: ChainFamily::Ferra, name: "ferra".into(), chain_id: Some(chain_id) }
+    }
+}
+
+/// Where an `External` event came from. Addresses are kept raw because only EVM ones fit `Address`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ExternalRef {
+    pub network: Network,
+    pub tx_id: String,
+    #[ts(type = "number | null")]
+    pub block: Option<u64>,
+    pub from_raw: String,
+    pub to_raw: String,
+    pub asset_symbol: String,
+    pub decimals: u8,
+    /// Amount in base units of that network's asset, as a decimal string.
+    pub amount: String,
+    pub fee: Option<f64>,
+    pub explorer_url: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct TokenInfo {
@@ -181,6 +249,8 @@ pub enum TxKind {
     Anchor,
     /// A flag attached to an earlier event (`extra.flag`). Append-only: history is never edited.
     Flag,
+    /// An event observed on another network and attested by Swissquote (`extra.external`).
+    External,
 }
 
 /// Who raised a flag.
@@ -196,6 +266,8 @@ pub enum FlagSource {
     Review,
     /// A chain integrity check (`/chain/verify`).
     Integrity,
+    /// The validator's risk model.
+    Model,
     /// A human.
     Manual,
 }
@@ -220,7 +292,7 @@ pub struct Flag {
 
 /// One event on the chain. The hashed fields are fixed per `version`; `flags` is derived from
 /// later `Flag` events and `extra` carries kind-specific data (owner keys, flag payloads, …).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ChainTx {
     #[serde(default = "default_version")]
@@ -259,6 +331,16 @@ pub struct ChainTx {
     /// Derived from later `Flag` events; not part of the hash.
     #[serde(default)]
     pub flags: Vec<Flag>,
+    /// Network the event settled on. Ferra for native events, the origin network for `External`.
+    #[serde(default = "default_network")]
+    pub network: Network,
+    /// Feature vector computed at commit from the pre-state; stored, versioned, not hashed.
+    #[serde(default)]
+    pub features: Option<features::TxFeatures>,
+}
+
+fn default_network() -> Network {
+    Network { family: ChainFamily::Ferra, name: "ferra".into(), chain_id: None }
 }
 
 fn default_version() -> u32 {
@@ -296,7 +378,7 @@ pub struct Block {
 }
 
 /// A block with its events, as the explorer / visualiser wants it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct BlockWithTxs {
     pub block: Block,
@@ -308,6 +390,7 @@ pub struct BlockWithTxs {
 pub struct ChainInfo {
     #[ts(type = "number")]
     pub chain_id: u64,
+    pub network: Network,
     #[ts(type = "number")]
     pub latest_block: u64,
     #[ts(type = "string")]

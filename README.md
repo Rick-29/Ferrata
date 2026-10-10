@@ -5,8 +5,9 @@ risk-scored, **co-signed by Swissquote**, written to a hash-chained audit log wi
 Swissquote-signed receipts, and recoverable through a timelocked, cancellable flow.
 Swissquote can refuse to co-sign but can never move funds.
 
-The demo runs on a **tamper-evident pseudo-blockchain** that enforces the same rules a real
-smart account would. Every state change is a signed event, every block commits to a state root
+The demo runs on the **Ferra chain**, a tamper-evident pseudo-blockchain that enforces the same
+rules a real smart account would and records the wallet's activity on every network (Ethereum,
+Bitcoin, Solana, TON, Sui, …) as attested events, each with a feature vector for the validator. Every state change is a signed event, every block commits to a state root
 and carries a validator signature, and the whole chain can be replayed and re-verified from its
 append-only block file.
 
@@ -28,7 +29,7 @@ Ideas for the chain visualiser and the real-chain connector live in `future_impl
 cd backend
 cargo run -p sq-services                       # http://localhost:8787, in-memory chain
 SQ_CHAIN_FILE=../chain.jsonl cargo run -p sq-services   # persisted, replayed + verified on start
-cargo test --workspace                         # 126 tests; also regenerates frontend/packages/types/src
+cargo test --workspace                         # 138 tests; also regenerates frontend/packages/types/src
 cargo clippy --workspace --all-targets -- -D warnings
 wasm-pack build wallet-wasm --target web --release --out-dir ../../frontend/packages/core-wasm
 ```
@@ -99,7 +100,15 @@ POST /reconcile/{address}            chain-vs-log diff: unlogged txs, escape exi
 POST /review/{address}               full account review → { verdict: clean|suspicious|blocked, score, flags[], chain }
 POST /dev/tamper { tamper }          corrupt live state on purpose; then GET /chain/verify shows where
 POST /dev/reset                      fresh chain + empty logs (needs SQ_SIGNING_SEED)
+POST /chain/ingest                   record an event seen on another network (Swissquote-attested) → kind "external"
+GET  /chain/dataset?from=&limit=     feature rows + flag labels for training the validator's model
+GET  /model                          the loaded risk model (fixtures/model.json)
 ```
+
+Every event carries `network` (family, name, chain id) and `features`: ~45 numbers describing
+amount, timing, velocity, sender history, counterparty graph shape and the co-signer's verdict,
+computed from the pre-state at commit. `backend/features.md` lists them with their rationale.
+The review scores each event with the model and raises `MODEL_RISK` with the top contributions.
 
 Every event (`ChainTx`) carries `version`, `timestamp`, `kind`, the signatures that authorised
 it, an open `extra` map, and derived `flags`. Flags are their own append-only events, so adding
@@ -118,7 +127,8 @@ format is backward and forward compatible.
 | POST | `/recovery/start` · GET `/recovery/{id}` · POST `…/cancel` · POST `…/execute` | timelocked recovery; cancel needs the current owner's signature over `cancel_hash` |
 | POST | `/reconcile/{address}` · `/review/{address}` | compliance views |
 | GET | `/chains` · `/chain/info` · `/chain/verify` · `/chain/blocks` · `/chain/blocks/{n}` · `/chain/tx/{hash}` · `/chain/history/{address}` · `/chain/accounts/{address}` | explorer reads |
-| POST | `/chain/accounts` · `/chain/faucet` · `/chain/prepare` · `/chain/simulate` · `/chain/submit` · `/chain/escape/{hash,start,cancel}` | chain writes |
+| POST | `/chain/accounts` · `/chain/faucet` · `/chain/prepare` · `/chain/simulate` · `/chain/submit` · `/chain/escape/{hash,start,cancel}` · `/chain/ingest` | chain writes |
+| GET | `/chain/dataset` · `/model` | validator data and model |
 | POST | `/dev/passkeys` · GET `/dev/passkeys` · POST `/dev/passkeys/{name}/sign` · POST `/dev/reset` · POST `/dev/tamper` | demo helpers |
 
 Errors are always `{ code, message, details }`. Codes: `CORE_*` (`SEQ_GAP`, `CHAIN_BROKEN`,
@@ -129,7 +139,7 @@ Held and refused are 200s, not errors.
 ## Pseudo-blockchain rules
 
 - An account is 2-of-2: owner passkey + Swissquote's Ed25519 key, fixed at creation. Address = last 20 bytes of `keccak(owner key)`.
-- Every state change is an event: `account_created`, `faucet`, `cosigned`, `escape_start`, `escape_cancel`, `escape_exit`, `owner_rotation`, `anchor`, `flag`. Events store the signatures that authorised them; replay re-verifies every one.
+- Every state change is an event: `account_created`, `faucet`, `cosigned`, `escape_start`, `escape_cancel`, `escape_exit`, `owner_rotation`, `anchor`, `flag`, `external`. Events store the signatures that authorised them; replay re-verifies every one. `external` events mirror activity observed on other networks and need Swissquote's attestation.
 - One block per event. `block.hash` covers version, chain id, number, timestamp, parent, txs root and **state root**; the validator key signs it. The validator key is not the co-signer key.
 - `user_op_hash = keccak("SQW-USEROP-v1" ‖ chain_id ‖ from ‖ to ‖ value ‖ keccak(data) ‖ nonce)`; co-signature = Ed25519 over `"SQW-COSIGN-v1" ‖ hash`.
 - Escape hatch: owner-only start, timelock, then transfers only to the declared exit address, no Swissquote. Reconciliation and review flag it Critical.

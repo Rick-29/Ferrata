@@ -77,6 +77,15 @@ and asset id; that is the one core change outside the trait.
 question on a real chain is a graph walk over `history` of counterparties. Cap the depth, cache
 per address, and reuse the exposure BFS already in `sq-adapters::signals`.
 
+## 2b. Connectors feed the Ferra chain
+
+Rather than teaching the visualiser every RPC, each network gets a small watcher that polls (or
+subscribes to) the wallet's addresses and posts `IngestRequest`s to `POST /chain/ingest`. The Ferra
+chain then holds one attested, feature-rich, reviewable timeline across Ethereum, Bitcoin, Solana,
+TON and Sui, and the visualiser reads only Ferra. Start with an Alloy-based Base Sepolia watcher
+(ERC-20 `Transfer` logs plus native transfers), then Bitcoin via a public Esplora API. Fees go in
+`ExternalRef.fee`; the chain fills `features.fee` from it.
+
 ## 3. Account review as a workflow
 
 Today `POST /review/{address}` runs once and writes flags. Next: a review record with a status

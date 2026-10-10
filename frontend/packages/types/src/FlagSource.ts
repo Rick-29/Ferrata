@@ -3,4 +3,4 @@
 /**
  * Who raised a flag.
  */
-export type FlagSource = "policy" | "reconciliation" | "review" | "integrity" | "manual";
+export type FlagSource = "policy" | "reconciliation" | "review" | "integrity" | "model" | "manual";

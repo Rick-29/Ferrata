@@ -10,9 +10,11 @@ use std::sync::{Mutex, MutexGuard};
 use alloy_primitives::{Address, B256, Bytes, U256};
 use wallet_core::{BalanceDelta, TxRequest};
 
+use super::features::SubmitMeta;
+use super::model::DatasetRow;
 use super::{
-    AccountView, Block, BlockWithTxs, ChainError, ChainInfo, ChainTx, ChainVerification, EscapeStatus, Flag, OwnerKey,
-    OwnerSignature, PreparedOp, SignedUserOp, SubmitResult, Tamper,
+    AccountView, Block, BlockWithTxs, ChainError, ChainInfo, ChainTx, ChainVerification, EscapeStatus, ExternalRef, Flag,
+    OwnerKey, OwnerSignature, PreparedOp, SignedUserOp, SubmitResult, Tamper,
 };
 
 /// Everything the Swissquote services need from a settlement layer.
@@ -34,8 +36,13 @@ pub trait ChainBackend: Send + Sync {
 
     // ----- user operations (owner + Swissquote 2-of-2) -----
     fn prepare(&self, tx: &TxRequest) -> Result<PreparedOp, ChainError>;
+    /// The hash a submitted operation's signatures cover (nonce taken from the op, not the account).
+    fn user_op_hash_for(&self, op: &SignedUserOp) -> B256;
     fn simulate(&self, tx: &TxRequest) -> Result<Vec<BalanceDelta>, ChainError>;
-    fn submit(&mut self, op: &SignedUserOp, now: u64) -> Result<SubmitResult, ChainError>;
+    fn submit(&mut self, op: &SignedUserOp, meta: &SubmitMeta, now: u64) -> Result<SubmitResult, ChainError>;
+    /// Record an event seen on another network, attested by Swissquote.
+    fn external_hash(&self, wallet: Address, ext: &ExternalRef) -> B256;
+    fn ingest_external(&mut self, wallet: Address, ext: ExternalRef, counterparty: Option<Address>, incoming: bool, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
 
     // ----- escape hatch (owner only, timelocked) -----
     fn escape_hash(&self, address: Address, to: Address, nonce: u64) -> B256;
@@ -64,6 +71,8 @@ pub trait ChainBackend: Send + Sync {
     fn blocks(&self, from: u64, limit: usize) -> Vec<BlockWithTxs>;
     fn tx(&self, hash: B256) -> Result<ChainTx, ChainError>;
     fn history(&self, address: Address) -> Vec<ChainTx>;
+    /// Feature rows with flag-derived labels, for training the validator's model.
+    fn dataset(&self, from: u64, limit: usize) -> Vec<DatasetRow>;
 }
 
 pub type ChainGuard<'a> = MutexGuard<'a, Box<dyn ChainBackend>>;
@@ -146,11 +155,20 @@ impl ChainBackend for super::MockChain {
     fn prepare(&self, tx: &TxRequest) -> Result<PreparedOp, ChainError> {
         super::MockChain::prepare(self, tx)
     }
+    fn user_op_hash_for(&self, op: &SignedUserOp) -> B256 {
+        super::MockChain::user_op_hash(self, &op.tx, op.nonce)
+    }
     fn simulate(&self, tx: &TxRequest) -> Result<Vec<BalanceDelta>, ChainError> {
         super::MockChain::simulate(self, tx)
     }
-    fn submit(&mut self, op: &SignedUserOp, now: u64) -> Result<SubmitResult, ChainError> {
-        super::MockChain::submit(self, op, now)
+    fn submit(&mut self, op: &SignedUserOp, meta: &SubmitMeta, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::submit(self, op, meta, now)
+    }
+    fn external_hash(&self, wallet: Address, ext: &ExternalRef) -> B256 {
+        super::MockChain::external_hash(self, wallet, ext)
+    }
+    fn ingest_external(&mut self, wallet: Address, ext: ExternalRef, counterparty: Option<Address>, incoming: bool, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::ingest_external(self, wallet, ext, counterparty, incoming, cosignature, now)
     }
     fn escape_hash(&self, address: Address, to: Address, nonce: u64) -> B256 {
         super::MockChain::escape_hash(self, address, to, nonce)
@@ -199,5 +217,8 @@ impl ChainBackend for super::MockChain {
     }
     fn history(&self, address: Address) -> Vec<ChainTx> {
         super::MockChain::history(self, address)
+    }
+    fn dataset(&self, from: u64, limit: usize) -> Vec<DatasetRow> {
+        super::MockChain::dataset(self, from, limit)
     }
 }

@@ -86,7 +86,23 @@ pub fn review_account(state: &AppState, address: Address) -> Result<ReviewReport
         }
     }
 
-    // 4. Integrity of the chain itself.
+    // 4. The model's opinion on every event that has features.
+    let model = state.model.clone();
+    let threshold = model.describe().threshold;
+    for tx in &txs {
+        if let Some(f) = &tx.features {
+            let score = model.score(f);
+            if score >= threshold {
+                let severity = if score >= 0.85 { RiskBand::High } else { RiskBand::Medium };
+                let mut fl = flag(tx, FlagSource::Model, severity, "MODEL_RISK", format!("{} scores {score:.2}", model.name()), now);
+                fl.data.insert("score".into(), serde_json::json!(score));
+                fl.data.insert("top".into(), serde_json::json!(model.explain(f, 5)));
+                wanted.push(fl);
+            }
+        }
+    }
+
+    // 5. Integrity of the chain itself.
     let chain_check = state.chain()?.verify();
     if !chain_check.ok
         && let Some(last) = txs.last()

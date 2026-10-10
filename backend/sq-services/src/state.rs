@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use alloy_primitives::{Address, B256, keccak256};
+use api_types::{PolicySnapshot, SubmitMeta};
 use api_types::{HoldState, RecoveryState, Session};
 use ed25519_dalek::SigningKey;
 use sq_adapters::chain::ChainGuard;
 use sq_adapters::{
     BlockStore, ChainBackend, ChainConfig, ChainError, ChainRegistry, Clock, Ed25519Signer, FixtureSignalProvider,
-    InMemoryLogStore, JsonlBlockStore, LogStore, MockChain, NullBlockStore, ReceiptSigner, SignalProvider, SystemClock,
+    InMemoryLogStore, JsonlBlockStore, LinearModel, LogStore, MockChain, Network, NullBlockStore, ReceiptSigner, RiskModel,
+    SignalProvider, SystemClock,
 };
 use wallet_core::{AbiTxDecoder, RiskScorer, RuleBasedScorer, TxDecoder};
 
@@ -34,6 +36,10 @@ pub struct AppState {
     pub recoveries: Mutex<HashMap<String, RecoveryState>>,
     /// Which Swissquote client registered each wallet address. A session may only act on its own.
     pub owners: Mutex<HashMap<Address, String>>,
+    /// When each user-op hash was prepared, so the chain can record decision latency.
+    pub prepared: Mutex<HashMap<B256, u64>>,
+    /// The validator's risk model (`fixtures/model.json`).
+    pub model: Arc<dyn RiskModel>,
     pub dev_keys: DevKeyring,
     validator_seed: [u8; 32],
 }
@@ -76,6 +82,9 @@ impl AppState {
         let signals = FixtureSignalProvider::load(&config.fixtures_dir, config.policy.max_exposure_hops)
             .map_err(|e| anyhow::anyhow!("loading signal fixtures: {e}"))?;
 
+        let model = LinearModel::load(&config.fixtures_dir.join("model.json")).map_err(|e| anyhow::anyhow!("loading model: {e}"))?;
+        tracing::info!(model = model.name, features = model.weights.len(), "risk model loaded");
+
         let log: Arc<dyn LogStore> = match &config.snapshot_path {
             Some(p) => Arc::new(InMemoryLogStore::with_snapshot(p.clone()).map_err(|e| anyhow::anyhow!("log snapshot: {e}"))?),
             None => Arc::new(InMemoryLogStore::new()),
@@ -95,6 +104,8 @@ impl AppState {
             holds: Mutex::new(HashMap::new()),
             recoveries: Mutex::new(HashMap::new()),
             owners: Mutex::new(HashMap::new()),
+            prepared: Mutex::new(HashMap::new()),
+            model: Arc::new(model),
             dev_keys: DevKeyring::default(),
             validator_seed,
         }))
@@ -103,6 +114,7 @@ impl AppState {
     fn make_mock_chain(config: &Config, signer: &Ed25519Signer, validator_seed: [u8; 32], now: u64) -> Result<Box<dyn ChainBackend>, ChainError> {
         let cfg = ChainConfig {
             chain_id: config.seed.chain_id,
+            network: Network::ferra(config.seed.chain_id),
             cosigner: signer.verifying_key(),
             escape_delay_secs: config.seed.escape_delay_secs,
             tokens: config.seed.tokens.clone(),
@@ -133,6 +145,7 @@ impl AppState {
         self.lock(&self.recoveries)?.clear();
         self.lock(&self.challenges)?.clear();
         self.lock(&self.owners)?.clear();
+        self.lock(&self.prepared)?.clear();
         tracing::warn!("demo state reset");
         Ok(())
     }
@@ -172,6 +185,32 @@ impl AppState {
             (Some(o), Some(c)) if o == c => Ok(()),
             _ => Err(ServiceError::Unauthorized),
         }
+    }
+
+    /// Remember when a hash was prepared (assess / prepare) so the chain can record decision latency.
+    pub fn note_prepared(&self, user_op_hash: B256) -> Result<(), ServiceError> {
+        let now = self.now();
+        let mut m = self.lock(&self.prepared)?;
+        m.entry(user_op_hash).or_insert(now);
+        if m.len() > 10_000 {
+            m.retain(|_, t| now.saturating_sub(*t) < 86_400);
+        }
+        Ok(())
+    }
+
+    /// What the chain should record alongside a submission: latency and the policy outcome from the audit log.
+    pub fn submit_meta(&self, address: Address, user_op_hash: B256) -> Result<SubmitMeta, ServiceError> {
+        let prepared_at = self.lock(&self.prepared)?.get(&user_op_hash).copied();
+        let log = self.log.load(address)?;
+        let entry = log.entries().iter().rev().find(|e| e.entry.user_op_hash == user_op_hash);
+        let policy = entry.map(|e| PolicySnapshot {
+            score: Some(e.entry.assessment.score),
+            band: Some(e.entry.assessment.band),
+            reasons: e.entry.assessment.reasons.iter().map(|r| format!("{:?}", r.code)).collect(),
+            sanctions_hit: None,
+            exposure_hops: None,
+        });
+        Ok(SubmitMeta { prepared_at, step_up: entry.is_some_and(|e| e.entry.step_up), policy, fee: None })
     }
 
     pub fn lock<'a, T>(&self, m: &'a Mutex<T>) -> Result<MutexGuard<'a, T>, ServiceError> {

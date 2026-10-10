@@ -1,0 +1,41 @@
+{
+  "name": "ferra-risk-v0 (hand-set AML heuristics; replace with weights trained on GET /chain/dataset)",
+  "bias": -3.0,
+  "threshold": 0.6,
+  "weights": {
+    "policy_sanctions_hit": 6.0,
+    "policy_exposure_hops": -0.8,
+    "policy_band": 0.9,
+    "sender_prior_max_severity": 0.5,
+    "counterparty_prior_max_severity": 0.7,
+    "counterparty_pass_through": 1.6,
+    "counterparty_fan_out_ratio": 0.6,
+    "counterparty_new_for_sender": 0.7,
+    "counterparty_is_account": -0.4,
+    "reciprocal": 0.5,
+    "fraction_of_balance": 1.8,
+    "share_of_lifetime_volume": 0.6,
+    "amount_log": 0.25,
+    "is_round_amount": -0.2,
+    "velocity_ratio": 0.35,
+    "sender_out_count_24h": 0.3,
+    "is_night": 0.4,
+    "sender_age_days": -0.15,
+    "decision_latency_secs": 0.2,
+    "has_prev_tx": -0.3,
+    "step_up": -0.5,
+    "via_dapp": 0.4,
+    "sender_escape_active": 1.5,
+    "kind_escape_exit": 3.0,
+    "kind_external": 0.3,
+    "family_bitcoin": 0.2,
+    "signer_webauthn": -0.3
+  },
+  "transforms": {
+    "policy_exposure_hops": "log1p",
+    "velocity_ratio": "log1p",
+    "sender_out_count_24h": "log1p",
+    "decision_latency_secs": 600.0,
+    "sender_age_days": "log1p"
+  }
+}

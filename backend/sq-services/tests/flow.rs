@@ -559,3 +559,70 @@ async fn tampering_is_visible_through_verify_blocks_and_review() {
     assert_eq!(r.verdict, ReviewVerdict::Blocked);
     assert!(r.flags.iter().any(|f| f.code == "CHAIN_TAMPERED" && f.source == FlagSource::Integrity), "{:?}", r.flags);
 }
+
+#[tokio::test]
+async fn events_carry_features_network_and_feed_the_dataset_and_model() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(17);
+    let addr = app.onboard(&owner).await;
+
+    // a co-signed payment: features come from the pre-state, latency from /assess, policy from the log
+    let tx = usdc_tx(addr, Address::repeat_byte(0x66), 100_000_000);
+    let a: AssessResponse = app.post("/assess", AssessRequest { tx: tx.clone(), account: None }).await;
+    app.clock.advance(42);
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext::default(), None).await;
+    let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
+    let mined = app.submit(&owner, tx, &prepared, Some(cosignature)).await;
+    let t: ChainTx = app.get(&format!("/chain/tx/{}", mined.tx_hash)).await;
+    assert_eq!(t.network.family, ChainFamily::Ferra);
+    let f = t.features.expect("features stored on the event");
+    assert_eq!(f.decision_latency_secs, Some(42));
+    assert_eq!(f.policy.score, a.assessment.score.into());
+    assert_eq!(f.policy.reasons, vec!["NewRecipient".to_string()]);
+    assert!(f.counterparty_new_for_sender);
+    assert_eq!(f.signer_kind, "ed25519");
+    assert!((f.fraction_of_balance - 0.2).abs() < 1e-9);
+
+    // an event seen on Bitcoin lands on the Ferra chain with its origin
+    let ext = ExternalRef {
+        network: Network { family: ChainFamily::Bitcoin, name: "bitcoin-testnet".into(), chain_id: None },
+        tx_id: "deadbeef".into(),
+        block: Some(1),
+        from_raw: "tb1qsomeone".into(),
+        to_raw: "tb1qalice".into(),
+        asset_symbol: "BTC".into(),
+        decimals: 8,
+        amount: "250000".into(),
+        fee: Some(0.000003),
+        explorer_url: Some("https://mempool.space/testnet/tx/deadbeef".into()),
+    };
+    let r: SubmitResult = app.post("/chain/ingest", IngestRequest { chain_id: None, wallet: addr, counterparty: None, incoming: true, event: ext }).await;
+    assert_eq!(r.kind, TxKind::External);
+    let t: ChainTx = app.get(&format!("/chain/tx/{}", r.tx_hash)).await;
+    assert_eq!(t.network.name, "bitcoin-testnet");
+    assert_eq!(t.to, addr);
+    let v: ChainVerification = app.get("/chain/verify").await;
+    assert!(v.ok);
+
+    // the dataset exposes every featured event with its labels; the model describes itself
+    let rows: Vec<DatasetRow> = app.get("/chain/dataset").await;
+    assert!(rows.iter().any(|r| r.tx_hash == mined.tx_hash && r.label.is_none()));
+    assert!(rows.iter().any(|r| r.features.network.family == ChainFamily::Bitcoin));
+    let info: ModelInfo = app.get("/model").await;
+    assert!(info.feature_count > 10);
+
+    // a self-draining night-time payment to a fresh address right after an escape timer trips the model
+    let exit_to = Address::repeat_byte(0x77);
+    let h: HashResponse = app.post("/chain/escape/hash", EscapeHashRequest { chain_id: None, address: addr, to: Some(exit_to) }).await;
+    let _: EscapeResponse = app.post("/chain/escape/start", StartEscapeRequest { chain_id: None, address: addr, to: exit_to, signature: owner.sign(&h.hash) }).await;
+    let drain = usdc_tx(addr, Address::repeat_byte(0x88), 400_000_000);
+    let (outcome, prepared) = app.cosign(&drain, &AccountContext::default(), None).await;
+    let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
+    let mined = app.submit(&owner, drain, &prepared, Some(cosignature)).await;
+    let report: ReviewReport = app.post(&format!("/review/{addr}"), serde_json::json!({})).await;
+    let model_flag = report.flags.iter().find(|f| f.code == "MODEL_RISK" && f.target == mined.tx_hash).unwrap_or_else(|| panic!("{:?}", report.flags));
+    assert_eq!(model_flag.source, FlagSource::Model);
+    assert!(model_flag.data.contains_key("top"));
+    let rows: Vec<DatasetRow> = app.get("/chain/dataset").await;
+    assert!(rows.iter().any(|r| r.tx_hash == mined.tx_hash && r.label_codes.contains(&"MODEL_RISK".to_string())));
+}

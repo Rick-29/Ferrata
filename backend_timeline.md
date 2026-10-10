@@ -3,13 +3,13 @@
 Status of everything in `backend/`, kept current by P1. The frontend has its own file.
 Legend: ✅ done and tested · 🟡 work in progress · ⬜ not started · ❌ dropped.
 
-Last update: 2026-10-10, step 11 (tamper-evident chain, flags, review, session binding).
+Last update: 2026-10-10, step 12 (Ferra chain: networks, external events, features, model).
 
 ## Verification snapshot
 
 | Check | Result |
 | --- | --- |
-| `cargo test --workspace` | 126 green (core 38, adapters 31, api-types 42 binding exports, services 15 end-to-end) |
+| `cargo test --workspace` | 138 green (core 38, adapters 41, api-types 43 binding exports, services 16 end-to-end) |
 | `cargo clippy --workspace --all-targets -- -D warnings` | clean; `unwrap`/`expect`/`panic` denied outside tests |
 | `cargo build -p wallet-wasm --target wasm32-unknown-unknown` | ok |
 | TypeScript bindings | regenerated into `frontend/packages/types/src` by `cargo test`, no `bigint` |
@@ -42,12 +42,28 @@ Last update: 2026-10-10, step 11 (tamper-evident chain, flags, review, session b
 | Second validator / 2-of-2 block signing | | ⬜ |
 | Chain as its own process | | ⬜ |
 
+## Ferra chain as cross-network ledger + validator data
+
+| Item | Status |
+| --- | --- |
+| `Network { family: ferra/evm/bitcoin/solana/ton/sui/other, name, chain_id }` on every event and chain | ✅ |
+| `TxKind::External` + `POST /chain/ingest`: events seen elsewhere, Swissquote-attested (co-signed `external_hash`), raw addresses kept in `extra.external` | ✅ |
+| `TxFeatures` v1 (~45 features) computed from pre-state at commit, stored on the event, not hashed, versioned | ✅ see `backend/features.md` |
+| Decision latency (`/assess` or `/prepare` → `/submit`) and policy snapshot from the audit log recorded via `SubmitMeta` | ✅ |
+| `GET /chain/dataset`: rows `{ features, label, label_codes }` | ✅ |
+| `RiskModel` trait, `LinearModel` from `fixtures/model.json`, `GET /model`, `MODEL_RISK` flag with top contributions | ✅ hand-set weights · ⬜ trained weights |
+| Real connectors that call `/chain/ingest` from Ethereum / Bitcoin / Solana RPCs | ⬜ see `future_implementation.md` |
+| Price feed for fiat-normalised amounts | ⬜ |
+| Device / IP / geo in `SubmitMeta` | ⬜ |
+| Two-hop graph aggregates | ⬜ |
+
 ## Account review (validation system)
 
 | Item | Status |
 | --- | --- |
 | `POST /review/{address}`: policy reasons from the log, counterparty sanctions/exposure both directions, chain-vs-log findings, integrity check | ✅ |
 | Findings written back as `Flag` events; review idempotent | ✅ |
+| Model score per event (`FlagSource::Model`) | ✅ |
 | Verdict `clean` / `suspicious` / `blocked` and score | ✅ |
 | Flags visible on events, accounts and block pages | ✅ |
 | Review as a workflow (open / cleared / escalated, manual flags, "merge back" after escape) | ⬜ see `future_implementation.md` |
@@ -115,6 +131,7 @@ Last update: 2026-10-10, step 11 (tamper-evident chain, flags, review, session b
 
 ## Next (in order)
 
+0. First real connector: an Ethereum (Base Sepolia) watcher that turns transfers of a registered address into `/chain/ingest` calls, so the visualiser shows a live network next to the Ferra chain.
 1. `wasm-pack build` into `frontend/packages/core-wasm` when P3 asks.
 2. Role on sessions (client vs compliance) and gate `/reconcile`, `/review`, `/dev`.
 3. Review workflow records and manual flags.

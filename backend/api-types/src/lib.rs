@@ -8,9 +8,26 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 pub use sq_adapters::chain::{
-    AccountView, AssetBalance, Block, BlockWithTxs, ChainInfo, ChainTx, ChainVerification, EscapeStatus, Flag, FlagSource,
-    OwnerKey, OwnerSignature, PreparedOp, SignedUserOp, SubmitResult, Tamper, TokenInfo, TxKind,
+    AccountView, AssetBalance, Block, BlockWithTxs, ChainFamily, ChainInfo, ChainTx, ChainVerification, DatasetRow,
+    EscapeStatus, ExternalRef, Flag, FlagSource, ModelInfo, Network, OwnerKey, OwnerSignature, PolicySnapshot, PreparedOp,
+    SignedUserOp, SubmitMeta, SubmitResult, Tamper, TokenInfo, TxFeatures, TxKind,
 };
+
+/// An event Swissquote observed on another network, to be recorded on the Ferra chain.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct IngestRequest {
+    #[ts(type = "number | null")]
+    pub chain_id: Option<u64>,
+    /// The wallet's Ferra address this event belongs to.
+    #[ts(type = "string")]
+    pub wallet: Address,
+    /// Counterparty as a 20-byte address when the origin network has one; raw strings go in `event`.
+    #[ts(type = "string | null")]
+    pub counterparty: Option<Address>,
+    pub incoming: bool,
+    pub event: ExternalRef,
+}
 
 /// Page of blocks for explorers: `?from=0&limit=50` (newest first when `from` is omitted).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
@@ -415,7 +432,7 @@ pub struct EscapeResponse {
     pub tx: SubmitResult,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct HistoryResponse {
     #[ts(type = "string")]

@@ -6,9 +6,11 @@ use wallet_core::{AbiTxDecoder, BalanceDelta, DecodedAction, TxDecoder, TxReques
 
 use super::auth::{OwnerKey, OwnerSignature, verify_owner};
 use super::store::{BlockStore, NullBlockStore};
+use super::features::{SubmitMeta, kind_tag};
+use super::model::DatasetRow;
 use super::{
     AccountView, AssetBalance, BLOCK_VERSION, Block, BlockWithTxs, ChainError, ChainInfo, ChainTx, ChainVerification,
-    EVENT_VERSION, EscapeStatus, Flag, PreparedOp, SignedUserOp, SubmitResult, TokenInfo, TxKind,
+    EVENT_VERSION, EscapeStatus, ExternalRef, Flag, Network, PreparedOp, SignedUserOp, SubmitResult, TokenInfo, TxKind,
 };
 use crate::signer::cosign_payload;
 
@@ -17,6 +19,7 @@ const ESCAPE_DOMAIN: &[u8] = b"SQW-ESCAPE-v1";
 const ESCAPE_CANCEL_DOMAIN: &[u8] = b"SQW-ESCAPE-CANCEL-v1";
 const ROTATE_DOMAIN: &[u8] = b"SQW-ROTATE-v1";
 const ANCHOR_DOMAIN: &[u8] = b"SQW-ANCHOR-v1";
+const EXTERNAL_DOMAIN: &[u8] = b"SQW-EXTERNAL-v1";
 const TX_DOMAIN: &[u8] = b"SQW-EVENT-v1";
 const BLOCK_DOMAIN: &[u8] = b"SQW-BLOCK-v1";
 const STATE_DOMAIN: &[u8] = b"SQW-STATE-v1";
@@ -24,6 +27,7 @@ const STATE_DOMAIN: &[u8] = b"SQW-STATE-v1";
 #[derive(Debug, Clone)]
 pub struct ChainConfig {
     pub chain_id: u64,
+    pub network: Network,
     pub cosigner: VerifyingKey,
     pub escape_delay_secs: u64,
     pub tokens: Vec<TokenInfo>,
@@ -31,18 +35,18 @@ pub struct ChainConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Escape {
-    to: Address,
-    started_at: u64,
-    unlock_at: u64,
+pub(super) struct Escape {
+    pub(super) to: Address,
+    pub(super) started_at: u64,
+    pub(super) unlock_at: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Account {
-    owner: OwnerKey,
-    nonce: u64,
-    escape: Option<Escape>,
-    created_block: u64,
+pub(super) struct Account {
+    pub(super) owner: OwnerKey,
+    pub(super) nonce: u64,
+    pub(super) escape: Option<Escape>,
+    pub(super) created_block: u64,
 }
 
 /// Balances exist for any address (accounts, EOAs, faucet recipients); accounts add signing rules.
@@ -85,17 +89,17 @@ pub struct MockChain {
     validator: VerifyingKey,
     validator_key: Option<SigningKey>,
     decoder: AbiTxDecoder,
-    tokens: BTreeMap<Address, TokenInfo>,
-    accounts: BTreeMap<Address, Account>,
+    pub(super) tokens: BTreeMap<Address, TokenInfo>,
+    pub(super) accounts: BTreeMap<Address, Account>,
     balances: BTreeMap<Address, Balances>,
     /// `(spender, owner, token) -> allowance`
     allowances: BTreeMap<(Address, Address, Address), U256>,
-    blocks: Vec<Block>,
-    txs: BTreeMap<B256, ChainTx>,
+    pub(super) blocks: Vec<Block>,
+    pub(super) txs: BTreeMap<B256, ChainTx>,
     /// Tx hashes in chain order.
-    order: Vec<B256>,
+    pub(super) order: Vec<B256>,
     /// Derived index: target event -> flags raised on it.
-    flags: BTreeMap<B256, Vec<Flag>>,
+    pub(super) flags: BTreeMap<B256, Vec<Flag>>,
     store: Box<dyn BlockStore>,
 }
 
@@ -167,6 +171,7 @@ impl MockChain {
         let head = self.latest();
         ChainInfo {
             chain_id: self.cfg.chain_id,
+            network: self.cfg.network.clone(),
             latest_block: head.number,
             head: head.hash,
             state_root: head.state_root,
@@ -192,7 +197,7 @@ impl MockChain {
         extra.insert("owner".into(), serde_json::to_value(&owner).map_err(|e| ChainError::MalformedEvent(e.to_string()))?);
         let action = DecodedAction::ContractCall { target: address, selector: selector(b"createAccount(bytes)"), value: U256::ZERO };
         let tx = self.event(TxKind::AccountCreated, address, address, U256::ZERO, Bytes::new(), 0, B256::ZERO, action, now);
-        self.commit(ChainTx { extra, ..tx })?;
+        self.commit(ChainTx { extra, ..tx }, &SubmitMeta::default())?;
         Ok(address)
     }
 
@@ -251,7 +256,7 @@ impl MockChain {
             ),
         };
         let tx = self.event(TxKind::Faucet, Address::ZERO, to_field, value, data, 0, B256::ZERO, action, now);
-        self.commit(tx)
+        self.commit(tx, &SubmitMeta::default())
     }
 
     // ----- hashes the signers must cover -----
@@ -298,6 +303,12 @@ impl MockChain {
         self.auth_hash(ANCHOR_DOMAIN, address, head.as_slice(), 0)
     }
 
+    /// What Swissquote co-signs when it attests an event seen on another network.
+    pub fn external_hash(&self, wallet: Address, ext: &ExternalRef) -> B256 {
+        let subject = format!("{}:{}:{}:{}", ext.network.name, ext.tx_id, ext.from_raw, ext.to_raw);
+        self.auth_hash(EXTERNAL_DOMAIN, wallet, subject.as_bytes(), 0)
+    }
+
     // ----- user operations -----
 
     /// Decodes and assigns the nonce; the result's `user_op_hash` is what the owner signs and Swissquote co-signs.
@@ -331,17 +342,44 @@ impl MockChain {
     }
 
     /// Validates both signatures and executes. This is the 2-of-2 rule the real account enforces.
-    pub fn submit(&mut self, op: &SignedUserOp, now: u64) -> Result<SubmitResult, ChainError> {
+    pub fn submit(&mut self, op: &SignedUserOp, meta: &SubmitMeta, now: u64) -> Result<SubmitResult, ChainError> {
         self.check_chain(op.tx.chain_id)?;
         let action = self.decoder.decode(&op.tx)?;
         let hash = self.user_op_hash(&op.tx, op.nonce);
         let kind = if op.cosignature.is_some() { TxKind::Cosigned } else { TxKind::EscapeExit };
+        let mut extra = BTreeMap::new();
+        if let Some(o) = &op.tx.origin {
+            extra.insert("origin".into(), serde_json::Value::String(o.clone()));
+        }
         let tx = ChainTx {
             owner_signature: Some(op.owner_signature.clone()),
             cosignature: op.cosignature.clone(),
+            extra,
             ..self.event(kind, op.tx.from, op.tx.to, op.tx.value, op.tx.data.clone(), op.nonce, hash, action, now)
         };
-        self.commit(tx)
+        self.commit(tx, meta)
+    }
+
+    /// Records an event observed on another network, attested by Swissquote's co-signature over
+    /// `external_hash`. `counterparty` is the EVM-shaped address when one exists; raw strings live in `extra.external`.
+    pub fn ingest_external(&mut self, wallet: Address, ext: ExternalRef, counterparty: Option<Address>, incoming: bool, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        let hash = self.external_hash(wallet, &ext);
+        let radix = if ext.amount.starts_with("0x") { 16 } else { 10 };
+        let amount = U256::from_str_radix(ext.amount.trim_start_matches("0x"), radix).map_err(|e| ChainError::MalformedEvent(format!("external amount: {e}")))?;
+        let other = counterparty.unwrap_or(Address::ZERO);
+        let (from, to) = if incoming { (other, wallet) } else { (wallet, other) };
+        let action = DecodedAction::ContractCall { target: to, selector: selector(b"external(bytes)"), value: amount };
+        let mut extra = BTreeMap::new();
+        extra.insert("external".into(), serde_json::to_value(&ext).map_err(|e| ChainError::MalformedEvent(e.to_string()))?);
+        extra.insert("incoming".into(), serde_json::Value::Bool(incoming));
+        let tx = ChainTx {
+            cosignature: Some(cosignature.clone()),
+            extra,
+            network: ext.network.clone(),
+            ..self.event(TxKind::External, from, to, amount, Bytes::new(), 0, hash, action, now)
+        };
+        let meta = SubmitMeta { fee: ext.fee, ..Default::default() };
+        self.commit(tx, &meta)
     }
 
     // ----- escape hatch -----
@@ -351,7 +389,7 @@ impl MockChain {
         let hash = self.escape_hash(address, to, nonce);
         let action = DecodedAction::ContractCall { target: address, selector: selector(b"startEscapeHatch(address)"), value: U256::ZERO };
         let tx = ChainTx { owner_signature: Some(sig.clone()), ..self.event(TxKind::EscapeStart, address, to, U256::ZERO, Bytes::new(), nonce, hash, action, now) };
-        let r = self.commit(tx)?;
+        let r = self.commit(tx, &SubmitMeta::default())?;
         Ok((self.account(address, now)?.escape, r))
     }
 
@@ -360,7 +398,7 @@ impl MockChain {
         let hash = self.escape_cancel_hash(address, nonce);
         let action = DecodedAction::ContractCall { target: address, selector: selector(b"cancelEscapeHatch()"), value: U256::ZERO };
         let tx = ChainTx { owner_signature: Some(sig.clone()), ..self.event(TxKind::EscapeCancel, address, address, U256::ZERO, Bytes::new(), nonce, hash, action, now) };
-        self.commit(tx)
+        self.commit(tx, &SubmitMeta::default())
     }
 
     // ----- recovery -----
@@ -377,7 +415,7 @@ impl MockChain {
             extra,
             ..self.event(TxKind::OwnerRotation, address, address, U256::ZERO, Bytes::copy_from_slice(new_owner.bytes()), nonce, hash, action, now)
         };
-        self.commit(tx)
+        self.commit(tx, &SubmitMeta::default())
     }
 
     // ----- anchoring and flags -----
@@ -389,7 +427,7 @@ impl MockChain {
             cosignature: Some(cosignature.clone()),
             ..self.event(TxKind::Anchor, address, address, U256::ZERO, Bytes::copy_from_slice(head.as_slice()), 0, head, action, now)
         };
-        self.commit(tx)
+        self.commit(tx, &SubmitMeta::default())
     }
 
     /// Attaches a flag to an existing event as a new event. Idempotent per `(target, source, code)`.
@@ -402,7 +440,7 @@ impl MockChain {
         extra.insert("flag".into(), serde_json::to_value(&flag).map_err(|e| ChainError::MalformedEvent(e.to_string()))?);
         let action = DecodedAction::ContractCall { target: target_from, selector: selector(b"flag(bytes32,string)"), value: U256::ZERO };
         let tx = ChainTx { extra, ..self.event(TxKind::Flag, Address::ZERO, target_from, U256::ZERO, Bytes::copy_from_slice(flag.target.as_slice()), 0, flag.target, action, now) };
-        self.commit(tx).map(Some)
+        self.commit(tx, &SubmitMeta::default()).map(Some)
     }
 
     // ----- reads -----
@@ -432,6 +470,33 @@ impl MockChain {
             .filter_map(|h| self.view_tx(*h))
             .filter(|t| t.from == address || t.to == address || t.action.counterparty() == Some(address))
             .collect()
+    }
+
+    /// Training rows: every event with features, labelled by the flags raised on it.
+    pub fn dataset(&self, from: u64, limit: usize) -> Vec<DatasetRow> {
+        self.order
+            .iter()
+            .filter_map(|h| self.view_tx(*h))
+            .filter(|t| t.block_number >= from && t.features.is_some())
+            .take(limit)
+            .filter_map(|t| {
+                let features = t.features.clone()?;
+                Some(DatasetRow {
+                    tx_hash: t.hash,
+                    block_number: t.block_number,
+                    label: t.flags.iter().map(|f| f.severity).max(),
+                    label_codes: t.flags.iter().map(|f| f.code.clone()).collect(),
+                    features,
+                })
+            })
+            .collect()
+    }
+
+    pub(super) fn network_of(&self, tx: &ChainTx) -> Network {
+        if tx.kind == TxKind::External {
+            return tx.network.clone();
+        }
+        self.cfg.network.clone()
     }
 
     /// Replays the whole chain from its own blocks and checks every hash, signature and state root,
@@ -503,16 +568,19 @@ impl MockChain {
             cosignature: None,
             extra: BTreeMap::new(),
             flags: Vec::new(),
+            network: self.cfg.network.clone(),
+            features: None,
         }
     }
 
-    /// Authorise, execute, mine, persist. The single path every state change takes, live or replayed.
-    fn commit(&mut self, mut tx: ChainTx) -> Result<SubmitResult, ChainError> {
+    /// Authorise, feature, execute, mine, persist. The single path every state change takes.
+    fn commit(&mut self, mut tx: ChainTx, meta: &SubmitMeta) -> Result<SubmitResult, ChainError> {
         let key = self.validator_key.clone().ok_or(ChainError::ReadOnly)?;
         let parent = self.latest();
         tx.block_number = parent.number + 1;
         tx.timestamp = tx.timestamp.max(parent.timestamp);
         self.authorize(&tx)?;
+        tx.features = Some(self.features_for(&tx, meta));
         self.execute(&tx)?;
         tx.hash = self.tx_hash(&tx, parent.hash);
         let mut block = self.build_block(&parent, &tx);
@@ -661,7 +729,7 @@ impl MockChain {
         buf.extend_from_slice(parent_hash.as_slice());
         buf.extend_from_slice(&tx.block_number.to_be_bytes());
         buf.extend_from_slice(&tx.timestamp.to_be_bytes());
-        buf.extend_from_slice(kind_tag(tx.kind));
+        buf.extend_from_slice(kind_tag(tx.kind).as_bytes());
         buf.extend_from_slice(tx.from.as_slice());
         buf.extend_from_slice(tx.to.as_slice());
         buf.extend_from_slice(&tx.value.to_be_bytes::<32>());
@@ -671,6 +739,7 @@ impl MockChain {
         buf.extend_from_slice(keccak256(json_bytes(&tx.owner_signature)).as_slice());
         buf.extend_from_slice(keccak256(tx.cosignature.as_ref().map(|c| c.as_ref()).unwrap_or(&[])).as_slice());
         buf.extend_from_slice(keccak256(json_bytes(&tx.extra)).as_slice());
+        buf.extend_from_slice(keccak256(json_bytes(&tx.network)).as_slice());
         keccak256(buf)
     }
 
@@ -755,6 +824,19 @@ impl MockChain {
                 }
                 Ok(())
             }
+            TxKind::External => {
+                let ext: ExternalRef = extra_field(tx, "external")?;
+                let incoming: bool = extra_field(tx, "incoming")?;
+                let wallet = if incoming { tx.to } else { tx.from };
+                if !self.accounts.contains_key(&wallet) {
+                    return Err(ChainError::UnknownAccount(wallet));
+                }
+                if tx.user_op_hash != self.external_hash(wallet, &ext) {
+                    return Err(ChainError::MalformedEvent("external attestation hash mismatch".into()));
+                }
+                let sig = tx.cosignature.as_ref().ok_or(ChainError::MissingCosignature)?;
+                self.verify_cosignature(&tx.user_op_hash, sig)
+            }
         }
     }
 
@@ -817,7 +899,7 @@ impl MockChain {
                 }
                 self.bump_nonce(tx.from);
             }
-            TxKind::Anchor => {}
+            TxKind::Anchor | TxKind::External => {}
             TxKind::Flag => {
                 let flag: Flag = extra_field(tx, "flag")?;
                 self.flags.entry(flag.target).or_default().push(flag);
@@ -918,20 +1000,6 @@ fn selector(sig: &[u8]) -> Bytes {
     Bytes::copy_from_slice(&keccak256(sig)[..4])
 }
 
-fn kind_tag(k: TxKind) -> &'static [u8] {
-    match k {
-        TxKind::AccountCreated => b"account_created",
-        TxKind::Faucet => b"faucet",
-        TxKind::Cosigned => b"cosigned",
-        TxKind::EscapeStart => b"escape_start",
-        TxKind::EscapeCancel => b"escape_cancel",
-        TxKind::EscapeExit => b"escape_exit",
-        TxKind::OwnerRotation => b"owner_rotation",
-        TxKind::Anchor => b"anchor",
-        TxKind::Flag => b"flag",
-    }
-}
-
 fn json_bytes<T: serde::Serialize>(v: &T) -> Vec<u8> {
     serde_json::to_vec(v).unwrap_or_default()
 }
@@ -1026,6 +1094,7 @@ mod tests {
     fn cfg(sq: &Ed25519Signer) -> ChainConfig {
         ChainConfig {
             chain_id: CHAIN,
+            network: Network::ferra(CHAIN),
             cosigner: sq.verifying_key(),
             escape_delay_secs: 600,
             tokens: vec![TokenInfo { address: usdc(), symbol: "USDC".into(), decimals: 6 }],
@@ -1061,7 +1130,7 @@ mod tests {
         let (mut chain, sq, owner, addr) = setup();
         let to = Address::repeat_byte(0x22);
         let op = cosigned(&chain, &sq, &owner, usdc_tx(addr, to, 100_000_000));
-        let r = chain.submit(&op, 1_010).unwrap();
+        let r = chain.submit(&op, &SubmitMeta::default(), 1_010).unwrap();
         assert_eq!(r.kind, TxKind::Cosigned);
         assert_eq!(r.block_number, 4); // genesis, account, 2 faucets, then this
         assert_eq!(chain.balances_of(to)[1].amount, U256::from(100_000_000u64));
@@ -1081,17 +1150,17 @@ mod tests {
         let good_owner = owner.sign(&prep.user_op_hash);
 
         let no_cosig = SignedUserOp { tx: tx.clone(), nonce: 0, owner_signature: good_owner.clone(), cosignature: None };
-        assert_eq!(chain.submit(&no_cosig, 1_010).unwrap_err(), ChainError::EscapeNotStarted);
+        assert_eq!(chain.submit(&no_cosig, &SubmitMeta::default(), 1_010).unwrap_err(), ChainError::EscapeNotStarted);
 
         let other = Ed25519Signer::from_seed([9u8; 32]);
         let forged = SignedUserOp { tx: tx.clone(), nonce: 0, owner_signature: good_owner.clone(), cosignature: Some(other.cosign(&prep.user_op_hash)) };
-        assert_eq!(chain.submit(&forged, 1_010).unwrap_err(), ChainError::BadCosignature);
+        assert_eq!(chain.submit(&forged, &SubmitMeta::default(), 1_010).unwrap_err(), ChainError::BadCosignature);
 
         let wrong_owner = SignedUserOp { tx: tx.clone(), nonce: 0, owner_signature: Owner::new(2).sign(&prep.user_op_hash), cosignature: Some(sq.cosign(&prep.user_op_hash)) };
-        assert_eq!(chain.submit(&wrong_owner, 1_010).unwrap_err(), ChainError::BadOwnerSignature);
+        assert_eq!(chain.submit(&wrong_owner, &SubmitMeta::default(), 1_010).unwrap_err(), ChainError::BadOwnerSignature);
 
         let bad_nonce = SignedUserOp { tx, nonce: 3, owner_signature: good_owner, cosignature: Some(sq.cosign(&prep.user_op_hash)) };
-        assert_eq!(chain.submit(&bad_nonce, 1_010).unwrap_err(), ChainError::BadNonce { expected: 0, got: 3 });
+        assert_eq!(chain.submit(&bad_nonce, &SubmitMeta::default(), 1_010).unwrap_err(), ChainError::BadNonce { expected: 0, got: 3 });
         assert_eq!(chain.latest().number, 3, "rejected submissions mine nothing");
     }
 
@@ -1099,7 +1168,7 @@ mod tests {
     fn insufficient_balance_is_rejected_without_state_change() {
         let (mut chain, sq, owner, addr) = setup();
         let op = cosigned(&chain, &sq, &owner, usdc_tx(addr, Address::repeat_byte(0x22), 999_000_000_000));
-        assert!(matches!(chain.submit(&op, 1_010).unwrap_err(), ChainError::InsufficientBalance { .. }));
+        assert!(matches!(chain.submit(&op, &SubmitMeta::default(), 1_010).unwrap_err(), ChainError::InsufficientBalance { .. }));
         assert_eq!(chain.account(addr, 1_010).unwrap().nonce, 0);
         assert!(chain.verify().ok);
     }
@@ -1116,14 +1185,14 @@ mod tests {
         let prep = chain.prepare(&tx).unwrap();
         assert_eq!(prep.nonce, 1);
         let op = SignedUserOp { tx: tx.clone(), nonce: 1, owner_signature: owner.sign(&prep.user_op_hash), cosignature: None };
-        assert_eq!(chain.submit(&op, 2_100).unwrap_err(), ChainError::EscapeLocked { unlock_at: 2_600 });
+        assert_eq!(chain.submit(&op, &SubmitMeta::default(), 2_100).unwrap_err(), ChainError::EscapeLocked { unlock_at: 2_600 });
 
         let wrong = usdc_tx(addr, Address::repeat_byte(0x44), 1);
         let p2 = chain.prepare(&wrong).unwrap();
         let op2 = SignedUserOp { tx: wrong, nonce: 1, owner_signature: owner.sign(&p2.user_op_hash), cosignature: None };
-        assert_eq!(chain.submit(&op2, 2_700).unwrap_err(), ChainError::EscapeWrongRecipient(exit_to));
+        assert_eq!(chain.submit(&op2, &SubmitMeta::default(), 2_700).unwrap_err(), ChainError::EscapeWrongRecipient(exit_to));
 
-        let r = chain.submit(&op, 2_700).unwrap();
+        let r = chain.submit(&op, &SubmitMeta::default(), 2_700).unwrap();
         assert_eq!(r.kind, TxKind::EscapeExit);
         assert_eq!(chain.balances_of(exit_to)[1].amount, U256::from(500_000_000u64));
         assert!(chain.verify().ok);
@@ -1151,9 +1220,9 @@ mod tests {
         let tx = usdc_tx(addr, Address::repeat_byte(0x22), 1);
         let prep = chain.prepare(&tx).unwrap();
         let old = SignedUserOp { tx: tx.clone(), nonce: prep.nonce, owner_signature: owner.sign(&prep.user_op_hash), cosignature: Some(sq.cosign(&prep.user_op_hash)) };
-        assert_eq!(chain.submit(&old, 3_001).unwrap_err(), ChainError::BadOwnerSignature);
+        assert_eq!(chain.submit(&old, &SubmitMeta::default(), 3_001).unwrap_err(), ChainError::BadOwnerSignature);
         let fresh = SignedUserOp { tx, nonce: prep.nonce, owner_signature: new_owner.sign(&prep.user_op_hash), cosignature: Some(sq.cosign(&prep.user_op_hash)) };
-        chain.submit(&fresh, 3_001).unwrap();
+        chain.submit(&fresh, &SubmitMeta::default(), 3_001).unwrap();
         assert!(chain.verify().ok);
     }
 
@@ -1176,7 +1245,7 @@ mod tests {
         chain.anchor(addr, head, &sq.cosign(&h), 1_500).unwrap();
 
         let op = cosigned(&chain, &sq, &owner, usdc_tx(addr, Address::repeat_byte(0x22), 5));
-        let r = chain.submit(&op, 1_600).unwrap();
+        let r = chain.submit(&op, &SubmitMeta::default(), 1_600).unwrap();
         let flag = Flag { code: "TEST".into(), severity: RiskBand::High, source: super::super::FlagSource::Review, message: "m".into(), at: 1_700, target: r.tx_hash, data: BTreeMap::new() };
         assert!(chain.flag(flag.clone(), 1_700).unwrap().is_some());
         assert!(chain.flag(flag.clone(), 1_701).unwrap().is_none(), "same code+source is deduped");
@@ -1191,7 +1260,7 @@ mod tests {
     fn tampering_is_detected_in_every_form() {
         let (mut chain, sq, owner, addr) = setup();
         let op = cosigned(&chain, &sq, &owner, usdc_tx(addr, Address::repeat_byte(0x22), 5));
-        let r = chain.submit(&op, 1_600).unwrap();
+        let r = chain.submit(&op, &SubmitMeta::default(), 1_600).unwrap();
         assert!(chain.verify().ok);
 
         let snapshot_root = chain.state_root();
@@ -1216,6 +1285,77 @@ mod tests {
     }
 
     #[test]
+    fn features_describe_sender_counterparty_and_timing() {
+        let (mut chain, sq, owner, addr) = setup();
+        let to = Address::repeat_byte(0x22);
+        let op = cosigned(&chain, &sq, &owner, usdc_tx(addr, to, 100_000_000));
+        let policy = super::super::PolicySnapshot { score: Some(20), band: Some(RiskBand::Low), reasons: vec!["NEW_RECIPIENT".into()], sanctions_hit: Some(false), exposure_hops: None };
+        let meta = SubmitMeta { prepared_at: Some(1_590), step_up: true, policy: Some(policy), fee: None };
+        let r = chain.submit(&op, &meta, 1_600).unwrap();
+        let f = chain.tx(r.tx_hash).unwrap().features.unwrap();
+        assert_eq!(f.network.family, super::super::ChainFamily::Ferra);
+        assert_eq!(f.signer_kind, "ed25519");
+        assert!(f.cosigned && f.step_up && !f.via_dapp);
+        assert_eq!(f.asset_symbol, "USDC");
+        assert!((f.amount - 100.0).abs() < 1e-9);
+        assert!((f.balance_before - 500.0).abs() < 1e-9);
+        assert!((f.fraction_of_balance - 0.2).abs() < 1e-9);
+        assert!(f.is_round_amount);
+        assert_eq!(f.decision_latency_secs, Some(10));
+        assert_eq!(f.sender_age_secs, 600);
+        assert_eq!(f.sender_in_count, 2, "two faucet credits");
+        assert_eq!(f.sender_out_count, 0);
+        assert!(f.counterparty_new_for_sender);
+        assert_eq!(f.policy.reasons, vec!["NEW_RECIPIENT".to_string()]);
+        let v = f.to_vector();
+        assert_eq!(v.get("family_ferra"), Some(&1.0));
+        assert_eq!(v.get("step_up"), Some(&1.0));
+
+        // second payment to the same counterparty: no longer new, velocity and history move
+        let op2 = cosigned(&chain, &sq, &owner, usdc_tx(addr, to, 50_000_000));
+        let r2 = chain.submit(&op2, &SubmitMeta::default(), 1_700).unwrap();
+        let f2 = chain.tx(r2.tx_hash).unwrap().features.unwrap();
+        assert!(!f2.counterparty_new_for_sender);
+        assert_eq!(f2.sender_out_count, 1);
+        assert_eq!(f2.counterparty_in_count, 1);
+        assert_eq!(f2.secs_since_sender_prev_tx, Some(100));
+        assert_eq!(f2.sender_out_count_24h, 1);
+        assert!((f2.share_of_lifetime_volume - 50.0 / 150.0).abs() < 1e-9);
+        let rows = chain.dataset(0, 100);
+        assert_eq!(rows.len(), chain.latest().number as usize, "every event after genesis has features");
+        assert!(chain.verify().ok, "features are not part of the hash");
+    }
+
+    #[test]
+    fn external_events_are_attested_by_swissquote_and_carry_their_network() {
+        let (mut chain, sq, _owner, addr) = setup();
+        let ext = ExternalRef {
+            network: Network { family: super::super::ChainFamily::Bitcoin, name: "bitcoin-testnet".into(), chain_id: None },
+            tx_id: "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b".into(),
+            block: Some(2_500_000),
+            from_raw: "tb1qexternal".into(),
+            to_raw: "tb1qwallet".into(),
+            asset_symbol: "BTC".into(),
+            decimals: 8,
+            amount: "150000".into(),
+            fee: Some(0.0000021),
+            explorer_url: None,
+        };
+        assert_eq!(chain.ingest_external(addr, ext.clone(), None, true, &Bytes::from(vec![0u8; 64]), 1_800).unwrap_err(), ChainError::BadCosignature);
+        let h = chain.external_hash(addr, &ext);
+        let r = chain.ingest_external(addr, ext, None, true, &sq.cosign(&h), 1_800).unwrap();
+        let tx = chain.tx(r.tx_hash).unwrap();
+        assert_eq!(tx.kind, TxKind::External);
+        assert_eq!(tx.network.family, super::super::ChainFamily::Bitcoin);
+        assert_eq!(tx.to, addr);
+        let f = tx.features.unwrap();
+        assert_eq!(f.network.name, "bitcoin-testnet");
+        assert!((f.fee - 0.0000021).abs() < 1e-12);
+        assert_eq!(chain.history(addr).last().unwrap().kind, TxKind::External);
+        assert!(chain.verify().ok);
+    }
+
+    #[test]
     fn persisted_chain_replays_identically_and_rejects_an_edited_file() {
         let dir = std::env::temp_dir().join(format!("sqw-chain-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -1228,7 +1368,7 @@ mod tests {
             let addr = chain.create_account(owner.key(), 1_000).unwrap();
             chain.fund(addr, Some(usdc()), U256::from(500_000_000u64), 1_002).unwrap();
             let op = cosigned(&chain, &sq, &owner, usdc_tx(addr, Address::repeat_byte(0x22), 5));
-            chain.submit(&op, 1_600).unwrap();
+            chain.submit(&op, &SubmitMeta::default(), 1_600).unwrap();
             (chain.latest(), addr)
         };
         // a later process has a different clock: the stored genesis wins

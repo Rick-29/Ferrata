@@ -81,6 +81,9 @@ async fn assess(State(state): State<SharedState>, caller: Caller, Json(req): Jso
         let chain = state.chain_for(Some(req.tx.chain_id))?;
         if chain.has_account(req.tx.from) { Some(chain.prepare(&req.tx)?) } else { None }
     };
+    if let Some(p) = &prepared {
+        state.note_prepared(p.user_op_hash)?;
+    }
     let log = state.log.load(req.tx.from)?;
     Ok(Json(AssessResponse {
         action: scored.action,

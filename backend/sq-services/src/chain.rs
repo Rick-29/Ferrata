@@ -5,8 +5,8 @@
 use alloy_primitives::{Address, B256};
 use api_types::{
     AccountView, BlockWithTxs, BlocksQuery, CancelEscapeRequest, ChainInfo, ChainQuery, ChainTx, ChainVerification,
-    CreateAccountRequest, EscapeHashRequest, EscapeResponse, FaucetRequest, HashResponse, HistoryResponse, PreparedOp,
-    SignedUserOp, SimulateRequest, SimulateResponse, StartEscapeRequest, SubmitResult,
+    CreateAccountRequest, DatasetRow, EscapeHashRequest, EscapeResponse, FaucetRequest, HashResponse, HistoryResponse,
+    IngestRequest, ModelInfo, PreparedOp, SignedUserOp, SimulateRequest, SimulateResponse, StartEscapeRequest, SubmitResult,
 };
 use axum::extract::{Path, Query, State};
 use axum::routing::{get, post};
@@ -18,7 +18,11 @@ use crate::state::SharedState;
 
 /// Top-level, cross-chain routes.
 pub fn wallet_routes() -> Router<SharedState> {
-    Router::new().route("/chains", get(chains))
+    Router::new().route("/chains", get(chains)).route("/model", get(model))
+}
+
+async fn model(State(state): State<SharedState>) -> ApiResult<ModelInfo> {
+    Ok(Json(state.model.describe()))
 }
 
 pub fn routes() -> Router<SharedState> {
@@ -35,6 +39,8 @@ pub fn routes() -> Router<SharedState> {
         .route("/escape/start", post(escape_start))
         .route("/escape/cancel", post(escape_cancel))
         .route("/history/{address}", get(history))
+        .route("/ingest", post(ingest))
+        .route("/dataset", get(dataset))
         .route("/blocks", get(blocks))
         .route("/blocks/{number}", get(block))
         .route("/tx/{hash}", get(tx))
@@ -74,7 +80,9 @@ async fn faucet(State(state): State<SharedState>, Json(req): Json<FaucetRequest>
 }
 
 async fn prepare(State(state): State<SharedState>, Json(req): Json<SimulateRequest>) -> ApiResult<PreparedOp> {
-    Ok(Json(state.chain_for(Some(req.tx.chain_id))?.prepare(&req.tx)?))
+    let p = state.chain_for(Some(req.tx.chain_id))?.prepare(&req.tx)?;
+    state.note_prepared(p.user_op_hash)?;
+    Ok(Json(p))
 }
 
 async fn simulate(State(state): State<SharedState>, Json(req): Json<SimulateRequest>) -> ApiResult<SimulateResponse> {
@@ -85,7 +93,9 @@ async fn simulate(State(state): State<SharedState>, Json(req): Json<SimulateRequ
 
 async fn submit(State(state): State<SharedState>, caller: Caller, Json(op): Json<SignedUserOp>) -> ApiResult<SubmitResult> {
     state.check_owner(&caller, op.tx.from)?;
-    let r = state.chain_for(Some(op.tx.chain_id))?.submit(&op, state.now())?;
+    let user_op_hash = state.chain_for(Some(op.tx.chain_id))?.user_op_hash_for(&op);
+    let meta = state.submit_meta(op.tx.from, user_op_hash)?;
+    let r = state.chain_for(Some(op.tx.chain_id))?.submit(&op, &meta, state.now())?;
     tracing::info!(chain = op.tx.chain_id, tx = %r.tx_hash, block = r.block_number, kind = ?r.kind, "transaction mined");
     Ok(Json(r))
 }
@@ -118,6 +128,26 @@ async fn escape_cancel(State(state): State<SharedState>, caller: Caller, Json(re
 
 async fn history(State(state): State<SharedState>, Query(q): Query<ChainQuery>, Path(address): Path<Address>) -> ApiResult<HistoryResponse> {
     Ok(Json(HistoryResponse { address, txs: state.chain_for(q.chain_id)?.history(address) }))
+}
+
+/// Records an event Swissquote observed on another network (Ethereum, Bitcoin, Solana, TON, Sui, …)
+/// on the Ferra chain, attested by its co-signature. This is how the wallet's cross-chain activity
+/// becomes one reviewable, tamper-evident history.
+async fn ingest(State(state): State<SharedState>, caller: Caller, Json(req): Json<IngestRequest>) -> ApiResult<SubmitResult> {
+    state.check_owner(&caller, req.wallet)?;
+    let now = state.now();
+    let mut chain = state.chain_for(req.chain_id)?;
+    let cosig = state.signer.cosign(&chain.external_hash(req.wallet, &req.event));
+    let r = chain.ingest_external(req.wallet, req.event, req.counterparty, req.incoming, &cosig, now)?;
+    tracing::info!(wallet = %req.wallet, tx = %r.tx_hash, "external event recorded on the Ferra chain");
+    Ok(Json(r))
+}
+
+/// Feature rows labelled by flags, for training the validator's model offline.
+async fn dataset(State(state): State<SharedState>, Query(q): Query<BlocksQuery>) -> ApiResult<Vec<DatasetRow>> {
+    let chain = state.chain_for(q.chain_id)?;
+    let limit = q.limit.unwrap_or(1_000).clamp(1, 10_000) as usize;
+    Ok(Json(chain.dataset(q.from.unwrap_or(0), limit)))
 }
 
 /// A page of blocks with their events. Without `from`, the newest `limit` blocks.
