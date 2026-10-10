@@ -9,6 +9,7 @@
 
 pub mod auth;
 pub mod backend;
+pub mod behaviour;
 pub mod features;
 mod ledger;
 pub mod model;
@@ -16,10 +17,11 @@ mod store;
 
 pub use auth::{OwnerKey, OwnerSignature};
 pub use backend::{ChainBackend, ChainGuard, ChainRegistry};
+pub use behaviour::{ActivityLevel, Archetype, Intent, IntentOutcome, IntentOutcomeKind, WalletProfile, WalletSettings};
 pub use features::{PolicySnapshot, SubmitMeta, TxFeatures};
 pub use ledger::{ChainConfig, MockChain, Tamper};
 pub use model::{DatasetRow, LinearModel, ModelInfo, RiskModel};
-pub use store::{BlockStore, JsonlBlockStore, NullBlockStore};
+pub use store::{BlockStore, CHAIN_FORMAT, CHAIN_FORMAT_VERSION, ChainHeader, ChainRecord, JsonlBlockStore, LoadedChain, NullBlockStore};
 
 use std::collections::BTreeMap;
 
@@ -251,6 +253,12 @@ pub enum TxKind {
     Flag,
     /// An event observed on another network and attested by Swissquote (`extra.external`).
     External,
+    /// The owner changed their own settings (`extra.settings`), owner-signed.
+    SettingsChanged,
+    /// A transaction composed in the wallet before signing (`extra.intent`), Swissquote-attested.
+    Intent,
+    /// What became of an intent (`extra.outcome`), Swissquote-attested.
+    IntentOutcome,
 }
 
 /// Who raised a flag.
@@ -268,6 +276,10 @@ pub enum FlagSource {
     Integrity,
     /// The validator's risk model.
     Model,
+    /// Deviation from the user's own profile (intents, settings, habits).
+    Behaviour,
+    /// Where the money came from on the origin network.
+    Provenance,
     /// A human.
     Manual,
 }
@@ -319,6 +331,12 @@ pub struct ChainTx {
     #[ts(type = "string")]
     pub user_op_hash: B256,
     pub action: DecodedAction,
+    /// Risk band the wallet / co-signer computed when this happened. Hashed: part of the record.
+    #[serde(default)]
+    pub risk_level: Option<RiskBand>,
+    /// Risk the validator tools assign afterwards: the highest flag severity. Derived, not hashed.
+    #[serde(default)]
+    pub reviewed_risk: Option<RiskBand>,
     #[serde(default)]
     pub owner_signature: Option<OwnerSignature>,
     #[serde(default)]

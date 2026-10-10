@@ -74,6 +74,7 @@ async fn justify(State(state): State<SharedState>, caller: Caller, Path(id): Pat
         hold.release_entry = Some(record(&state, hold.address, entry)?);
         hold.cosignature = Some(state.signer.cosign(&hold.user_op_hash));
         hold.status = HoldStatus::Released;
+        crate::assess::record_intent_outcome(&state, state.chains.default_chain(), hold.address, hold.user_op_hash, api_types::IntentOutcomeKind::Released, None)?;
     }
     tracing::info!(hold = %hold.id, status = ?hold.status, "hold reviewed");
     state.lock(&state.holds)?.insert(id, hold.clone());

@@ -44,7 +44,15 @@ counterparty_fan_out_ratio: number,
 /**
  * The counterparty forwarded ≥ 90 % of what it received within 24 h at least once (pass-through).
  */
-counterparty_pass_through: boolean, policy: PolicySnapshot, 
+counterparty_pass_through: boolean, policy: PolicySnapshot, archetype: string, activity: string, 
+/**
+ * `amount / mean of prior outgoing`, 0 without history.
+ */
+amount_vs_mean_out: number, amount_vs_p95_out: number, holding_ratio: number, prior_cancel_rate: number, cancels_24h: number, settings_changes_24h: number, secs_since_settings_change: number | null, 
+/**
+ * Compose → signed submission, from the matching `intent` event.
+ */
+intent_to_submit_secs: number | null, exceeds_own_limit: boolean, 
 /**
  * Open for future features without a schema change.
  */

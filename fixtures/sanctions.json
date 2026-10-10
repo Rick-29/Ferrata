@@ -3,5 +3,10 @@
   "addresses": [
     "0x000000000000000000000000000000000000dead",
     "0x00000000000000000000000000000000000bad01"
+  ],
+  "_raw_comment": "Sanctioned addresses on other networks, in each network's own format (used by provenance checks).",
+  "raw_addresses": [
+    "EQDsanctionedTONaddressForTheDemo000000000000000",
+    "tb1qsanctionedbitcoindemoaddress0000000000000"
   ]
 }

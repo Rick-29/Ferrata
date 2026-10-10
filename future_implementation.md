@@ -79,6 +79,8 @@ per address, and reuse the exposure BFS already in `sq-adapters::signals`.
 
 ## 2b. Connectors feed the Ferra chain
 
+**Status: the connectors exist** (`backend/sq-connectors`: TON, Bitcoin, Base Sepolia behind
+`NetworkSource`) and `POST /chain/sync` pulls one page on demand. What is left is the scheduler.
 Rather than teaching the visualiser every RPC, each network gets a small watcher that polls (or
 subscribes to) the wallet's addresses and posts `IngestRequest`s to `POST /chain/ingest`. The Ferra
 chain then holds one attested, feature-rich, reviewable timeline across Ethereum, Bitcoin, Solana,

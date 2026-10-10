@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 pub use sq_adapters::chain::{
+    ActivityLevel, Archetype, Intent, IntentOutcome, IntentOutcomeKind, WalletProfile, WalletSettings,
     AccountView, AssetBalance, Block, BlockWithTxs, ChainFamily, ChainInfo, ChainTx, ChainVerification, DatasetRow,
     EscapeStatus, ExternalRef, Flag, FlagSource, ModelInfo, Network, OwnerKey, OwnerSignature, PolicySnapshot, PreparedOp,
     SignedUserOp, SubmitMeta, SubmitResult, Tamper, TokenInfo, TxFeatures, TxKind,
@@ -47,6 +48,82 @@ pub struct TamperRequest {
     #[ts(type = "number | null")]
     pub chain_id: Option<u64>,
     pub tamper: Tamper,
+}
+
+/// Pull an address's history from a connected network into the Ferra chain.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SyncRequest {
+    #[ts(type = "string")]
+    pub wallet: Address,
+    /// A network name from `GET /networks` (`ton-testnet`, `bitcoin-testnet`, `base-sepolia`, …).
+    pub network: String,
+    /// The wallet's address on that network, in that network's own format.
+    pub address_raw: String,
+    #[ts(type = "number | null")]
+    pub limit: Option<u32>,
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SyncResponse {
+    pub network: Network,
+    #[ts(type = "number")]
+    pub fetched: u64,
+    #[ts(type = "number")]
+    pub recorded: u64,
+    #[ts(type = "number")]
+    pub skipped_existing: u64,
+    pub next_cursor: Option<String>,
+}
+
+// ---------- settings, intents, profile, provenance ----------
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SettingsHashRequest {
+    pub settings: WalletSettings,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SetSettingsRequest {
+    pub settings: WalletSettings,
+    /// Owner signature over the hash from `POST /settings/{address}/hash`.
+    pub signature: OwnerSignature,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SettingsResponse {
+    #[ts(type = "string")]
+    pub address: Address,
+    pub settings: WalletSettings,
+    pub tx: Option<SubmitResult>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct IntentState {
+    pub intent: Intent,
+    pub outcome: Option<IntentOutcomeKind>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ProvenanceResponse {
+    #[ts(type = "string")]
+    pub tx_hash: B256,
+    pub assessment: sq_connectors::provenance::ProvenanceAssessment,
+    pub flagged: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ReviewQuery {
+    /// Also query origin networks for external events (slow; capped at 5 per call).
+    pub provenance: Option<bool>,
 }
 
 // ---------- account review ----------
@@ -180,6 +257,9 @@ pub struct AssessRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct AssessResponse {
+    /// The `intent` event recorded for this composition; cancel it with `POST /intents/{id}/cancel`.
+    #[serde(default)]
+    pub intent_id: Option<String>,
     pub action: DecodedAction,
     pub assessment: RiskAssessment,
     pub signals: ExternalSignals,

@@ -8,6 +8,7 @@ pub mod signals;
 pub mod signer;
 
 pub use chain::{
+    ActivityLevel, Archetype, Intent, IntentOutcome, IntentOutcomeKind, WalletProfile, WalletSettings,
     AccountView, Block, BlockStore, BlockWithTxs, ChainBackend, ChainConfig, ChainError, ChainFamily, ChainRegistry, ChainTx,
     ChainVerification, DatasetRow, EscapeStatus, ExternalRef, Flag, FlagSource, JsonlBlockStore, LinearModel, MockChain, ModelInfo,
     Network, NullBlockStore, OwnerKey, OwnerSignature, PolicySnapshot, PreparedOp, RiskModel, SignedUserOp, SubmitMeta,

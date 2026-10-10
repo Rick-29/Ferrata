@@ -1,5 +1,5 @@
 [workspace]
-members = ["api-types", "sq-adapters", "sq-services", "wallet-core", "wallet-wasm"]
+members = ["api-types", "sq-adapters", "sq-connectors", "sq-services", "wallet-core", "wallet-wasm"]
 resolver = "3"
 
 [workspace.package]
@@ -10,6 +10,7 @@ edition = "2024"
 wallet-core = { path = "wallet-core" }
 api-types = { path = "api-types" }
 sq-adapters = { path = "sq-adapters" }
+sq-connectors = { path = "sq-connectors" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

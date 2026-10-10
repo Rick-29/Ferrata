@@ -29,6 +29,8 @@ pub enum ReasonCode {
     Sanctioned,
     MixerExposure,
     SimulatedDrain,
+    /// Above the limit the wallet owner set for themselves (settings on the Ferra chain).
+    OwnLimitExceeded,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -77,6 +79,10 @@ pub struct ExternalSignals {
 pub struct AccountContext {
     #[ts(type = "string[]")]
     pub known_recipients: Vec<Address>,
+    /// The owner's own per-transaction ceiling for the asset being moved, in base units, if set.
+    #[serde(default)]
+    #[ts(type = "string | null")]
+    pub own_per_tx_limit: Option<U256>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -171,6 +177,7 @@ impl RuleBasedScorer {
             .with_rule(Box::new(UnlimitedApprovalRule))
             .with_rule(Box::new(TypedDataPermitRule))
             .with_rule(Box::new(AmountLimitRule))
+            .with_rule(Box::new(OwnLimitRule))
             .with_rule(Box::new(NewRecipientRule))
             .with_rule(Box::new(AllowlistRule))
     }
@@ -223,7 +230,7 @@ mod tests {
         Address::repeat_byte(0x11)
     }
     fn account() -> AccountContext {
-        AccountContext { known_recipients: vec![known()] }
+        AccountContext { known_recipients: vec![known()], own_per_tx_limit: None }
     }
     fn assess(action: DecodedAction, origin: Option<&str>, signals: ExternalSignals) -> RiskAssessment {
         let cfg = config();
@@ -315,6 +322,18 @@ mod tests {
         );
         assert!(codes(&a).contains(&ReasonCode::PermitSignature));
         assert_eq!(a.band, RiskBand::High);
+    }
+
+    #[test]
+    fn own_limit_from_wallet_settings_fires() {
+        let cfg = config();
+        let acc = AccountContext { known_recipients: vec![known()], own_per_tx_limit: Some(U256::from(10_000_000u64)) };
+        let action = DecodedAction::Erc20Transfer { token: usdc(), to: known(), amount: U256::from(20_000_000u64) };
+        let signals = ExternalSignals::default();
+        let ctx = EvalContext { action: &action, origin: None, account: &acc, signals: &signals, config: &cfg };
+        let a = RuleBasedScorer::standard().assess(&ctx).unwrap();
+        assert_eq!(codes(&a), vec![ReasonCode::OwnLimitExceeded]);
+        assert_eq!(a.band, RiskBand::Medium);
     }
 
     #[test]

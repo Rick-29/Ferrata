@@ -61,6 +61,14 @@ pub struct Config {
     pub seed: DemoSeed,
     pub clients: Vec<Client>,
     pub kyc_scripts: Vec<KycScript>,
+    /// Sanctioned addresses on other networks, as raw strings (`fixtures/sanctions.json: raw_addresses`).
+    pub sanctioned_raw: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct SanctionsFile {
+    #[serde(default)]
+    raw_addresses: Vec<String>,
 }
 
 impl Config {
@@ -91,6 +99,7 @@ impl Config {
         let seed: DemoSeed = read_json(&fixtures_dir.join("demo-seed.json"))?;
         let accounts: AccountsFile = read_json(&fixtures_dir.join("accounts.json"))?;
         let kyc: KycFile = read_json(&fixtures_dir.join("kyc-scripts.json"))?;
+        let sanctions: SanctionsFile = read_json(&fixtures_dir.join("sanctions.json"))?;
         Ok(Self {
             port,
             fixtures_dir,
@@ -104,6 +113,7 @@ impl Config {
             seed,
             clients: accounts.clients,
             kyc_scripts: kyc.scripts,
+            sanctioned_raw: sanctions.raw_addresses,
         })
     }
 }

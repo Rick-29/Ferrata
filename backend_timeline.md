@@ -3,17 +3,18 @@
 Status of everything in `backend/`, kept current by P1. The frontend has its own file.
 Legend: ✅ done and tested · 🟡 work in progress · ⬜ not started · ❌ dropped.
 
-Last update: 2026-10-10, step 12 (Ferra chain: networks, external events, features, model).
+Last update: 2026-10-10, step 14 (intents, settings, profile, behaviour flags, provenance, ferra-verify --behaviour/--provenance).
 
 ## Verification snapshot
 
 | Check | Result |
 | --- | --- |
-| `cargo test --workspace` | 138 green (core 38, adapters 41, api-types 43 binding exports, services 16 end-to-end) |
+| `cargo test --workspace` | 168 green (core 39, adapters 50, connectors 8, api-types 51 binding exports, services 20 end-to-end) |
 | `cargo clippy --workspace --all-targets -- -D warnings` | clean; `unwrap`/`expect`/`panic` denied outside tests |
 | `cargo build -p wallet-wasm --target wasm32-unknown-unknown` | ok |
 | TypeScript bindings | regenerated into `frontend/packages/types/src` by `cargo test`, no `bigint` |
 | Persisted chain across a restart | ✅ replayed and verified on start; edited file refused |
+| `ferra-verify` on a server-written file | ✅ intact → exit 0 with per-event risk lines; one edited digit → `TAMPERED`, exit 1 |
 
 ## Crates
 
@@ -24,6 +25,8 @@ Last update: 2026-10-10, step 12 (Ferra chain: networks, external events, featur
 | `api-types` | HTTP DTOs → TS | ✅ |
 | `wallet-wasm` | `WalletCore { assess, build_entry, verify_log, rule_ids }` | ✅ builds · ⬜ not packaged with `wasm-pack` yet |
 | `sq-services` | Axum API, one module per capability | ✅ |
+| `sq-connectors` | `NetworkSource` trait + TON (toncenter, ported from NetView), Bitcoin (Esplora), EVM (Blockscout) | ✅ parsing unit-tested offline; live calls best-effort |
+| `ferra-verify` (bin in `sq-adapters`) | standalone verifier over the chain file | ✅ |
 
 ## Tamper-evident chain
 
@@ -34,6 +37,8 @@ Last update: 2026-10-10, step 12 (Ferra chain: networks, external events, featur
 | Blocks commit to a state root | sequential commitment over accounts, balances, allowances in sorted order | ✅ · ⬜ Merkle for per-account proofs |
 | Blocks are signed by a validator key distinct from the co-signer | Ed25519 over `"SQW-BLOCK-v1" ‖ block.hash`; `SQ_VALIDATOR_SEED` | ✅ |
 | Append-only persistence, replay + verify on start | `JsonlBlockStore`, `MockChain::new` refuses a file that does not replay | ✅ |
+| Self-describing file: `header` record with keys, network, tokens; `MockChain::from_loaded` needs nothing else | `store.rs`, `ferra-verify` | ✅ |
+| `risk_level` (wallet, hashed) and `reviewed_risk` (tools, derived from flags) on every event | `ChainTx` | ✅ |
 | Live-state drift without an event is caught | `verify` compares replayed state root with live | ✅ |
 | Integrity endpoint and demo corruption | `GET /chain/verify`, `POST /dev/tamper` (tx value, balance, block parent) | ✅ |
 | Versioned, extensible events | `version` field, `#[serde(default)]` on new fields, open `extra` map, unknown keys ignored | ✅ |
@@ -52,10 +57,35 @@ Last update: 2026-10-10, step 12 (Ferra chain: networks, external events, featur
 | Decision latency (`/assess` or `/prepare` → `/submit`) and policy snapshot from the audit log recorded via `SubmitMeta` | ✅ |
 | `GET /chain/dataset`: rows `{ features, label, label_codes }` | ✅ |
 | `RiskModel` trait, `LinearModel` from `fixtures/model.json`, `GET /model`, `MODEL_RISK` flag with top contributions | ✅ hand-set weights · ⬜ trained weights |
-| Real connectors that call `/chain/ingest` from Ethereum / Bitcoin / Solana RPCs | ⬜ see `future_implementation.md` |
+| Connectors: `POST /chain/sync` pulls a page from TON / Bitcoin / Base Sepolia public indexers, dedupes per (network, tx id), attests each event | ✅ |
+| Solana, Sui, TON mainnet jettons, Ethereum mainnet sources | ⬜ one `NetworkSource` each |
+| Background sync (poll every N seconds per registered wallet) | ⬜ |
 | Price feed for fiat-normalised amounts | ⬜ |
 | Device / IP / geo in `SubmitMeta` | ⬜ |
 | Two-hop graph aggregates | ⬜ |
+
+## Behavioural data on the chain
+
+| Item | Status |
+| --- | --- |
+| `settings_changed` events (owner-signed, nonce-bound): per-tx limit %, daily limit, step-up %, intent timeout, hold timeout, allowlist, open `extra` | ✅ |
+| `intent` events at `/assess` (target, asset, amount, origin, wallet band and score, hash to sign), Swissquote-attested | ✅ |
+| `intent_outcome` events: submitted / cancelled / step_up_required / held / refused / released, written automatically; `POST /intents/{address}/{id}/cancel` | ✅ |
+| `WalletProfile` (`GET /profile/{address}`): archetype, activity, amount distribution, hours, cancel rate, settings changes | ✅ |
+| Features v2: profile-relative amount, cancel rate, cancels / settings changes in 24 h, compose-to-submit latency, own-limit breach, archetype | ✅ |
+| Behaviour flags: `CANCEL_STREAK`, `SETTINGS_THEN_RETRY`, `BEHAVIOUR_DEVIATION`, `DORMANT_BURST`, `OWN_LIMIT_BYPASS` (source `behaviour`) | ✅ |
+| Own per-tx limit enforced by the policy (`OWN_LIMIT_EXCEEDED`) and the allowlist counted as known recipients | ✅ |
+| Daily limit and step-up-above-% enforced by the policy | ⬜ recorded, not yet enforced |
+| Intent expiry as an event (today computed lazily as "abandoned") | ⬜ |
+
+## Provenance (origin-network check)
+
+| Item | Status |
+| --- | --- |
+| `sq-connectors::provenance`: counterparty history on its network → freshness, pass-through, fan-in, single use, round trip, sanctions (raw list in `fixtures/sanctions.json`) | ✅ |
+| `POST /provenance/{tx_hash}` → `PROVENANCE` flag with reasons; `POST /review/{address}?provenance=true` (cap 5) | ✅ |
+| `ferra-verify --behaviour` (offline profiles + findings) and `--provenance` (online) | ✅ |
+| Timestamped freshness (sources expose block only) and 2-hop tracing | ⬜ |
 
 ## Account review (validation system)
 
@@ -64,6 +94,7 @@ Last update: 2026-10-10, step 12 (Ferra chain: networks, external events, featur
 | `POST /review/{address}`: policy reasons from the log, counterparty sanctions/exposure both directions, chain-vs-log findings, integrity check | ✅ |
 | Findings written back as `Flag` events; review idempotent | ✅ |
 | Model score per event (`FlagSource::Model`) | ✅ |
+| Behaviour and provenance findings in the review | ✅ |
 | Verdict `clean` / `suspicious` / `blocked` and score | ✅ |
 | Flags visible on events, accounts and block pages | ✅ |
 | Review as a workflow (open / cleared / escalated, manual flags, "merge back" after escape) | ⬜ see `future_implementation.md` |
@@ -131,7 +162,7 @@ Last update: 2026-10-10, step 12 (Ferra chain: networks, external events, featur
 
 ## Next (in order)
 
-0. First real connector: an Ethereum (Base Sepolia) watcher that turns transfers of a registered address into `/chain/ingest` calls, so the visualiser shows a live network next to the Ferra chain.
+0. Background sync loop over registered wallets and their external addresses (the connectors exist; only the scheduler is missing), plus a `wallet_addresses` map so a wallet declares its TON / BTC / EVM addresses once.
 1. `wasm-pack build` into `frontend/packages/core-wasm` when P3 asks.
 2. Role on sessions (client vs compliance) and gate `/reconcile`, `/review`, `/dev`.
 3. Review workflow records and manual flags.

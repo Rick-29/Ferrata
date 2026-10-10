@@ -7,7 +7,11 @@ import type { RiskAssessment } from "./RiskAssessment";
 /**
  * Everything the confirm screen needs in one call.
  */
-export type AssessResponse = { action: DecodedAction, assessment: RiskAssessment, signals: ExternalSignals, 
+export type AssessResponse = { 
+/**
+ * The `intent` event recorded for this composition; cancel it with `POST /intents/{id}/cancel`.
+ */
+intent_id: string | null, action: DecodedAction, assessment: RiskAssessment, signals: ExternalSignals, 
 /**
  * Present when `tx.from` is a pseudo-chain account: the hash to sign and the nonce.
  */

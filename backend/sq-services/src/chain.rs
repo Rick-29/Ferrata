@@ -6,7 +6,8 @@ use alloy_primitives::{Address, B256};
 use api_types::{
     AccountView, BlockWithTxs, BlocksQuery, CancelEscapeRequest, ChainInfo, ChainQuery, ChainTx, ChainVerification,
     CreateAccountRequest, DatasetRow, EscapeHashRequest, EscapeResponse, FaucetRequest, HashResponse, HistoryResponse,
-    IngestRequest, ModelInfo, PreparedOp, SignedUserOp, SimulateRequest, SimulateResponse, StartEscapeRequest, SubmitResult,
+    IngestRequest, ModelInfo, Network, PreparedOp, SignedUserOp, SimulateRequest, SimulateResponse, StartEscapeRequest,
+    SubmitResult, SyncRequest, SyncResponse,
 };
 use axum::extract::{Path, Query, State};
 use axum::routing::{get, post};
@@ -18,7 +19,12 @@ use crate::state::SharedState;
 
 /// Top-level, cross-chain routes.
 pub fn wallet_routes() -> Router<SharedState> {
-    Router::new().route("/chains", get(chains)).route("/model", get(model))
+    Router::new().route("/chains", get(chains)).route("/model", get(model)).route("/networks", get(networks))
+}
+
+/// Networks the Ferra chain can pull history from.
+async fn networks(State(state): State<SharedState>) -> ApiResult<Vec<Network>> {
+    Ok(Json(state.sources.networks()))
 }
 
 async fn model(State(state): State<SharedState>) -> ApiResult<ModelInfo> {
@@ -40,6 +46,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/escape/cancel", post(escape_cancel))
         .route("/history/{address}", get(history))
         .route("/ingest", post(ingest))
+        .route("/sync", post(sync))
         .route("/dataset", get(dataset))
         .route("/blocks", get(blocks))
         .route("/blocks/{number}", get(block))
@@ -96,6 +103,7 @@ async fn submit(State(state): State<SharedState>, caller: Caller, Json(op): Json
     let user_op_hash = state.chain_for(Some(op.tx.chain_id))?.user_op_hash_for(&op);
     let meta = state.submit_meta(op.tx.from, user_op_hash)?;
     let r = state.chain_for(Some(op.tx.chain_id))?.submit(&op, &meta, state.now())?;
+    crate::assess::record_intent_outcome(&state, op.tx.chain_id, op.tx.from, user_op_hash, api_types::IntentOutcomeKind::Submitted, Some(r.tx_hash))?;
     tracing::info!(chain = op.tx.chain_id, tx = %r.tx_hash, block = r.block_number, kind = ?r.kind, "transaction mined");
     Ok(Json(r))
 }
@@ -141,6 +149,35 @@ async fn ingest(State(state): State<SharedState>, caller: Caller, Json(req): Jso
     let r = chain.ingest_external(req.wallet, req.event, req.counterparty, req.incoming, &cosig, now)?;
     tracing::info!(wallet = %req.wallet, tx = %r.tx_hash, "external event recorded on the Ferra chain");
     Ok(Json(r))
+}
+
+/// Pulls a page of the wallet's history on a connected network and records every event not yet
+/// on the Ferra chain. Fetch happens before the chain lock is taken; idempotent per (network, tx id).
+async fn sync(State(state): State<SharedState>, caller: Caller, Json(req): Json<SyncRequest>) -> ApiResult<SyncResponse> {
+    state.check_owner(&caller, req.wallet)?;
+    let source = state.sources.get(&req.network).map_err(|e| ServiceError::BadRequest(e.to_string()))?;
+    let page = source
+        .fetch(&req.address_raw, req.cursor.as_deref(), req.limit.unwrap_or(50))
+        .await
+        .map_err(|e| ServiceError::Upstream { provider: "connector", msg: e.to_string() })?;
+    let network = source.network();
+    let now = state.now();
+    let fetched = page.events.len() as u64;
+    let (mut recorded, mut skipped) = (0u64, 0u64);
+    {
+        let mut chain = state.chain()?;
+        for ev in page.events {
+            if chain.has_external(&ev.external.network.name, &ev.external.tx_id) {
+                skipped += 1;
+                continue;
+            }
+            let cosig = state.signer.cosign(&chain.external_hash(req.wallet, &ev.external));
+            chain.ingest_external(req.wallet, ev.external, ev.counterparty, ev.incoming, &cosig, now)?;
+            recorded += 1;
+        }
+    }
+    tracing::info!(wallet = %req.wallet, network = %network.name, fetched, recorded, skipped, "network history synced");
+    Ok(Json(SyncResponse { network, fetched, recorded, skipped_existing: skipped, next_cursor: page.next_cursor }))
 }
 
 /// Feature rows labelled by flags, for training the validator's model offline.

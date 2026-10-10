@@ -3,6 +3,7 @@ import type { DecodedAction } from "./DecodedAction";
 import type { Flag } from "./Flag";
 import type { Network } from "./Network";
 import type { OwnerSignature } from "./OwnerSignature";
+import type { RiskBand } from "./RiskBand";
 import type { TxFeatures } from "./TxFeatures";
 import type { TxKind } from "./TxKind";
 
@@ -14,7 +15,15 @@ export type ChainTx = { version: number, hash: string, block_number: number, tim
 /**
  * The hash the signatures below cover; zero for unsigned kinds.
  */
-user_op_hash: string, action: DecodedAction, owner_signature: OwnerSignature | null, cosignature: string | null, 
+user_op_hash: string, action: DecodedAction, 
+/**
+ * Risk band the wallet / co-signer computed when this happened. Hashed: part of the record.
+ */
+risk_level: RiskBand | null, 
+/**
+ * Risk the validator tools assign afterwards: the highest flag severity. Derived, not hashed.
+ */
+reviewed_risk: RiskBand | null, owner_signature: OwnerSignature | null, cosignature: string | null, 
 /**
  * Kind-specific payload. Forward compatible: readers ignore keys they do not know.
  */

@@ -5,7 +5,8 @@ use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use wallet_core::{AbiTxDecoder, BalanceDelta, DecodedAction, TxDecoder, TxRequest};
 
 use super::auth::{OwnerKey, OwnerSignature, verify_owner};
-use super::store::{BlockStore, NullBlockStore};
+use super::store::{BlockStore, ChainHeader, NullBlockStore};
+use super::behaviour::{Intent, IntentOutcome, IntentOutcomeKind, WalletSettings};
 use super::features::{SubmitMeta, kind_tag};
 use super::model::DatasetRow;
 use super::{
@@ -110,18 +111,66 @@ impl std::fmt::Debug for MockChain {
 }
 
 impl MockChain {
-    /// A signing chain. Loads and verifies any blocks already in `store`.
+    /// A signing chain. Loads and verifies any blocks already in `store`; writes the header on a fresh store.
     pub fn new(cfg: ChainConfig, validator_key: SigningKey, store: Box<dyn BlockStore>) -> Result<Self, ChainError> {
         let existing = store.load()?;
         let mut chain = Self::empty(cfg, validator_key.verifying_key(), Some(validator_key), store);
-        if existing.is_empty() {
+        if existing.blocks.is_empty() {
+            let header = chain.header();
+            chain.store.write_header(&header)?;
             chain.push_genesis()?;
         } else {
-            for b in &existing {
+            if let Some(h) = &existing.header {
+                chain.check_header(h)?;
+            }
+            for b in &existing.blocks {
                 chain.replay_block(b)?;
             }
         }
         Ok(chain)
+    }
+
+    /// The self-describing record a verifier needs besides the blocks.
+    pub fn header(&self) -> ChainHeader {
+        ChainHeader {
+            format: super::store::CHAIN_FORMAT.into(),
+            format_version: super::store::CHAIN_FORMAT_VERSION,
+            chain_id: self.cfg.chain_id,
+            network: self.cfg.network.clone(),
+            cosigner: hex::encode(self.cfg.cosigner.as_bytes()),
+            validator: hex::encode(self.validator.as_bytes()),
+            tokens: self.cfg.tokens.clone(),
+            escape_delay_secs: self.cfg.escape_delay_secs,
+            genesis_time: self.cfg.genesis_time,
+        }
+    }
+
+    fn check_header(&self, h: &ChainHeader) -> Result<(), ChainError> {
+        let bad = |reason: String| ChainError::Tampered { block: 0, reason };
+        if h.chain_id != self.cfg.chain_id {
+            return Err(bad(format!("file is chain {}, configured {}", h.chain_id, self.cfg.chain_id)));
+        }
+        if h.cosigner != hex::encode(self.cfg.cosigner.as_bytes()) {
+            return Err(bad("file was written for a different co-signer key".into()));
+        }
+        if h.validator != hex::encode(self.validator.as_bytes()) {
+            return Err(bad("file was written for a different validator key".into()));
+        }
+        Ok(())
+    }
+
+    /// Whether an external event with this origin id is already recorded (sync idempotence).
+    pub fn has_external(&self, network_name: &str, tx_id: &str) -> bool {
+        self.txs.values().any(|t| {
+            t.kind == TxKind::External
+                && t.network.name == network_name
+                && t.extra.get("external").and_then(|e| e.get("tx_id")).and_then(|v| v.as_str()) == Some(tx_id)
+        })
+    }
+
+    /// Every event in chain order, with derived fields filled.
+    pub fn events(&self) -> Vec<ChainTx> {
+        self.order.iter().filter_map(|h| self.view_tx(*h)).collect()
     }
 
     /// Convenience for tests and single-process demos: no persistence.
@@ -136,6 +185,25 @@ impl MockChain {
             chain.replay_block(b)?;
         }
         Ok(chain)
+    }
+
+    /// Verify-only chain from a parsed file, taking the configuration from its header.
+    pub fn from_loaded(loaded: &super::store::LoadedChain) -> Result<Self, ChainError> {
+        let h = loaded.header.as_ref().ok_or_else(|| ChainError::Storage("no header record".into()))?;
+        let key = |hex_str: &str, what: &str| -> Result<VerifyingKey, ChainError> {
+            let bytes = hex::decode(hex_str).map_err(|e| ChainError::Storage(format!("{what}: {e}")))?;
+            let arr: [u8; 32] = bytes.try_into().map_err(|_| ChainError::Storage(format!("{what}: expected 32 bytes")))?;
+            VerifyingKey::from_bytes(&arr).map_err(|e| ChainError::Storage(format!("{what}: {e}")))
+        };
+        let cfg = ChainConfig {
+            chain_id: h.chain_id,
+            network: h.network.clone(),
+            cosigner: key(&h.cosigner, "cosigner")?,
+            escape_delay_secs: h.escape_delay_secs,
+            tokens: h.tokens.clone(),
+            genesis_time: h.genesis_time,
+        };
+        Self::replay(cfg, key(&h.validator, "validator")?, &loaded.blocks)
     }
 
     fn empty(cfg: ChainConfig, validator: VerifyingKey, validator_key: Option<SigningKey>, store: Box<dyn BlockStore>) -> Self {
@@ -443,6 +511,52 @@ impl MockChain {
         self.commit(tx, &SubmitMeta::default()).map(Some)
     }
 
+    // ----- the owner's settings and intentions (see behaviour.rs) -----
+
+    /// Owner-signed settings change; consumes a nonce like any owner action.
+    pub fn set_settings(&mut self, address: Address, settings: WalletSettings, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError> {
+        let nonce = self.nonce_of(address)?;
+        let hash = self.settings_hash(address, nonce, &settings);
+        let mut extra = BTreeMap::new();
+        extra.insert("settings".into(), serde_json::to_value(&settings).map_err(|e| ChainError::MalformedEvent(e.to_string()))?);
+        let action = DecodedAction::ContractCall { target: address, selector: selector(b"setSettings(bytes)"), value: U256::ZERO };
+        let tx = ChainTx { owner_signature: Some(sig.clone()), extra, ..self.event(TxKind::SettingsChanged, address, address, U256::ZERO, Bytes::new(), nonce, hash, action, now) };
+        self.commit(tx, &SubmitMeta::default())
+    }
+
+    /// Swissquote records what the owner composed, before anything is signed.
+    pub fn record_intent(&mut self, address: Address, intent: Intent, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        let hash = self.intent_hash(address, &intent.id);
+        let mut extra = BTreeMap::new();
+        extra.insert("intent".into(), serde_json::to_value(&intent).map_err(|e| ChainError::MalformedEvent(e.to_string()))?);
+        let action = DecodedAction::ContractCall { target: intent.to, selector: selector(b"intent(bytes)"), value: intent.amount };
+        let tx = ChainTx { cosignature: Some(cosignature.clone()), extra, ..self.event(TxKind::Intent, address, intent.to, U256::ZERO, Bytes::new(), 0, hash, action, now) };
+        let meta = SubmitMeta { policy: intent.band.map(|b| super::PolicySnapshot { band: Some(b), score: intent.score, ..Default::default() }), ..Default::default() };
+        self.commit(tx, &meta)
+    }
+
+    pub fn record_intent_outcome(&mut self, address: Address, outcome: IntentOutcome, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        let hash = self.intent_hash(address, &format!("{}:{:?}", outcome.intent_id, outcome.outcome));
+        let mut extra = BTreeMap::new();
+        extra.insert("outcome".into(), serde_json::to_value(&outcome).map_err(|e| ChainError::MalformedEvent(e.to_string()))?);
+        let action = DecodedAction::ContractCall { target: address, selector: selector(b"intentOutcome(bytes)"), value: U256::ZERO };
+        let tx = ChainTx { cosignature: Some(cosignature.clone()), extra, ..self.event(TxKind::IntentOutcome, address, address, U256::ZERO, Bytes::new(), 0, hash, action, now) };
+        self.commit(tx, &SubmitMeta::default())
+    }
+
+    /// The most recent intent for this hash that has not reached a final outcome.
+    pub fn open_intent_for(&self, address: Address, user_op_hash: B256) -> Option<Intent> {
+        self.intents_of(address)
+            .into_iter()
+            .rev()
+            .find(|r| r.intent.user_op_hash == user_op_hash && !matches!(r.final_outcome(), Some(IntentOutcomeKind::Submitted | IntentOutcomeKind::Cancelled | IntentOutcomeKind::Refused)))
+            .map(|r| r.intent)
+    }
+
+    pub fn intent_by_id(&self, address: Address, id: &str) -> Option<(Intent, Option<IntentOutcomeKind>)> {
+        self.intents_of(address).into_iter().find(|r| r.intent.id == id).map(|r| (r.intent.clone(), r.final_outcome()))
+    }
+
     // ----- reads -----
 
     pub fn latest(&self) -> Block {
@@ -570,6 +684,8 @@ impl MockChain {
             flags: Vec::new(),
             network: self.cfg.network.clone(),
             features: None,
+            risk_level: None,
+            reviewed_risk: None,
         }
     }
 
@@ -579,6 +695,7 @@ impl MockChain {
         let parent = self.latest();
         tx.block_number = parent.number + 1;
         tx.timestamp = tx.timestamp.max(parent.timestamp);
+        tx.risk_level = meta.policy.as_ref().and_then(|p| p.band);
         self.authorize(&tx)?;
         tx.features = Some(self.features_for(&tx, meta));
         self.execute(&tx)?;
@@ -714,9 +831,10 @@ impl MockChain {
         Some(BlockWithTxs { block, txs })
     }
 
-    fn view_tx(&self, hash: B256) -> Option<ChainTx> {
+    pub(super) fn view_tx(&self, hash: B256) -> Option<ChainTx> {
         let mut tx = self.txs.get(&hash)?.clone();
         tx.flags = self.flags.get(&hash).cloned().unwrap_or_default();
+        tx.reviewed_risk = tx.flags.iter().map(|f| f.severity).max();
         Some(tx)
     }
 
@@ -740,6 +858,7 @@ impl MockChain {
         buf.extend_from_slice(keccak256(tx.cosignature.as_ref().map(|c| c.as_ref()).unwrap_or(&[])).as_slice());
         buf.extend_from_slice(keccak256(json_bytes(&tx.extra)).as_slice());
         buf.extend_from_slice(keccak256(json_bytes(&tx.network)).as_slice());
+        buf.push(tx.risk_level.map(|r| r as u8 + 1).unwrap_or(0));
         keccak256(buf)
     }
 
@@ -824,6 +943,32 @@ impl MockChain {
                 }
                 Ok(())
             }
+            TxKind::SettingsChanged => {
+                let acc = self.account_for(tx)?;
+                let settings: WalletSettings = extra_field(tx, "settings")?;
+                self.check_hash_and_owner(tx, acc, self.settings_hash(tx.from, tx.nonce, &settings))
+            }
+            TxKind::Intent => {
+                self.account_for(tx)?;
+                let intent: Intent = extra_field(tx, "intent")?;
+                if tx.user_op_hash != self.intent_hash(tx.from, &intent.id) {
+                    return Err(ChainError::MalformedEvent("intent hash mismatch".into()));
+                }
+                let sig = tx.cosignature.as_ref().ok_or(ChainError::MissingCosignature)?;
+                self.verify_cosignature(&tx.user_op_hash, sig)
+            }
+            TxKind::IntentOutcome => {
+                self.account_for(tx)?;
+                let o: IntentOutcome = extra_field(tx, "outcome")?;
+                if !self.intents_of(tx.from).iter().any(|r| r.intent.id == o.intent_id) {
+                    return Err(ChainError::MalformedEvent(format!("outcome for unknown intent {}", o.intent_id)));
+                }
+                if tx.user_op_hash != self.intent_hash(tx.from, &format!("{}:{:?}", o.intent_id, o.outcome)) {
+                    return Err(ChainError::MalformedEvent("intent outcome hash mismatch".into()));
+                }
+                let sig = tx.cosignature.as_ref().ok_or(ChainError::MissingCosignature)?;
+                self.verify_cosignature(&tx.user_op_hash, sig)
+            }
             TxKind::External => {
                 let ext: ExternalRef = extra_field(tx, "external")?;
                 let incoming: bool = extra_field(tx, "incoming")?;
@@ -899,7 +1044,8 @@ impl MockChain {
                 }
                 self.bump_nonce(tx.from);
             }
-            TxKind::Anchor | TxKind::External => {}
+            TxKind::Anchor | TxKind::External | TxKind::Intent | TxKind::IntentOutcome => {}
+            TxKind::SettingsChanged => self.bump_nonce(tx.from),
             TxKind::Flag => {
                 let flag: Flag = extra_field(tx, "flag")?;
                 self.flags.entry(flag.target).or_default().push(flag);
@@ -1250,6 +1396,7 @@ mod tests {
         assert!(chain.flag(flag.clone(), 1_700).unwrap().is_some());
         assert!(chain.flag(flag.clone(), 1_701).unwrap().is_none(), "same code+source is deduped");
         assert_eq!(chain.tx(r.tx_hash).unwrap().flags, vec![flag.clone()]);
+        assert_eq!(chain.tx(r.tx_hash).unwrap().reviewed_risk, Some(RiskBand::High), "tools' verdict is derived from flags");
         assert_eq!(chain.account(addr, 1_800).unwrap().flags.len(), 1);
         let v = chain.verify();
         assert!(v.ok, "{v:?}");
@@ -1292,6 +1439,8 @@ mod tests {
         let policy = super::super::PolicySnapshot { score: Some(20), band: Some(RiskBand::Low), reasons: vec!["NEW_RECIPIENT".into()], sanctions_hit: Some(false), exposure_hops: None };
         let meta = SubmitMeta { prepared_at: Some(1_590), step_up: true, policy: Some(policy), fee: None };
         let r = chain.submit(&op, &meta, 1_600).unwrap();
+        assert_eq!(chain.tx(r.tx_hash).unwrap().risk_level, Some(RiskBand::Low), "wallet's risk is on the record");
+        assert_eq!(chain.tx(r.tx_hash).unwrap().reviewed_risk, None);
         let f = chain.tx(r.tx_hash).unwrap().features.unwrap();
         assert_eq!(f.network.family, super::super::ChainFamily::Ferra);
         assert_eq!(f.signer_kind, "ed25519");
@@ -1356,6 +1505,84 @@ mod tests {
     }
 
     #[test]
+    fn settings_intents_profile_and_behaviour_findings() {
+        use super::super::behaviour::{Archetype, IntentOutcomeKind, WalletSettings};
+        let (mut chain, sq, owner, addr) = setup();
+
+        // settings are owner-signed and consume a nonce
+        let s = WalletSettings { per_tx_limit_pct: 20, ..Default::default() };
+        let h = chain.settings_hash(addr, 0, &s);
+        assert_eq!(chain.set_settings(addr, s.clone(), &Owner::new(2).sign(&h), 1_100).unwrap_err(), ChainError::BadOwnerSignature);
+        chain.set_settings(addr, s.clone(), &owner.sign(&h), 1_100).unwrap();
+        assert_eq!(chain.settings_of(addr).per_tx_limit_pct, 20);
+        assert_eq!(chain.account(addr, 1_100).unwrap().nonce, 1);
+
+        let merchant = Address::repeat_byte(0x22);
+        let mut t = 1_200u64;
+        let submit = |chain: &mut MockChain, t: &mut u64, to: Address, amount: u64, cancel_first: u32| -> SubmitResult {
+            for c in 0..cancel_first {
+                let id = format!("i-{}-{c}", *t);
+                let tx = usdc_tx(addr, to, amount);
+                let prep = chain.prepare(&tx).unwrap();
+                let intent = super::super::Intent { id: id.clone(), to, asset: Some(usdc()), amount: U256::from(amount), origin: None, band: Some(RiskBand::Low), score: Some(0), user_op_hash: prep.user_op_hash };
+                let ih = chain.intent_hash(addr, &id);
+                chain.record_intent(addr, intent, &sq.cosign(&ih), *t).unwrap();
+                let o = super::super::IntentOutcome { intent_id: id.clone(), outcome: IntentOutcomeKind::Cancelled, tx_hash: None };
+                let oh = chain.intent_hash(addr, &format!("{id}:Cancelled"));
+                chain.record_intent_outcome(addr, o, &sq.cosign(&oh), *t + 10).unwrap();
+                *t += 60;
+            }
+            let id = format!("i-{}", *t);
+            let tx = usdc_tx(addr, to, amount);
+            let prep = chain.prepare(&tx).unwrap();
+            let intent = super::super::Intent { id: id.clone(), to, asset: Some(usdc()), amount: U256::from(amount), origin: None, band: Some(RiskBand::Low), score: Some(0), user_op_hash: prep.user_op_hash };
+            let ih = chain.intent_hash(addr, &id);
+            chain.record_intent(addr, intent, &sq.cosign(&ih), *t).unwrap();
+            assert!(chain.open_intent_for(addr, prep.user_op_hash).is_some());
+            let op = SignedUserOp { tx, nonce: prep.nonce, owner_signature: owner.sign(&prep.user_op_hash), cosignature: Some(sq.cosign(&prep.user_op_hash)) };
+            let r = chain.submit(&op, &SubmitMeta { prepared_at: Some(*t), ..Default::default() }, *t + 30).unwrap();
+            let o = super::super::IntentOutcome { intent_id: id.clone(), outcome: IntentOutcomeKind::Submitted, tx_hash: Some(r.tx_hash) };
+            let oh = chain.intent_hash(addr, &format!("{id}:Submitted"));
+            chain.record_intent_outcome(addr, o, &sq.cosign(&oh), *t + 31).unwrap();
+            assert!(chain.open_intent_for(addr, prep.user_op_hash).is_none());
+            *t += 3_600;
+            r
+        };
+
+        // a habit: six small payments to the merchant
+        for _ in 0..6 {
+            submit(&mut chain, &mut t, merchant, 5_000_000, 0);
+        }
+        let p = chain.profile(addr, t);
+        assert_eq!(p.out_count, 6);
+        assert_eq!(p.submitted, 6);
+        assert_eq!(p.cancelled, 0);
+        assert_eq!(p.archetype, Archetype::Holder, "500 in, 30 out");
+        assert_eq!(p.distinct_recipients, 1);
+        assert!((p.mean_out - 5.0).abs() < 1e-9);
+        assert_eq!(p.settings_changes, 1);
+
+        // then: two cancels, a big payment to a stranger, against the own 20 % limit
+        let big = submit(&mut chain, &mut t, Address::repeat_byte(0x99), 200_000_000, 2);
+        let f = chain.tx(big.tx_hash).unwrap().features.unwrap();
+        assert_eq!(f.version, 2);
+        assert_eq!(f.archetype, "holder");
+        assert!(f.amount_vs_mean_out > 30.0, "{}", f.amount_vs_mean_out);
+        assert_eq!(f.cancels_24h, 2);
+        assert_eq!(f.intent_to_submit_secs, Some(30));
+        assert!(f.exceeds_own_limit);
+        assert!(f.prior_cancel_rate > 0.0);
+
+        let findings = chain.behaviour_findings(addr, t);
+        let codes: Vec<&str> = findings.iter().map(|f| f.code.as_str()).collect();
+        assert!(codes.contains(&"CANCEL_STREAK"), "{codes:?}");
+        assert!(codes.contains(&"BEHAVIOUR_DEVIATION"), "{codes:?}");
+        assert!(codes.contains(&"OWN_LIMIT_BYPASS"), "{codes:?}");
+        assert!(findings.iter().filter(|f| f.code == "BEHAVIOUR_DEVIATION").all(|f| f.target == big.tx_hash && f.severity == RiskBand::High));
+        assert!(chain.verify().ok);
+    }
+
+    #[test]
     fn persisted_chain_replays_identically_and_rejects_an_edited_file() {
         let dir = std::env::temp_dir().join(format!("sqw-chain-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -1378,6 +1605,15 @@ mod tests {
         assert_eq!(reopened.latest(), head);
         assert_eq!(reopened.account(addr, 2_000).unwrap().nonce, 1);
         assert!(reopened.verify().ok);
+
+        // a standalone tool needs only the file: header + blocks
+        let loaded = JsonlBlockStore::new(path.clone()).load().unwrap();
+        let header = loaded.header.clone().unwrap();
+        assert_eq!(header.format, "ferra-chain");
+        assert_eq!(header.cosigner, hex::encode(sq.verifying_key().as_bytes()));
+        let standalone = MockChain::from_loaded(&loaded).unwrap();
+        assert_eq!(standalone.latest(), head);
+        assert_eq!(standalone.events().len(), 3);
 
         // wrong validator: every block signature fails
         let err = MockChain::new(cfg(&sq), SigningKey::from_bytes(&[1u8; 32]), Box::new(JsonlBlockStore::new(path.clone()))).unwrap_err();

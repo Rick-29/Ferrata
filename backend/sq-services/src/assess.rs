@@ -8,8 +8,8 @@ use api_types::{AssessRequest, AssessResponse, CosignOutcome, CosignRequest, Hol
 use axum::extract::State;
 use axum::routing::post;
 use axum::{Json, Router};
-use sq_adapters::TxKind;
 use sq_adapters::chain::auth::verify_owner;
+use sq_adapters::{Intent, IntentOutcome, IntentOutcomeKind, TxKind};
 use wallet_core::{
     AccountContext, DecodedAction, EvalContext, ExternalSignals, LogEntry, OutcomeKind, RiskAssessment, RiskBand,
     SignedEntry, TxRequest,
@@ -36,7 +36,7 @@ pub struct Scored {
 
 /// Recipients Swissquote itself has seen this account pay: co-signed log entries and on-chain
 /// co-signed transactions. Merged with whatever the client sends, so the client can only add, never hide.
-fn known_recipients(state: &AppState, chain_id: u64, address: Address, client: &AccountContext) -> Result<AccountContext, ServiceError> {
+fn known_recipients(state: &AppState, chain_id: u64, address: Address, client: &AccountContext, action: &DecodedAction) -> Result<AccountContext, ServiceError> {
     let mut seen: BTreeSet<Address> = client.known_recipients.iter().copied().collect();
     for e in state.log.load(address)?.entries() {
         if e.entry.outcome == OutcomeKind::Cosigned
@@ -46,6 +46,7 @@ fn known_recipients(state: &AppState, chain_id: u64, address: Address, client: &
         }
     }
     let chain = state.chain_for(Some(chain_id))?;
+    let mut own_per_tx_limit = None;
     if chain.has_account(address) {
         for t in chain.history(address) {
             if t.from == address
@@ -55,14 +56,24 @@ fn known_recipients(state: &AppState, chain_id: u64, address: Address, client: &
                 seen.insert(c);
             }
         }
+        // The owner's own ceiling from their on-chain settings, as a share of the balance being moved.
+        let settings = chain.settings_of(address);
+        if settings.per_tx_limit_pct > 0
+            && let Some(b) = chain.balances_of_view(address).into_iter().find(|b| b.asset == action.asset())
+        {
+            own_per_tx_limit = Some(b.amount * wallet_core::U256::from(settings.per_tx_limit_pct) / wallet_core::U256::from(100u64));
+        }
+        for a in settings.allowlist {
+            seen.insert(a);
+        }
     }
-    Ok(AccountContext { known_recipients: seen.into_iter().collect() })
+    Ok(AccountContext { known_recipients: seen.into_iter().collect(), own_per_tx_limit })
 }
 
 /// Decode, simulate, gather signals, score. Shared by preview and co-sign.
 pub fn score(state: &AppState, tx: &TxRequest, client_account: &AccountContext) -> Result<Scored, ServiceError> {
     let action = state.decoder.decode(tx)?;
-    let account = known_recipients(state, tx.chain_id, tx.from, client_account)?;
+    let account = known_recipients(state, tx.chain_id, tx.from, client_account, &action)?;
     let simulation = {
         let chain = state.chain_for(Some(tx.chain_id))?;
         if chain.has_account(tx.from) { chain.simulate(tx)? } else { Vec::new() }
@@ -84,8 +95,30 @@ async fn assess(State(state): State<SharedState>, caller: Caller, Json(req): Jso
     if let Some(p) = &prepared {
         state.note_prepared(p.user_op_hash)?;
     }
+    // Record what the user composed, before anything is signed.
+    let intent_id = match &prepared {
+        Some(p) => {
+            let id = AppState::new_id("int");
+            let intent = Intent {
+                id: id.clone(),
+                to: scored.action.counterparty().unwrap_or(req.tx.to),
+                asset: scored.action.asset(),
+                amount: scored.action.amount(),
+                origin: req.tx.origin.clone(),
+                band: Some(scored.assessment.band),
+                score: Some(scored.assessment.score),
+                user_op_hash: p.user_op_hash,
+            };
+            let mut chain = state.chain_for(Some(req.tx.chain_id))?;
+            let cosig = state.signer.cosign(&chain.intent_hash(req.tx.from, &id));
+            chain.record_intent(req.tx.from, intent, &cosig, state.now())?;
+            Some(id)
+        }
+        None => None,
+    };
     let log = state.log.load(req.tx.from)?;
     Ok(Json(AssessResponse {
+        intent_id,
         action: scored.action,
         assessment: scored.assessment,
         signals: scored.signals,
@@ -157,6 +190,15 @@ async fn cosign(State(state): State<SharedState>, caller: Caller, Json(req): Jso
     };
     let signed = record(&state, address, entry)?;
     tracing::info!(%address, seq = req.seq, ?band, ?outcome, "co-sign decision");
+    let intent_outcome = match outcome {
+        OutcomeKind::StepUp => Some(IntentOutcomeKind::StepUpRequired),
+        OutcomeKind::Held => Some(IntentOutcomeKind::Held),
+        OutcomeKind::Refused => Some(IntentOutcomeKind::Refused),
+        OutcomeKind::Cosigned => None,
+    };
+    if let Some(k) = intent_outcome {
+        record_intent_outcome(&state, req.tx.chain_id, address, req.user_op_hash, k, None)?;
+    }
 
     let result = match outcome {
         OutcomeKind::Cosigned => CosignOutcome::Cosigned { cosignature: state.signer.cosign(&req.user_op_hash), entry: signed },
@@ -181,4 +223,22 @@ async fn cosign(State(state): State<SharedState>, caller: Caller, Json(req): Jso
         }
     };
     Ok(Json(result))
+}
+
+/// Writes the outcome of the open intent behind `user_op_hash`, if there is one.
+pub fn record_intent_outcome(state: &AppState, chain_id: u64, address: Address, user_op_hash: B256, outcome: IntentOutcomeKind, tx_hash: Option<B256>) -> Result<(), ServiceError> {
+    let mut chain = state.chain_for(Some(chain_id))?;
+    let is_final = matches!(outcome, IntentOutcomeKind::Submitted | IntentOutcomeKind::Cancelled | IntentOutcomeKind::Refused);
+    // A final outcome closes every open composition of the same hash; a provisional one marks only the latest.
+    let mut guard = 0;
+    while let Some(intent) = chain.open_intent_for(address, user_op_hash) {
+        let o = IntentOutcome { intent_id: intent.id.clone(), outcome, tx_hash };
+        let cosig = state.signer.cosign(&chain.intent_hash(address, &format!("{}:{:?}", intent.id, outcome)));
+        chain.record_intent_outcome(address, o, &cosig, state.now())?;
+        guard += 1;
+        if !is_final || guard > 50 {
+            break;
+        }
+    }
+    Ok(())
 }

@@ -6,8 +6,8 @@
 use std::collections::BTreeMap;
 
 use alloy_primitives::Address;
-use api_types::{ReviewReport, ReviewVerdict};
-use axum::extract::{Path, State};
+use api_types::{ReviewQuery, ReviewReport, ReviewVerdict};
+use axum::extract::{Path, Query, State};
 use axum::routing::post;
 use axum::{Json, Router};
 use sq_adapters::{ChainTx, Flag, FlagSource, TxKind};
@@ -76,6 +76,9 @@ pub fn review_account(state: &AppState, address: Address) -> Result<ReviewReport
     let log = state.log.load(address)?;
     let mut wanted: Vec<Flag> = txs.iter().flat_map(|tx| judge(state, address, tx, now)).collect();
 
+    // 2b. Who this user is versus what they just did (intents, settings, habits).
+    wanted.extend(state.chain()?.behaviour_findings(address, now));
+
     // 3. Chain-versus-log findings that point at a specific event.
     let (findings, _) = diff(address, &txs, &log);
     for f in findings {
@@ -134,6 +137,23 @@ pub fn review_account(state: &AppState, address: Address) -> Result<ReviewReport
 
 use crate::error::ServiceError;
 
-async fn review(State(state): State<SharedState>, Path(address): Path<Address>) -> ApiResult<ReviewReport> {
+async fn review(State(state): State<SharedState>, Query(q): Query<ReviewQuery>, Path(address): Path<Address>) -> ApiResult<ReviewReport> {
+    if q.provenance.unwrap_or(false) {
+        // External events not yet judged on their origin network, newest first, capped.
+        let pending: Vec<_> = state
+            .chain()?
+            .history(address)
+            .into_iter()
+            .rev()
+            .filter(|t| t.kind == TxKind::External && !t.flags.iter().any(|f| f.source == FlagSource::Provenance))
+            .take(5)
+            .map(|t| t.hash)
+            .collect();
+        for h in pending {
+            if let Err(e) = crate::wallet::provenance_for(&state, h).await {
+                tracing::warn!(tx = %h, error = %e, "provenance check skipped");
+            }
+        }
+    }
     Ok(Json(review_account(&state, address)?))
 }

@@ -10,6 +10,7 @@ use std::sync::{Mutex, MutexGuard};
 use alloy_primitives::{Address, B256, Bytes, U256};
 use wallet_core::{BalanceDelta, TxRequest};
 
+use super::behaviour::{Intent, IntentOutcome, IntentOutcomeKind, WalletProfile, WalletSettings};
 use super::features::SubmitMeta;
 use super::model::DatasetRow;
 use super::{
@@ -32,6 +33,7 @@ pub trait ChainBackend: Send + Sync {
     fn create_account(&mut self, owner: OwnerKey, now: u64) -> Result<Address, ChainError>;
     fn has_account(&self, address: Address) -> bool;
     fn account(&self, address: Address, now: u64) -> Result<AccountView, ChainError>;
+    fn balances_of_view(&self, address: Address) -> Vec<super::AssetBalance>;
     fn fund(&mut self, to: Address, asset: Option<Address>, amount: U256, now: u64) -> Result<SubmitResult, ChainError>;
 
     // ----- user operations (owner + Swissquote 2-of-2) -----
@@ -43,6 +45,7 @@ pub trait ChainBackend: Send + Sync {
     /// Record an event seen on another network, attested by Swissquote.
     fn external_hash(&self, wallet: Address, ext: &ExternalRef) -> B256;
     fn ingest_external(&mut self, wallet: Address, ext: ExternalRef, counterparty: Option<Address>, incoming: bool, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
+    fn has_external(&self, network_name: &str, tx_id: &str) -> bool;
 
     // ----- escape hatch (owner only, timelocked) -----
     fn escape_hash(&self, address: Address, to: Address, nonce: u64) -> B256;
@@ -53,6 +56,18 @@ pub trait ChainBackend: Send + Sync {
     // ----- recovery (Swissquote only, after its timelock) -----
     fn rotate_hash(&self, address: Address, new_owner: &OwnerKey, nonce: u64) -> B256;
     fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
+
+    // ----- the owner's settings and intentions -----
+    fn settings_hash(&self, address: Address, nonce: u64, settings: &WalletSettings) -> B256;
+    fn settings_of(&self, address: Address) -> WalletSettings;
+    fn set_settings(&mut self, address: Address, settings: WalletSettings, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError>;
+    fn intent_hash(&self, address: Address, id: &str) -> B256;
+    fn record_intent(&mut self, address: Address, intent: Intent, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
+    fn record_intent_outcome(&mut self, address: Address, outcome: IntentOutcome, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
+    fn open_intent_for(&self, address: Address, user_op_hash: B256) -> Option<Intent>;
+    fn intent_by_id(&self, address: Address, id: &str) -> Option<(Intent, Option<IntentOutcomeKind>)>;
+    fn profile(&self, address: Address, now: u64) -> WalletProfile;
+    fn behaviour_findings(&self, address: Address, now: u64) -> Vec<Flag>;
 
     // ----- audit: anchoring, flags, integrity -----
     fn anchor_hash(&self, address: Address, head: B256) -> B256;
@@ -149,6 +164,9 @@ impl ChainBackend for super::MockChain {
     fn account(&self, address: Address, now: u64) -> Result<AccountView, ChainError> {
         super::MockChain::account(self, address, now)
     }
+    fn balances_of_view(&self, address: Address) -> Vec<super::AssetBalance> {
+        super::MockChain::balances_of(self, address)
+    }
     fn fund(&mut self, to: Address, asset: Option<Address>, amount: U256, now: u64) -> Result<SubmitResult, ChainError> {
         super::MockChain::fund(self, to, asset, amount, now)
     }
@@ -170,6 +188,9 @@ impl ChainBackend for super::MockChain {
     fn ingest_external(&mut self, wallet: Address, ext: ExternalRef, counterparty: Option<Address>, incoming: bool, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
         super::MockChain::ingest_external(self, wallet, ext, counterparty, incoming, cosignature, now)
     }
+    fn has_external(&self, network_name: &str, tx_id: &str) -> bool {
+        super::MockChain::has_external(self, network_name, tx_id)
+    }
     fn escape_hash(&self, address: Address, to: Address, nonce: u64) -> B256 {
         super::MockChain::escape_hash(self, address, to, nonce)
     }
@@ -187,6 +208,36 @@ impl ChainBackend for super::MockChain {
     }
     fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
         super::MockChain::rotate_owner(self, address, new_owner, cosignature, now)
+    }
+    fn settings_hash(&self, address: Address, nonce: u64, settings: &WalletSettings) -> B256 {
+        super::MockChain::settings_hash(self, address, nonce, settings)
+    }
+    fn settings_of(&self, address: Address) -> WalletSettings {
+        super::MockChain::settings_of(self, address)
+    }
+    fn set_settings(&mut self, address: Address, settings: WalletSettings, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::set_settings(self, address, settings, sig, now)
+    }
+    fn intent_hash(&self, address: Address, id: &str) -> B256 {
+        super::MockChain::intent_hash(self, address, id)
+    }
+    fn record_intent(&mut self, address: Address, intent: Intent, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::record_intent(self, address, intent, cosignature, now)
+    }
+    fn record_intent_outcome(&mut self, address: Address, outcome: IntentOutcome, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::record_intent_outcome(self, address, outcome, cosignature, now)
+    }
+    fn open_intent_for(&self, address: Address, user_op_hash: B256) -> Option<Intent> {
+        super::MockChain::open_intent_for(self, address, user_op_hash)
+    }
+    fn intent_by_id(&self, address: Address, id: &str) -> Option<(Intent, Option<IntentOutcomeKind>)> {
+        super::MockChain::intent_by_id(self, address, id)
+    }
+    fn profile(&self, address: Address, now: u64) -> WalletProfile {
+        super::MockChain::profile(self, address, now)
+    }
+    fn behaviour_findings(&self, address: Address, now: u64) -> Vec<Flag> {
+        super::MockChain::behaviour_findings(self, address, now)
     }
     fn anchor_hash(&self, address: Address, head: B256) -> B256 {
         super::MockChain::anchor_hash(self, address, head)

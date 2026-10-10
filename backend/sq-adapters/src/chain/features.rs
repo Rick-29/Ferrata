@@ -23,7 +23,7 @@ use super::auth::OwnerSignature;
 use super::ledger::MockChain;
 use super::{ChainTx, Network, TxKind};
 
-pub const FEATURES_VERSION: u32 = 1;
+pub const FEATURES_VERSION: u32 = 2;
 const DAY: u64 = 86_400;
 
 /// What the policy engine concluded when Swissquote co-signed. Recorded for learning, never
@@ -149,6 +149,36 @@ pub struct TxFeatures {
     // ----- what the co-signer concluded (recorded, not trusted) -----
     pub policy: PolicySnapshot,
 
+    // ----- v2: the user's own profile and intentions (see behaviour.rs) -----
+    #[serde(default)]
+    pub archetype: String,
+    #[serde(default)]
+    pub activity: String,
+    /// `amount / mean of prior outgoing`, 0 without history.
+    #[serde(default)]
+    pub amount_vs_mean_out: f64,
+    #[serde(default)]
+    pub amount_vs_p95_out: f64,
+    #[serde(default)]
+    pub holding_ratio: f64,
+    #[serde(default)]
+    pub prior_cancel_rate: f64,
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub cancels_24h: u64,
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub settings_changes_24h: u64,
+    #[serde(default)]
+    #[ts(type = "number | null")]
+    pub secs_since_settings_change: Option<u64>,
+    /// Compose → signed submission, from the matching `intent` event.
+    #[serde(default)]
+    #[ts(type = "number | null")]
+    pub intent_to_submit_secs: Option<u64>,
+    #[serde(default)]
+    pub exceeds_own_limit: bool,
+
     /// Open for future features without a schema change.
     #[serde(default)]
     #[ts(type = "Record<string, number>")]
@@ -223,6 +253,21 @@ impl TxFeatures {
         put("policy_reason_count", self.policy.reasons.len() as f64);
         put("policy_sanctions_hit", b(self.policy.sanctions_hit.unwrap_or(false)));
         put("policy_exposure_hops", self.policy.exposure_hops.map(f64::from).unwrap_or(-1.0));
+        if !self.archetype.is_empty() {
+            put(&format!("archetype_{}", self.archetype), 1.0);
+        }
+        if !self.activity.is_empty() {
+            put(&format!("activity_{}", self.activity), 1.0);
+        }
+        put("amount_vs_mean_out", self.amount_vs_mean_out);
+        put("amount_vs_p95_out", self.amount_vs_p95_out);
+        put("holding_ratio", self.holding_ratio);
+        put("prior_cancel_rate", self.prior_cancel_rate);
+        put("cancels_24h", self.cancels_24h as f64);
+        put("settings_changes_24h", self.settings_changes_24h as f64);
+        put("secs_since_settings_change", self.secs_since_settings_change.map(|s| s as f64).unwrap_or(-1.0));
+        put("intent_to_submit_secs", self.intent_to_submit_secs.map(|s| s as f64).unwrap_or(-1.0));
+        put("exceeds_own_limit", b(self.exceeds_own_limit));
         for (k, x) in &self.extra {
             put(&format!("extra_{k}"), *x);
         }
@@ -242,6 +287,9 @@ pub(super) fn kind_tag(k: TxKind) -> &'static str {
         TxKind::Anchor => "anchor",
         TxKind::Flag => "flag",
         TxKind::External => "external",
+        TxKind::SettingsChanged => "settings_changed",
+        TxKind::Intent => "intent",
+        TxKind::IntentOutcome => "intent_outcome",
     }
 }
 
@@ -342,6 +390,20 @@ impl MockChain {
         let dapp_origin = tx.extra.get("origin").and_then(|v| v.as_str()).map(String::from);
         let max_sev = |fs: &[super::Flag]| fs.iter().map(|f| f.severity).max();
 
+        // ----- the user's own profile, as of just before this event -----
+        let profile = self.profile(sender, tx.timestamp);
+        let intents = self.intents_of(sender);
+        let since24 = tx.timestamp.saturating_sub(DAY);
+        let cancels_24h = intents
+            .iter()
+            .filter(|r| r.outcomes.iter().any(|(at, o)| o.outcome == super::behaviour::IntentOutcomeKind::Cancelled && *at >= since24))
+            .count() as u64;
+        let settings_times: Vec<u64> = history.iter().filter(|t| t.kind == TxKind::SettingsChanged && t.from == sender).map(|t| t.timestamp).collect();
+        let settings_changes_24h = settings_times.iter().filter(|s| **s >= since24).count() as u64;
+        let secs_since_settings_change = settings_times.iter().max().map(|s| tx.timestamp.saturating_sub(*s));
+        let intent_to_submit_secs = intents.iter().rev().find(|r| r.intent.user_op_hash == tx.user_op_hash && tx.user_op_hash != alloy_primitives::B256::ZERO).map(|r| tx.timestamp.saturating_sub(r.at));
+        let exceeds_own_limit = profile.settings.per_tx_limit_pct > 0 && balance_before > 0.0 && amount / balance_before * 100.0 > f64::from(profile.settings.per_tx_limit_pct);
+
         TxFeatures {
             version: FEATURES_VERSION,
             network: self.network_of(tx),
@@ -391,6 +453,17 @@ impl MockChain {
             counterparty_fan_out_ratio: fan_out,
             counterparty_pass_through: pass_through,
             policy: meta.policy.clone().unwrap_or_default(),
+            archetype: format!("{:?}", profile.archetype).to_lowercase(),
+            activity: format!("{:?}", profile.activity).to_lowercase(),
+            amount_vs_mean_out: if profile.mean_out > 0.0 { amount / profile.mean_out } else { 0.0 },
+            amount_vs_p95_out: if profile.p95_out > 0.0 { amount / profile.p95_out } else { 0.0 },
+            holding_ratio: profile.holding_ratio,
+            prior_cancel_rate: profile.cancel_rate,
+            cancels_24h,
+            settings_changes_24h,
+            secs_since_settings_change,
+            intent_to_submit_secs,
+            exceeds_own_limit,
             extra: BTreeMap::new(),
         }
     }

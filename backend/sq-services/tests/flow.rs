@@ -15,7 +15,9 @@ use axum::http::{Request, StatusCode};
 use ed25519_dalek::{Signer, SigningKey};
 use http_body_util::BodyExt;
 use serde::de::DeserializeOwned;
+use async_trait::async_trait;
 use sq_adapters::{FixedClock, MockChain};
+use sq_connectors::{ConnectorError, NetworkSource, ObservedEvent, Page, SourceRegistry};
 use sq_services::assess::step_up_hash;
 use sq_services::config::Config;
 use sq_services::state::AppState;
@@ -52,7 +54,8 @@ impl App {
         let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
         let config = Config::load(fixtures, 0, None, Some([42u8; 32]), true, true).unwrap();
         let clock = Arc::new(FixedClock::new(1_000_000));
-        let state = AppState::build_with_clock(config, clock.clone()).unwrap();
+        let sources = SourceRegistry::new().register(Box::new(FakeTon));
+        let state = AppState::build_with(config, clock.clone(), sources).unwrap();
         Self { router: sq_services::router(state.clone()), state, clock, token: None }
     }
 
@@ -136,6 +139,47 @@ impl App {
     }
 }
 
+/// A network source that answers from memory: two TON events, then an empty page.
+struct FakeTon;
+
+#[async_trait]
+impl NetworkSource for FakeTon {
+    fn network(&self) -> Network {
+        Network { family: ChainFamily::Ton, name: "ton-testnet".into(), chain_id: None }
+    }
+    async fn fetch(&self, address_raw: &str, cursor: Option<&str>, _limit: u32) -> Result<Page, ConnectorError> {
+        if cursor.is_some() {
+            return Ok(Page::default());
+        }
+        if address_raw == "EQCsomeone" {
+            // the counterparty's own history: received 3 TON from a third party and forwarded it at once
+            let mk = |from: &str, to: &str, amount: &str, incoming: bool| ObservedEvent {
+                external: ExternalRef { network: self.network(), tx_id: format!("{from}>{to}"), block: Some(10), from_raw: from.into(), to_raw: to.into(), asset_symbol: "TON".into(), decimals: 9, amount: amount.into(), fee: None, explorer_url: None },
+                incoming,
+                counterparty: None,
+            };
+            return Ok(Page { events: vec![mk("EQCthird", "EQCsomeone", "3000000000", true), mk("EQCsomeone", "EQCalice", "3000000000", false)], next_cursor: None });
+        }
+        let ev = |id: &str, incoming: bool, amount: &str| ObservedEvent {
+            external: ExternalRef {
+                network: self.network(),
+                tx_id: id.into(),
+                block: Some(10),
+                from_raw: if incoming { "EQCsomeone".into() } else { address_raw.into() },
+                to_raw: if incoming { address_raw.into() } else { "EQCsomeone".into() },
+                asset_symbol: "TON".into(),
+                decimals: 9,
+                amount: amount.into(),
+                fee: Some(0.002),
+                explorer_url: None,
+            },
+            incoming,
+            counterparty: None,
+        };
+        Ok(Page { events: vec![ev("ton-1", true, "3000000000"), ev("ton-2", false, "1000000000")], next_cursor: Some("older".into()) })
+    }
+}
+
 fn usdc_tx(from: Address, to: Address, amount: u64) -> TxRequest {
     TxRequest { chain_id: 84532, from, to: USDC, value: U256::ZERO, data: encode_erc20_call(SEL_TRANSFER, to, U256::from(amount)), origin: None }
 }
@@ -171,7 +215,7 @@ async fn low_band_transfer_is_cosigned_submitted_logged_and_anchored() {
     let app = App::logged_in().await;
     let owner = Owner::new(1);
     let addr = app.onboard(&owner).await;
-    let account = AccountContext { known_recipients: vec![KNOWN] };
+    let account = AccountContext { known_recipients: vec![KNOWN], own_per_tx_limit: None };
 
     let tx = usdc_tx(addr, KNOWN, 50_000_000);
     let (outcome, prepared) = app.cosign(&tx, &account, None).await;
@@ -400,7 +444,7 @@ async fn recovery_cancel_during_timelock_wins_and_execute_after_timelock_rotates
     assert!(matches!(done.status, RecoveryStatus::Completed { .. }));
 
     let tx = usdc_tx(addr, KNOWN, 1);
-    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN] }, None).await;
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN], own_per_tx_limit: None }, None).await;
     let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
     let (s, e) = app
         .post_err("/chain/submit", SignedUserOp { tx: tx.clone(), nonce: prepared.nonce, owner_signature: real.sign(&prepared.user_op_hash), cosignature: Some(cosignature.clone()) })
@@ -457,7 +501,7 @@ async fn rewritten_log_is_caught_by_anchor_mismatch() {
     let owner = Owner::new(13);
     let addr = app.onboard(&owner).await;
     let tx = usdc_tx(addr, KNOWN, 1);
-    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN] }, None).await;
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN], own_per_tx_limit: None }, None).await;
     let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
     app.submit(&owner, tx, &prepared, Some(cosignature)).await;
     let _: AnchorResponse = app.post(&format!("/log/{addr}/anchor"), serde_json::json!({})).await;
@@ -480,7 +524,7 @@ async fn review_flags_sanctioned_counterparties_and_escape_exits_and_verdicts() 
 
     // clean account: one co-signed payment to a known merchant
     let tx = usdc_tx(addr, KNOWN, 1_000_000);
-    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN] }, None).await;
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN], own_per_tx_limit: None }, None).await;
     let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
     app.submit(&owner, tx, &prepared, Some(cosignature)).await;
     let r: ReviewReport = app.post(&format!("/review/{addr}"), serde_json::json!({})).await;
@@ -539,14 +583,13 @@ async fn tampering_is_visible_through_verify_blocks_and_review() {
     let owner = Owner::new(16);
     let addr = app.onboard(&owner).await;
     let tx = usdc_tx(addr, KNOWN, 1);
-    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN] }, None).await;
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN], own_per_tx_limit: None }, None).await;
     let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
     let mined = app.submit(&owner, tx, &prepared, Some(cosignature)).await;
 
     let page: Vec<BlockWithTxs> = app.get("/chain/blocks?limit=3").await;
     assert_eq!(page.len(), 3);
-    assert_eq!(page.last().unwrap().block.number, mined.block_number);
-    assert_eq!(page.last().unwrap().txs[0].hash, mined.tx_hash);
+    assert!(page.iter().any(|b| b.block.number == mined.block_number && b.txs[0].hash == mined.tx_hash), "the mined tx is in the newest page (followed by its intent outcome)");
     assert_eq!(page[1].block.hash, page[2].block.parent_hash);
     let v: ChainVerification = app.get("/chain/verify").await;
     assert!(v.ok);
@@ -625,4 +668,166 @@ async fn events_carry_features_network_and_feed_the_dataset_and_model() {
     assert!(model_flag.data.contains_key("top"));
     let rows: Vec<DatasetRow> = app.get("/chain/dataset").await;
     assert!(rows.iter().any(|r| r.tx_hash == mined.tx_hash && r.label_codes.contains(&"MODEL_RISK".to_string())));
+}
+
+#[tokio::test]
+async fn sync_pulls_a_network_history_onto_the_ferra_chain_idempotently() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(18);
+    let addr = app.onboard(&owner).await;
+
+    let nets: Vec<Network> = app.get("/networks").await;
+    assert_eq!(nets.len(), 1);
+    assert_eq!(nets[0].name, "ton-testnet");
+
+    let r: SyncResponse = app.post("/chain/sync", SyncRequest { wallet: addr, network: "ton-testnet".into(), address_raw: "EQCalice".into(), limit: None, cursor: None }).await;
+    assert_eq!((r.fetched, r.recorded, r.skipped_existing), (2, 2, 0));
+    assert_eq!(r.next_cursor.as_deref(), Some("older"));
+
+    let again: SyncResponse = app.post("/chain/sync", SyncRequest { wallet: addr, network: "ton-testnet".into(), address_raw: "EQCalice".into(), limit: None, cursor: None }).await;
+    assert_eq!((again.fetched, again.recorded, again.skipped_existing), (2, 0, 2));
+    let older: SyncResponse = app.post("/chain/sync", SyncRequest { wallet: addr, network: "ton-testnet".into(), address_raw: "EQCalice".into(), limit: None, cursor: Some("older".into()) }).await;
+    assert_eq!(older.fetched, 0);
+    assert!(older.next_cursor.is_none());
+
+    let history: HistoryResponse = app.get(&format!("/chain/history/{addr}")).await;
+    let ton: Vec<_> = history.txs.iter().filter(|t| t.kind == TxKind::External).collect();
+    assert_eq!(ton.len(), 2);
+    assert!(ton.iter().all(|t| t.network.family == ChainFamily::Ton && t.cosignature.is_some()));
+    assert!(ton.iter().any(|t| t.to == addr) && ton.iter().any(|t| t.from == addr));
+    assert!(ton.iter().all(|t| t.features.as_ref().is_some_and(|f| f.network.name == "ton-testnet")));
+    let v: ChainVerification = app.get("/chain/verify").await;
+    assert!(v.ok);
+
+    let (s, e) = app.post_err("/chain/sync", SyncRequest { wallet: addr, network: "sui".into(), address_raw: "0x1".into(), limit: None, cursor: None }).await;
+    assert_eq!((s, e.code.as_str()), (StatusCode::BAD_REQUEST, "BAD_REQUEST"));
+}
+
+#[tokio::test]
+async fn events_expose_wallet_risk_and_reviewed_risk_separately() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(19);
+    let addr = app.onboard(&owner).await;
+    let tx = usdc_tx(addr, MIXER_EXPOSED, 1_000_000);
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext::default(), None).await;
+    let CosignOutcome::Held { hold_id, .. } = outcome else { panic!("{outcome:?}") };
+    let hold: HoldState = app.post(&format!("/holds/{hold_id}/justify"), JustifyRequest { text: "Paying back a friend from the trip".into() }).await;
+    let mined = app.submit(&owner, tx, &prepared, hold.cosignature).await;
+
+    let t: ChainTx = app.get(&format!("/chain/tx/{}", mined.tx_hash)).await;
+    assert_eq!(t.risk_level, Some(RiskBand::High), "what the wallet computed at co-sign time");
+    assert_eq!(t.reviewed_risk, None, "no tool has looked yet");
+    let _: ReviewReport = app.post(&format!("/review/{addr}"), serde_json::json!({})).await;
+    let t: ChainTx = app.get(&format!("/chain/tx/{}", mined.tx_hash)).await;
+    assert_eq!(t.reviewed_risk, Some(RiskBand::High), "the review's verdict, from its flags");
+    assert_eq!(t.risk_level, Some(RiskBand::High), "the wallet's verdict is immutable");
+}
+
+#[tokio::test]
+async fn intents_settings_profile_and_behaviour_flags_through_the_api() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(20);
+    let addr = app.onboard(&owner).await;
+
+    // the owner sets a 20 % per-transaction limit, signed with the passkey
+    let settings = WalletSettings { per_tx_limit_pct: 20, ..Default::default() };
+    let h: HashResponse = app.post(&format!("/settings/{addr}/hash"), SettingsHashRequest { settings: settings.clone() }).await;
+    let (s, _) = app.post_err(&format!("/settings/{addr}"), SetSettingsRequest { settings: settings.clone(), signature: Owner::new(21).sign(&h.hash) }).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let set: SettingsResponse = app.post(&format!("/settings/{addr}"), SetSettingsRequest { settings: settings.clone(), signature: owner.sign(&h.hash) }).await;
+    assert_eq!(set.tx.unwrap().kind, TxKind::SettingsChanged);
+    let got: SettingsResponse = app.get(&format!("/settings/{addr}")).await;
+    assert_eq!(got.settings.per_tx_limit_pct, 20);
+
+    // a habit: six small payments, each composed (intent) then submitted (outcome)
+    let merchant = Address::repeat_byte(0x44);
+    for _ in 0..6 {
+        let tx = usdc_tx(addr, merchant, 5_000_000);
+        let a: AssessResponse = app.post("/assess", AssessRequest { tx: tx.clone(), account: None }).await;
+        let id = a.intent_id.expect("intent recorded at assess time");
+        let st: IntentState = app.get(&format!("/intents/{addr}/{id}")).await;
+        assert_eq!(st.outcome, None);
+        let (outcome, prepared) = app.cosign(&tx, &AccountContext::default(), None).await;
+        let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
+        app.submit(&owner, tx, &prepared, Some(cosignature)).await;
+        let st: IntentState = app.get(&format!("/intents/{addr}/{id}")).await;
+        assert_eq!(st.outcome, Some(IntentOutcomeKind::Submitted));
+        app.clock.advance(3_600);
+    }
+    let p: WalletProfile = app.get(&format!("/profile/{addr}")).await;
+    assert_eq!(p.archetype, Archetype::Holder);
+    assert_eq!(p.out_count, 6);
+    assert!(p.submitted >= 6, "every composition of a landed tx is resolved: {}", p.submitted);
+    assert_eq!(p.cancelled, 0);
+    assert_eq!(p.distinct_recipients, 1);
+
+    // then the user composes a 200 USDC payment to a stranger, cancels twice, and goes through
+    let stranger = Address::repeat_byte(0x99);
+    let big = usdc_tx(addr, stranger, 200_000_000);
+    for _ in 0..2 {
+        let a: AssessResponse = app.post("/assess", AssessRequest { tx: big.clone(), account: None }).await;
+        assert!(a.assessment.reasons.iter().any(|r| r.code == ReasonCode::OwnLimitExceeded), "{:?}", a.assessment);
+        let id = a.intent_id.unwrap();
+        let c: IntentState = app.post(&format!("/intents/{addr}/{id}/cancel"), serde_json::json!({})).await;
+        assert_eq!(c.outcome, Some(IntentOutcomeKind::Cancelled));
+        let (s, _) = app.post_err(&format!("/intents/{addr}/{id}/cancel"), serde_json::json!({})).await;
+        assert_eq!(s, StatusCode::CONFLICT);
+        app.clock.advance(60);
+    }
+    // own-limit + new recipient + large amount puts it in Medium → step-up, then it lands
+    let (first, prepared) = app.cosign(&big, &AccountContext::default(), None).await;
+    let CosignOutcome::StepUp { step_up_hash, .. } = first else { panic!("{first:?}") };
+    let (second, prepared2) = app.cosign(&big, &AccountContext::default(), Some(owner.sign(&step_up_hash))).await;
+    assert_eq!(prepared.user_op_hash, prepared2.user_op_hash);
+    let CosignOutcome::Cosigned { cosignature, .. } = second else { panic!("{second:?}") };
+    let mined = app.submit(&owner, big, &prepared2, Some(cosignature)).await;
+
+    let t: ChainTx = app.get(&format!("/chain/tx/{}", mined.tx_hash)).await;
+    let f = t.features.unwrap();
+    assert_eq!(f.archetype, "holder");
+    assert!(f.exceeds_own_limit);
+    assert!(f.cancels_24h >= 2, "{}", f.cancels_24h);
+    assert!(f.amount_vs_mean_out > 30.0);
+
+    let r: ReviewReport = app.post(&format!("/review/{addr}"), serde_json::json!({})).await;
+    let codes: Vec<&str> = r.flags.iter().filter(|f| f.target == mined.tx_hash).map(|f| f.code.as_str()).collect();
+    assert!(codes.contains(&"CANCEL_STREAK"), "{codes:?}");
+    assert!(codes.contains(&"BEHAVIOUR_DEVIATION"), "{codes:?}");
+    assert!(codes.contains(&"OWN_LIMIT_BYPASS"), "{codes:?}");
+    assert!(r.flags.iter().any(|f| f.source == FlagSource::Behaviour));
+    assert_eq!(r.verdict, ReviewVerdict::Suspicious);
+    let p: WalletProfile = app.get(&format!("/profile/{addr}")).await;
+    assert_eq!(p.cancelled, 2);
+    assert!(p.cancel_rate > 0.0);
+    assert!(r.chain.ok);
+}
+
+#[tokio::test]
+async fn provenance_checks_the_counterparty_on_its_origin_network() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(22);
+    let addr = app.onboard(&owner).await;
+    let _: SyncResponse = app.post("/chain/sync", SyncRequest { wallet: addr, network: "ton-testnet".into(), address_raw: "EQCalice".into(), limit: None, cursor: None }).await;
+    let history: HistoryResponse = app.get(&format!("/chain/history/{addr}")).await;
+    let inbound = history.txs.iter().find(|t| t.kind == TxKind::External && t.to == addr).unwrap();
+
+    let pr: ProvenanceResponse = app.post(&format!("/provenance/{}", inbound.hash), serde_json::json!({})).await;
+    assert!(pr.assessment.verified);
+    assert_eq!(pr.assessment.counterparty, "EQCsomeone");
+    assert!(pr.assessment.reasons.iter().any(|r| r.code == "PASS_THROUGH"), "{:?}", pr.assessment);
+    assert_eq!(pr.assessment.risk, RiskBand::High);
+    assert!(pr.flagged);
+
+    let t: ChainTx = app.get(&format!("/chain/tx/{}", inbound.hash)).await;
+    assert!(t.flags.iter().any(|f| f.code == "PROVENANCE" && f.source == FlagSource::Provenance));
+    assert_eq!(t.reviewed_risk, Some(RiskBand::High));
+
+    // the review can run the same check for whatever is still unjudged, and is idempotent
+    let r: ReviewReport = app.post(&format!("/review/{addr}?provenance=true"), serde_json::json!({})).await;
+    let prov: Vec<_> = r.flags.iter().filter(|f| f.code == "PROVENANCE").collect();
+    assert_eq!(prov.len(), 2, "one verdict per external event, both against the same mule");
+    assert_ne!(prov[0].target, prov[1].target);
+    assert_eq!(r.verdict, ReviewVerdict::Suspicious);
+    let v: ChainVerification = app.get("/chain/verify").await;
+    assert!(v.ok);
 }

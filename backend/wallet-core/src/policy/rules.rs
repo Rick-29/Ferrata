@@ -47,6 +47,25 @@ impl Rule for AmountLimitRule {
     }
 }
 
+/// The owner's own ceiling, set in the wallet settings and recorded on the Ferra chain.
+pub struct OwnLimitRule;
+impl Rule for OwnLimitRule {
+    fn id(&self) -> &'static str {
+        "own_limit"
+    }
+    fn evaluate(&self, ctx: &EvalContext) -> Result<Option<Reason>, CoreError> {
+        if matches!(ctx.action, DecodedAction::Erc20Approve { .. } | DecodedAction::TypedData { .. }) {
+            return Ok(None);
+        }
+        match ctx.account.own_per_tx_limit {
+            Some(limit) if ctx.action.amount() > limit => {
+                Ok(reason(ReasonCode::OwnLimitExceeded, 25, format!("above the owner's own per-transaction limit of {limit}")))
+            }
+            _ => Ok(None),
+        }
+    }
+}
+
 pub struct NewRecipientRule;
 impl Rule for NewRecipientRule {
     fn id(&self) -> &'static str {

@@ -13,6 +13,8 @@ use sq_adapters::{
 };
 use wallet_core::{AbiTxDecoder, RiskScorer, RuleBasedScorer, TxDecoder};
 
+use sq_connectors::SourceRegistry;
+
 use crate::auth::Caller;
 use crate::config::Config;
 use crate::dev::DevKeyring;
@@ -40,6 +42,8 @@ pub struct AppState {
     pub prepared: Mutex<HashMap<B256, u64>>,
     /// The validator's risk model (`fixtures/model.json`).
     pub model: Arc<dyn RiskModel>,
+    /// Connected networks the Ferra chain can pull history from.
+    pub sources: SourceRegistry,
     pub dev_keys: DevKeyring,
     validator_seed: [u8; 32],
 }
@@ -50,6 +54,21 @@ impl AppState {
     }
 
     pub fn build_with_clock(config: Config, clock: Arc<dyn Clock>) -> anyhow::Result<SharedState> {
+        let sources = Self::sources_from_env();
+        Self::build_with(config, clock, sources)
+    }
+
+    /// Public testnet indexers; no keys needed. `SQ_TONCENTER_API_KEY` raises TON rate limits.
+    fn sources_from_env() -> SourceRegistry {
+        let ton_key = std::env::var("SQ_TONCENTER_API_KEY").ok();
+        let ton_testnet = std::env::var("SQ_TON_NETWORK").map(|v| v != "mainnet").unwrap_or(true);
+        SourceRegistry::new()
+            .register(Box::new(sq_connectors::ton::TonCenterSource::new(ton_testnet, ton_key)))
+            .register(Box::new(sq_connectors::bitcoin::EsploraSource::new(true)))
+            .register(Box::new(sq_connectors::evm::BlockscoutSource::base_sepolia()))
+    }
+
+    pub fn build_with(config: Config, clock: Arc<dyn Clock>, sources: SourceRegistry) -> anyhow::Result<SharedState> {
         let signer = match config.signing_seed {
             Some(seed) => Ed25519Signer::from_seed(seed),
             None => Ed25519Signer::random(),
@@ -106,6 +125,7 @@ impl AppState {
             owners: Mutex::new(HashMap::new()),
             prepared: Mutex::new(HashMap::new()),
             model: Arc::new(model),
+            sources,
             dev_keys: DevKeyring::default(),
             validator_seed,
         }))

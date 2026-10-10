@@ -3,4 +3,8 @@
 /**
  * What the wallet knows about its own account at scoring time.
  */
-export type AccountContext = { known_recipients: string[], };
+export type AccountContext = { known_recipients: string[], 
+/**
+ * The owner's own per-transaction ceiling for the asset being moved, in base units, if set.
+ */
+own_per_tx_limit: string | null, };
