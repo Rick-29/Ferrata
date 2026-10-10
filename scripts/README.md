@@ -17,6 +17,11 @@ Ajoute `-SkipBackend` (Windows) ou `--skip-backend` pour sauter le backend.
 elle est construite sur des **données simulées** (le monde de démo de `fixtures/`), sans backend.
 Le mode est choisi au build par la variable `VITE_BRIDGE` (`fake` ou `real`).
 
+**Passkeys.** Par défaut, l'extension utilise de **vraies passkeys** (WebAuthn) : empreinte, visage
+ou code de l'appareil, vérifiés par l'appareil lui-même. Le popup doit rester ouvert pendant la
+signature. Sur une machine sans authentificateur, ou pour les tests, `VITE_PASSKEY=dev` utilise une
+passkey **simulée** (porte-clés `/dev` du backend), signalée « Passkey simulée » à l'écran.
+
 **`dev`** lance le backend sur `http://localhost:8787` et l'extension en mode dev, avec rechargement
 automatique à chaque sauvegarde.
 

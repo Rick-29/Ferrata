@@ -5,10 +5,11 @@ perdu sa passkey. Elle fait une seule chose :
 
 1. Connexion Swissquote (`alice` / `demo`).
 2. Adresse du wallet à récupérer (copiable dans les Réglages de l'extension).
-3. Nouvelle passkey créée sur le téléphone (passkey de démo `/dev/passkeys` tant que WebAuthn n'est pas branché).
-4. **Identification vidéo simulée** : titulaire (`kyc-pass`) ou attaquant (`kyc-fail`, rejeté).
-5. Délai de sécurité (2 min en démo) : les autres appareils peuvent annuler.
-6. Finaliser : Swissquote fait tourner la clé ; la passkey du téléphone devient la clé du wallet.
+3. Nouvelle passkey créée sur le téléphone : **simulée** (`/dev/passkeys`), car Expo Go n'a pas accès aux vraies passkeys. L'extension, elle, utilise de vraies passkeys WebAuthn.
+4. **Vérification faciale simulée** (optionnelle, facteur en plus) : aperçu caméra et scan factice, aucune image prise, enregistrée ni envoyée.
+5. **Identification vidéo simulée** : titulaire (`kyc-pass`) ou attaquant (`kyc-fail`, rejeté).
+6. Délai de sécurité (2 min en démo) : les autres appareils peuvent annuler.
+7. Finaliser : Swissquote fait tourner la clé ; la passkey du téléphone devient la clé du wallet.
 
 Elle réutilise le SDK (`../sdk`) et les types du backend (`../types`) ; elle n'est pas dans les
 workspaces npm (React Native et Vite ne partagent pas bien leurs dépendances).
