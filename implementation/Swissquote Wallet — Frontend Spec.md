@@ -1,7 +1,5 @@
 # Swissquote Wallet — Frontend Spec
 
-Oct 10, 2026 · @Vigo Walker
-
 ## Scope and rules
 
 P2 owns everything the user sees: the extension popup, the dApp approval window, onboarding and recovery screens, plus the problem/product and demo parts of the pitch. P2 never calls the chain, Rust or Swissquote directly; every action goes through the `@sqw/sdk` facade P3 provides.

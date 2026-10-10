@@ -1,7 +1,5 @@
 # Swissquote Wallet — Middleware Spec
 
-Oct 10, 2026 · @Vigo Walker
-
 ## Scope and rules
 
 P3 owns the TypeScript glue between UI, Rust and the chain: the `@sqw/sdk` package, the extension's background worker and dApp provider, all on-chain integration, mock data, and the legal/business material. P3 is the only person whose code imports `viem`, the WASM module, or `fetch`.

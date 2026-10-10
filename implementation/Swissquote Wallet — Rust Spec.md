@@ -1,7 +1,5 @@
 # Swissquote Wallet — Rust Spec
 
-Oct 10, 2026 · @Vigo Walker
-
 ## Scope and rules
 
 P1 owns all Rust: the pure domain crate shared by extension and server, the thin WASM facade, and the Swissquote services. The design doc is the source of truth for behaviour; this spec fixes structure.
