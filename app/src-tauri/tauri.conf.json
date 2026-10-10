@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Ferra Visualizer",
+  "version": "0.1.0",
+  "identifier": "com.swissquote.ferra-visualizer",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:8443",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Ferra Visualizer",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../../fixtures/chains/ferra-testnet.jsonl": "fixtures/chains/ferra-testnet.jsonl",
+      "../../fixtures/chains/ferra-testnet.validated.jsonl": "fixtures/chains/ferra-testnet.validated.jsonl",
+      "../../fixtures/chains/ferra-mainnet.jsonl": "fixtures/chains/ferra-mainnet.jsonl",
+      "../../fixtures/model.json": "fixtures/model.json",
+      "../../fixtures/sanctions.json": "fixtures/sanctions.json",
+      "../../fixtures/exposure-graph.json": "fixtures/exposure-graph.json"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "description": "Empowering Swissquote compliance admins, this app validates Ferra chain files and visualizes wallet histories, highlighting risk levels for efficient monitoring.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
