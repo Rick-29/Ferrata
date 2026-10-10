@@ -118,11 +118,11 @@ export function ErrorBanner({ message }: { readonly message: string | null }) {
 export function Steps({ current, labels }: { readonly current: number; readonly labels: readonly string[] }) {
   const t = useTheme();
   return (
-    <View style={styles.steps} accessibilityLabel={`Ã‰tape ${current + 1} sur ${labels.length}`}>
+    <View style={styles.steps} accessibilityLabel={`Étape ${current + 1} sur ${labels.length}`}>
       <View style={[styles.stepLine, { backgroundColor: t.borderStrong }]} />
       {labels.map((label, i) => {
         const on = i <= current;
-        const dot = <Text style={styles.stepDotText}>{i < current ? 'âœ“' : i + 1}</Text>;
+        const dot = <Text style={styles.stepDotText}>{i < current ? '✓' : i + 1}</Text>;
         return (
           <View key={label} style={styles.step}>
             {on ? (
