@@ -23,36 +23,61 @@ export class RiskWarning extends Widget<RiskWarningData> {
     css`
       section {
         display: grid;
-        gap: var(--sq-space-3);
-        padding: var(--sq-space-4);
-        border-radius: var(--sq-radius-lg);
-        border: 1px solid color-mix(in srgb, var(--sq-risk-high) 45%, transparent);
-        background: color-mix(in srgb, var(--sq-risk-high) 9%, var(--sq-surface));
+        gap: 9px;
+        padding: 13px;
+        border-radius: 19px;
+        border: 1px solid rgba(255, 122, 61, 0.2);
+        background: linear-gradient(130deg, rgba(255, 122, 61, 0.13), rgba(255, 77, 106, 0.07));
       }
       .head {
         display: flex;
-        gap: var(--sq-space-2);
         align-items: center;
+        gap: 8px;
+      }
+      .head svg {
+        flex: none;
+        width: 25px;
+        height: 25px;
+        padding: 5px;
+        box-sizing: border-box;
+        border-radius: 9px;
+        background: rgba(255, 122, 61, 0.15);
         color: var(--sq-risk-high);
       }
-      svg {
-        flex: none;
-        width: 20px;
-        height: 20px;
-      }
       h2 {
-        color: var(--sq-text);
+        font: 600 13px var(--sq-font-display);
+        color: #ffd5c1;
       }
       p {
-        font-size: 13px;
-        line-height: 1.45;
+        font-size: 10px;
+        line-height: 1.5;
+        color: #d0a89b;
       }
       ul {
+        list-style: none;
         margin: 0;
-        padding-left: 18px;
-        font-size: 13px;
+        padding: 0;
         display: grid;
-        gap: 2px;
+        gap: 5px;
+      }
+      li {
+        min-height: 27px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.1);
+        font-size: 10px;
+        color: #c7cad5;
+        box-sizing: border-box;
+      }
+      li::before {
+        content: '';
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--sq-risk-high);
       }
     `,
   ];

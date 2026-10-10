@@ -6,6 +6,8 @@ import type { WidgetEvent } from '../../core/events';
 import { Screen } from '../../core/Screen';
 import { screenStyles, textStyles } from '../../core/styles';
 import { ready } from '../../core/Widget';
+import { icon } from '../../core/icons';
+import '../../widgets/brand/Brand';
 import '../../widgets/consent-checkbox/ConsentCheckbox';
 import '../../widgets/legal-notice/LegalNotice';
 import '../../widgets/login-form/LoginForm';
@@ -28,33 +30,84 @@ export class OnboardingScreen extends Screen {
     screenStyles,
     textStyles,
     css`
+      :host {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sq-space-4);
+        min-height: 560px;
+      }
       header {
         display: grid;
-        gap: var(--sq-space-2);
-        padding-top: var(--sq-space-2);
-      }
-      .brand {
-        color: var(--sq-accent);
+        gap: 25px;
+        margin-top: 34px;
       }
       .lead {
-        font-size: 14px;
-        line-height: 1.45;
+        max-width: 290px;
+        font: 500 18px/1.35 var(--sq-font-display);
+        letter-spacing: -0.035em;
+      }
+      .hero {
+        margin-top: 26px;
+        display: grid;
+        justify-items: center;
+        gap: 10px;
+        text-align: center;
+      }
+      .orb {
+        position: relative;
+        width: 110px;
+        height: 110px;
+        margin-bottom: 12px;
+        border-radius: 38px;
+        display: grid;
+        place-items: center;
+        color: #eeeaff;
+        background: linear-gradient(145deg, rgba(255, 61, 127, 0.2), rgba(123, 92, 255, 0.2));
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow:
+          inset 0 0 28px rgba(255, 255, 255, 0.05),
+          0 0 50px rgba(123, 92, 255, 0.22);
+      }
+      .mini-key {
+        position: absolute;
+        right: -3px;
+        bottom: 5px;
+        width: 28px;
+        height: 28px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: var(--sq-brand-gradient);
+        color: #fff;
+      }
+      .hero p {
+        max-width: 280px;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      sq-step-progress {
+        margin-top: auto;
+        padding-top: var(--sq-space-4);
       }
     `,
   ];
 
   override render(): TemplateResult {
     return html`
-      <header>
-        <span class="eyebrow brand">Swissquote Wallet</span>
-        <h1>${this.step === 'login' ? 'Connectez-vous' : 'Sécurisez votre wallet'}</h1>
-        <p class="muted lead">
-          ${this.step === 'login'
-            ? 'Vos fonds restent à vous. Swissquote co-signe chaque transaction mais ne peut jamais les déplacer.'
-            : 'Votre passkey est la clé de votre wallet. Elle reste sur cet appareil et ne le quitte jamais.'}
-        </p>
-      </header>
-      <sq-step-progress .state=${ready({ steps: STEPS, current: this.step === 'login' ? 0 : 1 })}></sq-step-progress>
+      ${this.step === 'login'
+        ? html`<header>
+            <sq-brand></sq-brand>
+            <p class="lead">
+              Vos fonds restent à vous. Swissquote co-signe chaque transaction mais ne peut jamais les déplacer.
+            </p>
+          </header>`
+        : html`<div class="hero">
+            <div class="orb" aria-hidden="true">${icon('fingerprint', 54)}<span class="mini-key">${icon('key', 16)}</span></div>
+            <h1>Créer votre passkey</h1>
+            <p class="muted">
+              Votre passkey est la clé de votre wallet. Elle reste sur cet appareil et Swissquote n'y a jamais accès.
+            </p>
+          </div>`}
       ${this.step === 'login'
         ? html`<sq-login-form
             .state=${ready({ busy: this.busy, error: this.error })}
@@ -69,7 +122,7 @@ export class OnboardingScreen extends Screen {
             <sq-legal-notice></sq-legal-notice>
             <sq-passkey-prompt
             .state=${ready({
-              title: 'Créer votre passkey',
+              title: 'Passkey de cet appareil',
               description: 'Empreinte, visage ou code de votre appareil : rien à retenir.',
               actionLabel: 'Créer ma passkey',
               busy: this.busy,
@@ -79,6 +132,7 @@ export class OnboardingScreen extends Screen {
             @passkey-requested=${this.#createWallet}
             @retry=${this.#createWallet}
           ></sq-passkey-prompt>`}
+      <sq-step-progress .state=${ready({ steps: STEPS, current: this.step === 'login' ? 0 : 1 })}></sq-step-progress>
     `;
   }
 

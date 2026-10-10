@@ -39,6 +39,8 @@ pub struct AppState {
     pub owners: Mutex<HashMap<Address, String>>,
     /// When each user-op hash was prepared, so the chain can record decision latency.
     pub prepared: Mutex<HashMap<B256, u64>>,
+    /// Counters and retry schedule of the automatic validation worker.
+    pub validator: Mutex<crate::validator::ValidatorState>,
     /// The validator's risk model (`fixtures/model.json`).
     pub model: Arc<dyn RiskModel>,
     /// Connected networks the Ferra chain can pull history from.
@@ -130,6 +132,7 @@ impl AppState {
             recoveries: Mutex::new(HashMap::new()),
             owners: Mutex::new(HashMap::new()),
             prepared: Mutex::new(HashMap::new()),
+            validator: Mutex::new(Default::default()),
             model: Arc::new(model),
             sources,
             dev_keys: DevKeyring::default(),
@@ -237,6 +240,12 @@ impl AppState {
             risk_accepted: e.entry.risk_accepted,
         });
         Ok(SubmitMeta { prepared_at, step_up: entry.is_some_and(|e| e.entry.step_up), policy, fee: None })
+    }
+
+    /// Fixture lists plus the reports filed on the chain, as the connectors expect them.
+    pub fn watchlists(&self) -> Result<sq_connectors::provenance::Watchlists, ServiceError> {
+        let reported = self.chain()?.reported_addresses().into_iter().map(|r| (r.network, r.address, r.count));
+        Ok(sq_connectors::provenance::Watchlists::from_raw(&self.config.sanctioned_raw, &self.config.flagged_raw).with_reported(reported))
     }
 
     pub fn lock<'a, T>(&self, m: &'a Mutex<T>) -> Result<MutexGuard<'a, T>, ServiceError> {

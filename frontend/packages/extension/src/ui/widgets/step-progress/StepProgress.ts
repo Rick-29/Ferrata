@@ -1,5 +1,6 @@
 import { css, html, type TemplateResult } from 'lit';
 import { customElement } from 'lit/decorators.js';
+import { icon } from '../../core/icons';
 import { Widget } from '../../core/Widget';
 
 export interface StepProgressData {
@@ -8,38 +9,55 @@ export interface StepProgressData {
   readonly current: number;
 }
 
+/** Numbered dots on a line; done steps show a check (design: .steps). */
 @customElement('sq-step-progress')
 export class StepProgress extends Widget<StepProgressData> {
   static override styles = css`
     ol {
+      position: relative;
       list-style: none;
       margin: 0;
-      padding: 0;
-      display: grid;
-      grid-auto-flow: column;
-      grid-auto-columns: 1fr;
-      gap: var(--sq-space-2);
+      padding: 0 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    ol::before {
+      content: '';
+      position: absolute;
+      top: 11px;
+      left: 37px;
+      right: 37px;
+      height: 1px;
+      background: var(--sq-border-strong);
     }
     li {
-      display: grid;
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       gap: 6px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--sq-text-muted);
+      font-size: 9px;
+      color: var(--sq-text-faint);
     }
-    li::before {
-      content: '';
-      height: 3px;
-      border-radius: 2px;
-      background: var(--sq-border);
-      transition: background var(--sq-duration) var(--sq-ease);
+    .dot {
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--sq-border-strong);
+      background: var(--sq-bg);
+      font-size: 9px;
     }
-    li.done::before,
-    li[aria-current='step']::before {
-      background: var(--sq-accent);
-    }
-    li[aria-current='step'] {
+    li.on {
       color: var(--sq-text);
+    }
+    li.on .dot {
+      border: 0;
+      background: var(--sq-brand-gradient);
+      box-shadow: 0 0 16px rgba(255, 75, 31, 0.3);
+      color: #fff;
     }
   `;
 
@@ -47,8 +65,9 @@ export class StepProgress extends Widget<StepProgressData> {
     return html`
       <ol aria-label="Progression">
         ${steps.map(
-          (label, i) => html`<li class=${i < current ? 'done' : ''} aria-current=${i === current ? 'step' : 'false'}>
-            ${label}
+          (label, i) => html`<li class=${i <= current ? 'on' : ''} aria-current=${i === current ? 'step' : 'false'}>
+            <span class="dot">${i < current ? icon('check', 11) : i + 1}</span>
+            <span>${label}</span>
           </li>`,
         )}
       </ol>

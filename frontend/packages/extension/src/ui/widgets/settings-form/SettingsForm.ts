@@ -2,7 +2,7 @@ import type { WalletSettings } from '@sqw/types/WalletSettings';
 import { css, html, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { UiError } from '../../core/errors';
-import { fieldStyles, surfaceStyles, textStyles } from '../../core/styles';
+import { fieldStyles, textStyles } from '../../core/styles';
 import { Widget } from '../../core/Widget';
 import '../button/Button';
 
@@ -19,6 +19,7 @@ interface FieldSpec {
   readonly key: FieldKey;
   readonly label: string;
   readonly hint: string;
+  readonly unit: string;
   readonly max: number | null;
 }
 
@@ -26,10 +27,10 @@ const SECONDS_PER_MINUTE = 60;
 const PERCENT_MAX = 100;
 
 const FIELDS: readonly FieldSpec[] = [
-  { key: 'perTxPct', label: 'Limite par transaction (% du solde)', hint: '0 = désactivé', max: PERCENT_MAX },
-  { key: 'dailyLimit', label: 'Plafond par jour (unités entières)', hint: '0 = désactivé', max: null },
-  { key: 'stepUpPct', label: 'Confirmation supplémentaire au-delà de (% du solde)', hint: '0 = désactivé', max: PERCENT_MAX },
-  { key: 'timeoutMin', label: 'Transaction abandonnée après (minutes)', hint: 'Sans signature dans ce délai', max: null },
+  { key: 'perTxPct', label: 'Limite par transaction', hint: 'du solde', unit: '%', max: PERCENT_MAX },
+  { key: 'dailyLimit', label: 'Plafond par jour', hint: 'unités entières', unit: 'unités', max: null },
+  { key: 'stepUpPct', label: 'Confirmation supplémentaire au-delà de', hint: 'du solde', unit: '%', max: PERCENT_MAX },
+  { key: 'timeoutMin', label: 'Transaction abandonnée après', hint: 'sans signature', unit: 'min', max: null },
 ];
 
 type Draft = Readonly<Record<FieldKey, string>>;
@@ -51,14 +52,77 @@ export class SettingsForm extends Widget<SettingsFormData> {
   static override styles = [
     textStyles,
     fieldStyles,
-    surfaceStyles,
     css`
       form {
         display: grid;
-        gap: var(--sq-space-4);
+        gap: 13px;
+      }
+      .card {
+        padding: 4px 13px 9px;
+        border-radius: 19px;
+        border: 1px solid var(--sq-border);
+        background: var(--sq-surface);
+      }
+      .row {
+        min-height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border-bottom: 1px solid var(--sq-border);
+      }
+      .text {
+        display: grid;
+        gap: 3px;
+        max-width: 170px;
+      }
+      label {
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0;
+        text-transform: none;
+        color: #c4c8d4;
+        line-height: 1.35;
+      }
+      .box {
+        width: 96px;
+        height: 34px;
+        display: flex;
+        align-items: center;
+        padding: 0 8px;
+        box-sizing: border-box;
+        border-radius: 10px;
+        border: 1px solid var(--sq-border);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .box:focus-within {
+        border-color: rgba(255, 61, 127, 0.65);
+      }
+      input {
+        width: 52px;
+        height: auto;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        text-align: right;
+        font: 600 12px var(--sq-font-display);
+      }
+      input:focus-visible {
+        box-shadow: none;
+      }
+      .unit {
+        margin-left: auto;
+        font-size: 9px;
+        color: var(--sq-text-muted);
+      }
+      .zero {
+        display: block;
+        margin-top: 8px;
+        font-size: 9px;
+        color: var(--sq-text-faint);
       }
       .saved {
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         color: var(--sq-risk-low);
       }
@@ -79,8 +143,11 @@ export class SettingsForm extends Widget<SettingsFormData> {
     const draft = this.draft ?? toDraft(data.settings);
     const invalid = FIELDS.filter((f) => !isValid(draft[f.key], f.max)).map((f) => f.key);
     return html`
-      <form class="card" @submit=${(e: Event) => e.preventDefault()} novalidate>
-        ${FIELDS.map((f) => this.#field(f, draft, invalid.includes(f.key), data.busy))}
+      <form @submit=${(e: Event) => e.preventDefault()} novalidate>
+        <div class="card">
+          ${FIELDS.map((f) => this.#field(f, draft, invalid.includes(f.key), data.busy))}
+          <small class="zero">0 = désactivé</small>
+        </div>
         ${data.error ? html`<sq-error-panel .error=${data.error}></sq-error-panel>` : nothing}
         ${data.saved ? html`<p class="saved" role="status">Réglages enregistrés et signés.</p>` : nothing}
         <sq-button
@@ -97,24 +164,29 @@ export class SettingsForm extends Widget<SettingsFormData> {
   #field(spec: FieldSpec, draft: Draft, invalid: boolean, busy: boolean): TemplateResult {
     const id = `f-${spec.key}`;
     return html`
-      <div class="field">
-        <label for=${id}>${spec.label}</label>
-        <input
-          id=${id}
-          inputmode="numeric"
-          .value=${draft[spec.key]}
-          ?disabled=${busy}
-          aria-invalid=${invalid ? 'true' : 'false'}
-          @input=${(e: Event) => {
-            const value = e.target instanceof HTMLInputElement ? e.target.value.trim() : '';
-            this.draft = { ...draft, [spec.key]: value };
-          }}
-        />
-        ${invalid
-          ? html`<span class="field-error" role="alert">
-              ${spec.max === null ? 'Nombre entier positif attendu.' : `Entre 0 et ${spec.max}.`}
-            </span>`
-          : html`<span class="hint">${spec.hint}</span>`}
+      <div class="row">
+        <span class="text">
+          <label for=${id}>${spec.label}</label>
+          ${invalid
+            ? html`<span class="field-error" role="alert">
+                ${spec.max === null ? 'Nombre entier positif attendu.' : `Entre 0 et ${spec.max}.`}
+              </span>`
+            : html`<span class="hint">${spec.hint}</span>`}
+        </span>
+        <span class="box">
+          <input
+            id=${id}
+            inputmode="numeric"
+            .value=${draft[spec.key]}
+            ?disabled=${busy}
+            aria-invalid=${invalid ? 'true' : 'false'}
+            @input=${(e: Event) => {
+              const value = e.target instanceof HTMLInputElement ? e.target.value.trim() : '';
+              this.draft = { ...draft, [spec.key]: value };
+            }}
+          />
+          <span class="unit">${spec.unit}</span>
+        </span>
       </div>
     `;
   }

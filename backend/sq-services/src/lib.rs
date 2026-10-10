@@ -11,8 +11,10 @@ pub mod log;
 pub mod ownership;
 pub mod reconcile;
 pub mod recovery;
+pub mod reports;
 pub mod review;
 pub mod state;
+pub mod validator;
 pub mod wallet;
 
 use axum::Router;
@@ -37,6 +39,8 @@ pub fn router(state: SharedState) -> Router {
         .merge(recovery::routes())
         .merge(reconcile::routes())
         .merge(review::routes())
+        .merge(reports::routes())
+        .merge(validator::routes())
         .merge(wallet::routes())
         .merge(chain::wallet_routes())
         .nest("/chain", chain::routes());

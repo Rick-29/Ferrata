@@ -34,6 +34,7 @@ cargo test --workspace                         # 147 tests; also regenerates fro
 cargo run -p sq-connectors --bin ferra-verify -- ../chain.jsonl --events --behaviour   # verify a chain file with nothing else
 cargo run -p sq-connectors --bin ferra-verify -- ../chain.jsonl --provenance           # … and check external counterparties on their networks
 cargo run -p ferra-verify --bin ferra-report -- ton:EQ…:EQ… eth-sepolia:0x…:0x… --out r.json   # transfer reports from live indexers
+cargo run -p ferra-verify --bin ferra-seed -- --file fixtures/samples/pairs_mainnet.json --out fixtures/chains/ferra-mainnet.jsonl --reset   # a chain built from real history
 cargo clippy --workspace --all-targets -- -D warnings
 wasm-pack build wallet-wasm --target web --release --out-dir ../../frontend/packages/core-wasm
 ```
@@ -48,6 +49,8 @@ wasm-pack build wallet-wasm --target web --release --out-dir ../../frontend/pack
 | `SQ_LOG_SNAPSHOT` | none | JSON mirror of the audit logs |
 | `SQ_REQUIRE_AUTH` | `1` | bearer token from `/auth/session` on every non-public route; wallets are bound to the client that registered them |
 | `SQ_DEV_SIGNER` | `1` | mock passkeys and demo helpers under `/dev` |
+| `SQ_VALIDATOR_INTERVAL_SECS` | `30` | automatic validation worker cadence; `0` disables it |
+| `SQ_VALIDATOR_BATCH` | `4` | pending events judged concurrently per pass |
 
 Public routes (no token): `/auth/session`, `/chains`, everything under `/chain/*`, `/dev/*`.
 
@@ -104,6 +107,13 @@ GET  /chain/validation               { validatable, validated, percent, pending,
 POST /report/event/{tx_hash}         one-sided TransferReport for an external event: counterparty researched, risk predicted
 POST /risk/preview                   { network, counterparty, amount?, wallet?, sender? } → RiskPreview before signing:
                                      odds vs a typical transfer and per-factor multipliers with readable messages
+GET  /validator                      worker status: passes, events checked, flags written, retrying, validation %
+POST /validator/run?batch=           one validation pass now (the worker also runs every SQ_VALIDATOR_INTERVAL_SECS)
+POST /reports/address                { network, address, category?, reason } → "this address is a scam": attested on the
+                                     chain as an address_report event; past events touching it get REPORTED_ADDRESS,
+                                     future ones carry counterparty_reports in features, model, preview and provenance
+GET  /reports/address                every reported address with count and categories (public read)
+GET  /reports/address/{network}/{address}   the reports themselves
 POST /log/{address}/anchor           Swissquote co-signs the audit-log head onto the chain
 POST /reconcile/{address}            chain-vs-log diff: unlogged txs, escape exits, anchor mismatches
 POST /review/{address}               full account review → { verdict: clean|suspicious|blocked, score, flags[], chain }
@@ -163,6 +173,21 @@ events of the same transaction, where the sender got the money (inbound events o
 before the transfer, newest first, with each funder's account info), the sender's recent activity,
 and a provenance verdict on the receiver. A sample over TON mainnet, TON testnet, Ethereum and
 Sepolia is in `fixtures/samples/transfer_report.json`; the TypeScript type is `TransferReport`.
+
+### Semi-real chains for the validator (`ferra-seed`)
+
+`ferra-seed --file pairs.json --out chain.jsonl [--network ton --network bitcoin] [--pages 2]`
+builds a Ferra chain file from real network history: one simulated owner is created, every `to`
+address of the pairs is treated as that owner's address on its network, its history is fetched
+from the public indexers and recorded as Swissquote-attested `external` events in chronological
+order (genesis one hour before the first real event). The `from` sides stay real counterparties
+for the validator to judge. Two such chains are checked in under `fixtures/chains/`:
+`ferra-testnet.jsonl` (TON testnet + Sepolia, 333 events) and `ferra-mainnet.jsonl` (TON,
+Ethereum, Bitcoin, Solana mainnets, 490 events). Both verify with `ferra-verify`; start the
+server on one (`SQ_CHAIN_FILE=fixtures/chains/ferra-testnet.jsonl`, dev signing seed) and the
+validation worker judges it event by event, writing flags into the same file. The seeds are
+deterministic (`--signing-seed`, `--validator-seed`, `--owner-seed`), so the server opens the
+file with the same keys the seeder used.
 
 Connectors sit behind one `NetworkSource` trait (`backend/sq-connectors`: traits, registry,
 exposure tracer, provenance judge, transfer report, risk scorer) with one crate per family:

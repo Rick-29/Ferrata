@@ -14,27 +14,29 @@ export type RiskBadgeData = Pick<RiskAssessment, 'band' | 'score'>;
 export class RiskBadge extends Widget<RiskBadgeData> {
   static override styles = css`
     .badge {
+      min-height: 24px;
+      padding: 0 10px;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 12px 6px 10px;
+      gap: 6px;
       border-radius: 999px;
-      font-size: 13px;
-      font-weight: 650;
+      white-space: nowrap;
+      font-size: 10px;
+      font-weight: 600;
       color: var(--band);
-      background: color-mix(in srgb, var(--band) 13%, transparent);
+      border: 1px solid color-mix(in srgb, var(--band) 18%, transparent);
+      background: color-mix(in srgb, var(--band) 8%, transparent);
     }
     .dot {
-      width: 8px;
-      height: 8px;
+      width: 5px;
+      height: 5px;
       border-radius: 50%;
       background: var(--band);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--band) 25%, transparent);
+      box-shadow: 0 0 7px var(--band);
     }
     .score {
       font-variant-numeric: tabular-nums;
-      font-weight: 600;
-      opacity: 0.8;
+      opacity: 0.85;
     }
   `;
 

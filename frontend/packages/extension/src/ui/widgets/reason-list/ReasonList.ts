@@ -16,21 +16,38 @@ export class ReasonList extends Widget<readonly Reason[]> {
         margin: 0;
         padding: 0;
         display: grid;
-        gap: 6px;
+        gap: 5px;
       }
       li {
+        min-height: 30px;
         display: flex;
-        justify-content: space-between;
-        gap: var(--sq-space-3);
-        font-size: 13px;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.035);
+        font-size: 10px;
+        color: #c7cad5;
+        box-sizing: border-box;
+      }
+      li::before {
+        content: '';
+        flex: none;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--sq-risk-medium);
+      }
+      li span:first-child {
+        margin-right: auto;
       }
       .points {
         font-variant-numeric: tabular-nums;
-        font-weight: 650;
-        color: var(--sq-text-muted);
+        font-weight: 600;
+        color: var(--sq-risk-medium);
       }
       .none {
-        font-size: 13px;
+        font-size: 11px;
       }
     `,
   ];

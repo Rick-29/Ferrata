@@ -34,6 +34,10 @@ velocity_ratio: number, sender_tx_count: number, sender_out_count: number, sende
  */
 share_of_lifetime_volume: number, counterparty: string | null, counterparty_is_account: boolean, counterparty_new_for_sender: boolean, counterparty_tx_count: number, counterparty_in_count: number, counterparty_out_count: number, counterparty_distinct_senders: number, counterparty_first_seen_age_secs: number | null, counterparty_prior_flags: number, counterparty_prior_max_severity: RiskBand | null, 
 /**
+ * Scam / fraud reports filed against the counterparty on its network (v3).
+ */
+counterparty_reports: number, 
+/**
  * The counterparty paid the sender before (round trips, layering).
  */
 reciprocal: boolean, 

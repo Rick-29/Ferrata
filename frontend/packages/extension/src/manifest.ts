@@ -1,10 +1,11 @@
 import { defineManifest } from '@crxjs/vite-plugin';
+import { APP_NAME } from '../../brand/src/index.ts';
 
 const DAPP_MATCHES = ['http://localhost/*', 'https://app.uniswap.org/*', 'https://app.aave.com/*'];
 
 export default defineManifest({
   manifest_version: 3,
-  name: 'Swissquote Wallet',
+  name: APP_NAME,
   version: '0.1.0',
   action: { default_popup: 'src/popup/index.html' },
   background: { service_worker: 'src/background/index.ts', type: 'module' },

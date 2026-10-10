@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       '@sqw/types': fileURLToPath(new URL('../types/src', import.meta.url)),
       '@sqw/sdk': fileURLToPath(new URL('../sdk/src/index.ts', import.meta.url)),
+      '@sqw/brand': fileURLToPath(new URL('../brand/src/index.ts', import.meta.url)),
     },
   },
   build: {

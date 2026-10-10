@@ -142,6 +142,10 @@ pub struct TxFeatures {
     #[ts(type = "number")]
     pub counterparty_prior_flags: u64,
     pub counterparty_prior_max_severity: Option<RiskBand>,
+    /// Scam / fraud reports filed against the counterparty on its network (v3).
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub counterparty_reports: u64,
     /// The counterparty paid the sender before (round trips, layering).
     pub reciprocal: bool,
     /// `distinct recipients / outgoing count` of the counterparty: 1.0 = spreads everything out.
@@ -250,6 +254,7 @@ impl TxFeatures {
         put("counterparty_first_seen_age_days", self.counterparty_first_seen_age_secs.map(|s| s as f64 / DAY as f64).unwrap_or(-1.0));
         put("counterparty_prior_flags", self.counterparty_prior_flags as f64);
         put("counterparty_prior_max_severity", sev(self.counterparty_prior_max_severity));
+        put("counterparty_reports", self.counterparty_reports as f64);
         put("reciprocal", b(self.reciprocal));
         put("counterparty_fan_out_ratio", self.counterparty_fan_out_ratio);
         put("counterparty_pass_through", b(self.counterparty_pass_through));
@@ -296,6 +301,7 @@ pub(super) fn kind_tag(k: TxKind) -> &'static str {
         TxKind::SettingsChanged => "settings_changed",
         TxKind::Intent => "intent",
         TxKind::IntentOutcome => "intent_outcome",
+        TxKind::AddressReport => "address_report",
     }
 }
 
@@ -455,6 +461,7 @@ impl MockChain {
             counterparty_first_seen_age_secs: cp_first_seen.map(|f| tx.timestamp.saturating_sub(f)),
             counterparty_prior_flags: cp_flags.len() as u64,
             counterparty_prior_max_severity: max_sev(&cp_flags),
+            counterparty_reports: self.counterparty_reports(tx),
             reciprocal,
             counterparty_fan_out_ratio: fan_out,
             counterparty_pass_through: pass_through,

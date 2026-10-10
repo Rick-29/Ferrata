@@ -1,0 +1,7 @@
+{
+  "name": "@sqw/brand",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Product name shared by the extension, the mobile app and the website (alias @sqw/brand)."
+}

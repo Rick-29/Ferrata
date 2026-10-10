@@ -1,0 +1,49 @@
+[2m2026-10-10T18:39:26.248497Z[0m [32m INFO[0m [2msq_services::state[0m[2m:[0m Swissquote signing identity ready [3mswissquote_public_key[0m[2m=[0md04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737 [3mvalidator_public_key[0m[2m=[0m13e29b7a9491f6661b8f69b32adfb8215d792860109ab6f187a76d2434f30d8a [3mdev_signer[0m[2m=[0mtrue [3mrequire_auth[0m[2m=[0mtrue [3mchain_file[0m[2m=[0mSome("../fixtures/chains/ferra-testnet.validated.jsonl")
+[2m2026-10-10T18:39:26.248632Z[0m [33m WARN[0m [2msq_services::state[0m[2m:[0m SQ_DEV_SIGNER enabled: /dev/passkeys issues mock passkeys held in server memory. Demo only.
+[2m2026-10-10T18:39:32.585772Z[0m [32m INFO[0m [2msq_services::state[0m[2m:[0m pseudo-chain ready and verified [3mchain_id[0m[2m=[0m84532 [3mblocks[0m[2m=[0m337
+[2m2026-10-10T18:39:32.586832Z[0m [32m INFO[0m [2msq_services::state[0m[2m:[0m risk model loaded [3mmodel[0m[2m=[0m"ferra-risk-v0 (hand-set AML heuristics; replace with weights trained on GET /chain/dataset)" [3mfeatures[0m[2m=[0m28
+[2m2026-10-10T18:39:32.587045Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation worker started [3mevery[0m[2m=[0m5 [3mbatch[0m[2m=[0m8
+[2m2026-10-10T18:39:32.590694Z[0m [32m INFO[0m [2msq_services[0m[2m:[0m Swissquote wallet service listening on http://localhost:8790
+[2m2026-10-10T18:39:35.281846Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m2.4024024024024024
+[2m2026-10-10T18:39:42.343432Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m4.804804804804805
+[2m2026-10-10T18:39:49.358635Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m7.207207207207207
+[2m2026-10-10T18:40:05.778746Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m9.60960960960961
+[2m2026-10-10T18:40:13.597567Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m12.012012012012011
+[2m2026-10-10T18:40:21.446730Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m10 [3mpercent[0m[2m=[0m14.414414414414415
+[2m2026-10-10T18:41:19.517181Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m12 [3mpercent[0m[2m=[0m16.816816816816818
+[2m2026-10-10T18:41:26.832719Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m19.21921921921922
+[2m2026-10-10T18:42:17.861542Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m14 [3mpercent[0m[2m=[0m21.62162162162162
+[2m2026-10-10T18:42:25.921647Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m12 [3mpercent[0m[2m=[0m24.024024024024023
+[2m2026-10-10T18:42:33.413831Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m13 [3mpercent[0m[2m=[0m26.426426426426428
+[2m2026-10-10T18:43:11.718143Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m13 [3mpercent[0m[2m=[0m28.82882882882883
+[2m2026-10-10T18:44:18.982513Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m14 [3mpercent[0m[2m=[0m31.23123123123123
+[2m2026-10-10T18:44:50.798857Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m33.633633633633636
+[2m2026-10-10T18:45:15.363546Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m36.03603603603604
+[2m2026-10-10T18:45:55.400403Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m14 [3mpercent[0m[2m=[0m38.43843843843844
+[2m2026-10-10T18:46:43.659372Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m40.84084084084084
+[2m2026-10-10T18:46:58.301227Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m43.24324324324324
+[2m2026-10-10T18:47:37.482438Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m45.645645645645644
+[2m2026-10-10T18:48:19.854135Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m48.048048048048045
+[2m2026-10-10T18:48:59.023788Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m50.450450450450454
+[2m2026-10-10T18:49:38.465839Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m52.852852852852855
+[2m2026-10-10T18:50:23.620448Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m55.25525525525526
+[2m2026-10-10T18:51:03.255118Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m57.65765765765766
+[2m2026-10-10T18:51:36.309355Z[0m [33m WARN[0m [2msq_conn_ton[0m[2m:[0m tonapi unavailable, falling back to toncenter [3merror[0m[2m=[0mton-testnet: rate limited
+[2m2026-10-10T18:51:55.570111Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m9 [3mpercent[0m[2m=[0m60.06006006006006
+[2m2026-10-10T18:52:53.059329Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m62.46246246246246
+[2m2026-10-10T18:53:42.919802Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m64.86486486486487
+[2m2026-10-10T18:54:32.821867Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m67.26726726726727
+[2m2026-10-10T18:55:15.790100Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m69.66966966966967
+[2m2026-10-10T18:56:13.954184Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m72.07207207207207
+[2m2026-10-10T18:57:05.583142Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m74.47447447447448
+[2m2026-10-10T18:58:00.371362Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m76.87687687687688
+[2m2026-10-10T18:58:52.109954Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m79.27927927927928
+[2m2026-10-10T18:59:49.639216Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m81.68168168168168
+[2m2026-10-10T19:00:41.726739Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m84.08408408408408
+[2m2026-10-10T19:01:33.847402Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m86.48648648648648
+[2m2026-10-10T19:02:22.303610Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m88.88888888888889
+[2m2026-10-10T19:03:10.936167Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m91.29129129129129
+[2m2026-10-10T19:04:02.657913Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m93.69369369369369
+[2m2026-10-10T19:04:55.494350Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m96.09609609609609
+[2m2026-10-10T19:05:53.746992Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m8 [3mflags[0m[2m=[0m8 [3mpercent[0m[2m=[0m98.49849849849849
+[2m2026-10-10T19:06:20.891812Z[0m [32m INFO[0m [2msq_services::validator[0m[2m:[0m validation pass [3mchecked[0m[2m=[0m5 [3mflags[0m[2m=[0m5 [3mpercent[0m[2m=[0m100.0

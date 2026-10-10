@@ -1,7 +1,8 @@
 import { css, html, nothing, type TemplateResult } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import type { UiError } from '../../core/errors';
-import { surfaceStyles, textStyles } from '../../core/styles';
+import { icon } from '../../core/icons';
+import { textStyles } from '../../core/styles';
 import { Widget } from '../../core/Widget';
 import '../button/Button';
 
@@ -20,38 +21,43 @@ export interface PasskeyPromptData {
 export class PasskeyPrompt extends Widget<PasskeyPromptData> {
   static override styles = [
     textStyles,
-    surfaceStyles,
     css`
-      .card {
+      section {
         display: grid;
         gap: var(--sq-space-3);
       }
-      .head {
+      .card {
         display: flex;
-        gap: var(--sq-space-3);
-        align-items: flex-start;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 12px;
+        border-radius: 16px;
+        border: 1px solid var(--sq-border);
+        background: var(--sq-soft-gradient);
       }
       .icon {
         flex: none;
+        width: 31px;
+        height: 31px;
+        border-radius: 10px;
         display: grid;
         place-items: center;
-        width: 40px;
-        height: 40px;
-        border-radius: var(--sq-radius-md);
-        color: var(--sq-accent);
-        background: color-mix(in srgb, var(--sq-accent) 12%, transparent);
+        color: #b8adff;
+        background: rgba(123, 92, 255, 0.15);
       }
       .icon.busy {
-        animation: pulse 1.2s var(--sq-ease) infinite;
+        animation: pulse 1.2s ease-in-out infinite;
       }
-      svg {
-        width: 22px;
-        height: 22px;
+      .copy {
+        display: grid;
+        gap: 3px;
+      }
+      h2 {
+        font: 600 12px/1.3 var(--sq-font);
       }
       p {
-        font-size: 13px;
+        font-size: 10px;
         line-height: 1.45;
-        margin-top: 2px;
       }
       @keyframes pulse {
         50% {
@@ -68,15 +74,10 @@ export class PasskeyPrompt extends Widget<PasskeyPromptData> {
 
   protected override renderReady(data: PasskeyPromptData): TemplateResult {
     return html`
-      <section class="card" aria-busy=${data.busy ? 'true' : 'false'}>
-        <div class="head">
-          <span class="icon ${data.busy ? 'busy' : ''}" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-              <circle cx="8" cy="12" r="3.5" />
-              <path d="M11.5 12H21m-3 0v3m-3-3v2" />
-            </svg>
-          </span>
-          <div>
+      <section aria-busy=${data.busy ? 'true' : 'false'}>
+        <div class="card">
+          <span class="icon ${data.busy ? 'busy' : ''}" aria-hidden="true">${icon('fingerprint')}</span>
+          <div class="copy">
             <h2>${data.title}</h2>
             <p class="muted">${data.busy ? 'Suivez les instructions de votre appareil…' : data.description}</p>
           </div>

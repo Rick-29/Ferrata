@@ -101,6 +101,8 @@ pub struct MockChain {
     pub(super) order: Vec<B256>,
     /// Derived index: target event -> flags raised on it.
     pub(super) flags: BTreeMap<B256, Vec<Flag>>,
+    /// Derived index: `report_key(network, address)` -> reports, oldest first.
+    pub(super) reports: BTreeMap<String, Vec<super::AddressReport>>,
     store: Box<dyn BlockStore>,
 }
 
@@ -241,6 +243,7 @@ impl MockChain {
             txs: BTreeMap::new(),
             order: Vec::new(),
             flags: BTreeMap::new(),
+            reports: BTreeMap::new(),
             store,
         }
     }
@@ -529,6 +532,86 @@ impl MockChain {
         let action = DecodedAction::ContractCall { target: target_from, selector: selector(b"flag(bytes32,string)"), value: U256::ZERO };
         let tx = ChainTx { extra, ..self.event(TxKind::Flag, Address::ZERO, target_from, U256::ZERO, Bytes::copy_from_slice(flag.target.as_slice()), 0, flag.target, action, now) };
         self.commit(tx, &SubmitMeta::default()).map(Some)
+    }
+
+    // ----- reports about addresses -----
+
+    pub fn report_hash(&self, report: &super::AddressReport) -> B256 {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"ferra-report-v1|");
+        buf.extend_from_slice(&self.cfg.chain_id.to_be_bytes());
+        buf.extend_from_slice(&json_bytes(report));
+        keccak256(&buf)
+    }
+
+    /// Swissquote attests that `report` was filed. Nobody's funds move; the report becomes
+    /// evidence for every event, past and future, that touches that address.
+    pub fn report_address(&mut self, report: super::AddressReport, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        if report.address.trim().is_empty() || report.network.trim().is_empty() {
+            return Err(ChainError::MalformedEvent("report needs a network and an address".into()));
+        }
+        let hash = self.report_hash(&report);
+        let mut extra = BTreeMap::new();
+        extra.insert("report".into(), serde_json::to_value(&report).map_err(|e| ChainError::MalformedEvent(e.to_string()))?);
+        let action = DecodedAction::ContractCall { target: Address::ZERO, selector: selector(b"reportAddress(bytes)"), value: U256::ZERO };
+        let tx = ChainTx { cosignature: Some(cosignature.clone()), extra, ..self.event(TxKind::AddressReport, Address::ZERO, Address::ZERO, U256::ZERO, Bytes::new(), 0, hash, action, now) };
+        self.commit(tx, &SubmitMeta::default())
+    }
+
+    pub fn reports_of(&self, network: &str, address: &str) -> Vec<super::AddressReport> {
+        self.reports.get(&super::report_key(network, address)).cloned().unwrap_or_default()
+    }
+
+    pub fn report_count(&self, network: &str, address: &str) -> u64 {
+        self.reports.get(&super::report_key(network, address)).map(|r| r.len() as u64).unwrap_or(0)
+    }
+
+    pub fn reported_addresses(&self) -> Vec<super::ReportedAddress> {
+        self.reports
+            .values()
+            .filter_map(|rs| {
+                let first = rs.first()?;
+                let mut categories: Vec<String> = rs.iter().map(|r| r.category.clone()).collect();
+                categories.sort();
+                categories.dedup();
+                Some(super::ReportedAddress {
+                    network: first.network.clone(),
+                    address: first.address.clone(),
+                    count: rs.len() as u64,
+                    categories,
+                    first_at: first.at,
+                    last_at: rs.last().map(|r| r.at).unwrap_or(first.at),
+                })
+            })
+            .collect()
+    }
+
+    /// The counterparty of `tx` as `(network, address)` strings, the way reports are keyed.
+    pub(super) fn counterparty_key(&self, tx: &ChainTx) -> Option<(String, String)> {
+        match tx.kind {
+            TxKind::External => {
+                let ext = tx.extra.get("external")?;
+                let incoming = tx.extra.get("incoming").and_then(|v| v.as_bool()).unwrap_or(false);
+                let raw = ext.get(if incoming { "from_raw" } else { "to_raw" })?.as_str()?;
+                Some((tx.network.name.clone(), raw.to_string()))
+            }
+            TxKind::Cosigned | TxKind::EscapeExit => {
+                let c = tx.action.counterparty().filter(|c| *c != tx.from)?;
+                Some((self.cfg.network.name.clone(), format!("{c:#x}")))
+            }
+            _ => None,
+        }
+    }
+
+    /// Reports filed against the counterparty of `tx`, on its own network.
+    pub fn counterparty_reports(&self, tx: &ChainTx) -> u64 {
+        self.counterparty_key(tx).map(|(n, a)| self.report_count(&n, &a)).unwrap_or(0)
+    }
+
+    /// Every validatable event whose counterparty is `address` on `network`.
+    pub fn events_involving(&self, network: &str, address: &str) -> Vec<ChainTx> {
+        let key = super::report_key(network, address);
+        self.events().into_iter().filter(|t| self.counterparty_key(t).is_some_and(|(n, a)| super::report_key(&n, &a) == key)).collect()
     }
 
     // ----- the owner's settings and intentions (see behaviour.rs) -----
@@ -963,6 +1046,14 @@ impl MockChain {
                 }
                 Ok(())
             }
+            TxKind::AddressReport => {
+                let report: super::AddressReport = extra_field(tx, "report")?;
+                if tx.user_op_hash != self.report_hash(&report) {
+                    return Err(ChainError::MalformedEvent("report hash mismatch".into()));
+                }
+                let sig = tx.cosignature.as_ref().ok_or(ChainError::MissingCosignature)?;
+                self.verify_cosignature(&tx.user_op_hash, sig)
+            }
             TxKind::SettingsChanged => {
                 let acc = self.account_for(tx)?;
                 let settings: WalletSettings = extra_field(tx, "settings")?;
@@ -1069,6 +1160,10 @@ impl MockChain {
             TxKind::Flag => {
                 let flag: Flag = extra_field(tx, "flag")?;
                 self.flags.entry(flag.target).or_default().push(flag);
+            }
+            TxKind::AddressReport => {
+                let report: super::AddressReport = extra_field(tx, "report")?;
+                self.reports.entry(super::report_key(&report.network, &report.address)).or_default().push(report);
             }
         }
         Ok(())
@@ -1602,6 +1697,64 @@ mod tests {
         assert!(codes.contains(&"OWN_LIMIT_BYPASS"), "{codes:?}");
         assert!(findings.iter().filter(|f| f.code == "BEHAVIOUR_DEVIATION").all(|f| f.target == big.tx_hash && f.severity == RiskBand::High));
         assert!(chain.verify().ok);
+    }
+
+    #[test]
+    fn flag_data_with_long_floats_survives_the_file_round_trip() {
+        // serde_json without `float_roundtrip` parses 17-digit decimals off by one ulp, which
+        // re-serializes to different bytes and breaks the event hash on replay. Seen live.
+        let dir = std::env::temp_dir().join(format!("sqw-floats-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("chain.jsonl");
+        let _ = std::fs::remove_file(&path);
+        let sq = Ed25519Signer::from_seed([42u8; 32]);
+        let owner = Owner::new(1);
+        {
+            let mut chain = MockChain::new(cfg(&sq), validator(), Box::new(JsonlBlockStore::new(path.clone()))).unwrap();
+            let addr = chain.create_account(owner.key(), 1_000).unwrap();
+            chain.fund(addr, Some(usdc()), U256::from(500_000_000u64), 1_002).unwrap();
+            let op = cosigned(&chain, &sq, &owner, usdc_tx(addr, Address::repeat_byte(0x22), 5));
+            let r = chain.submit(&op, &SubmitMeta::default(), 1_600).unwrap();
+            for (i, score) in [0.11916792860243773f64, 0.9883802300053742, 1.0000001000000011e-9, 0.975609756097561].into_iter().enumerate() {
+                let mut data = BTreeMap::new();
+                data.insert("score".into(), serde_json::json!(score));
+                data.insert("top".into(), serde_json::json!([("a", score / 3.0), ("b", -score)]));
+                let f = super::super::Flag { code: format!("F{i}"), severity: RiskBand::Low, source: super::super::FlagSource::Model, message: String::new(), at: 1_700 + i as u64, target: r.tx_hash, data };
+                chain.flag(f, 1_700 + i as u64).unwrap();
+            }
+        }
+        let reopened = MockChain::new(cfg(&sq), validator(), Box::new(JsonlBlockStore::new(path.clone()))).unwrap();
+        assert!(reopened.verify().ok, "{:?}", reopened.verify());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn address_reports_are_attested_indexed_and_weigh_on_counterparty_features() {
+        let (mut chain, sq, owner, addr) = setup();
+        let mule = Address::repeat_byte(0x33);
+        let before = chain.submit(&cosigned(&chain, &sq, &owner, usdc_tx(addr, mule, 1_000_000)), &SubmitMeta::default(), 1_010).unwrap();
+        assert_eq!(chain.tx(before.tx_hash).unwrap().features.unwrap().counterparty_reports, 0);
+
+        let report = super::super::AddressReport { network: "ferra".into(), address: format!("{mule:#x}"), category: "scam".into(), reason: "took my money".into(), reporter: "SQ-100001".into(), at: 1_020 };
+        let h = chain.report_hash(&report);
+        assert_eq!(chain.report_address(report.clone(), &Bytes::from(vec![0u8; 64]), 1_020).unwrap_err(), ChainError::BadCosignature);
+        let r = chain.report_address(report.clone(), &sq.cosign(&h), 1_020).unwrap();
+        assert_eq!(r.kind, TxKind::AddressReport);
+        assert_eq!(chain.reports_of("ferra", &format!("{mule:#X}")), vec![report.clone()], "lookup is case-insensitive");
+        assert_eq!(chain.reported_addresses()[0].count, 1);
+        assert_eq!(chain.events_involving("ferra", &format!("{mule:#x}")).len(), 1);
+
+        // the next payment to the same address carries the report in its features
+        let after = chain.submit(&cosigned(&chain, &sq, &owner, usdc_tx(addr, mule, 1_000_000)), &SubmitMeta::default(), 1_030).unwrap();
+        assert_eq!(chain.tx(after.tx_hash).unwrap().features.unwrap().counterparty_reports, 1);
+        let other = chain.submit(&cosigned(&chain, &sq, &owner, usdc_tx(addr, Address::repeat_byte(0x44), 1_000_000)), &SubmitMeta::default(), 1_040).unwrap();
+        assert_eq!(chain.tx(other.tx_hash).unwrap().features.unwrap().counterparty_reports, 0);
+        assert!(chain.verify().ok);
+
+        // replay rebuilds the index
+        let blocks: Vec<_> = (0..=chain.latest().number).filter_map(|n| chain.block(n)).collect();
+        let replayed = MockChain::replay(cfg(&sq), validator().verifying_key(), &blocks).unwrap();
+        assert_eq!(replayed.reports_of("ferra", &format!("{mule:#x}")).len(), 1);
     }
 
     #[test]

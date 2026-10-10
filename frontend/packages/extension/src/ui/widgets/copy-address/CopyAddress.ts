@@ -1,6 +1,7 @@
 import { LitElement, css, html, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { shortAddress } from '../../core/format';
+import { icon } from '../../core/icons';
 
 const FEEDBACK_MS = 1500;
 
@@ -23,15 +24,15 @@ export class CopyAddress extends LitElement {
     button {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
+      height: 24px;
+      padding: 0 9px;
       font: inherit;
-      font-family: var(--sq-font-mono);
-      font-size: 12px;
-      padding: 4px 8px;
+      font-size: 9px;
       border-radius: 999px;
       border: 1px solid var(--sq-border);
-      background: var(--sq-surface-sunken);
-      color: var(--sq-text-muted);
+      background: rgba(255, 255, 255, 0.04);
+      color: #bcc1cf;
       cursor: pointer;
       transition: color var(--sq-duration) var(--sq-ease);
     }
@@ -43,8 +44,7 @@ export class CopyAddress extends LitElement {
       outline-offset: 2px;
     }
     .status {
-      font-family: var(--sq-font);
-      font-size: 11px;
+      display: inline-flex;
       font-weight: 600;
     }
     .copied {
@@ -61,7 +61,9 @@ export class CopyAddress extends LitElement {
     return html`
       <button type="button" title=${this.address} aria-label="Copier l'adresse ${this.address}" @click=${this.#copy}>
         <span>${shortAddress(this.address)}</span>
-        <span class="status ${this.status}" aria-live="polite">${STATUS_LABEL[this.status]}</span>
+        <span class="status ${this.status}" aria-live="polite">
+          ${this.status === 'idle' ? icon('copy', 13) : STATUS_LABEL[this.status]}
+        </span>
       </button>
     `;
   }

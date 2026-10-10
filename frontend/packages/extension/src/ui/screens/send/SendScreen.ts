@@ -5,6 +5,7 @@ import { customElement, state } from 'lit/decorators.js';
 import type { UiError } from '../../core/errors';
 import type { WidgetEvent } from '../../core/events';
 import { formatUnits, isAddress, toBaseUnits, toHexUnits, unitsToDecimal } from '../../core/format';
+import { screenHeader } from '../../core/header';
 import { Screen, toWidgetState } from '../../core/Screen';
 import { screenStyles, textStyles } from '../../core/styles';
 import { loading, ready, type WidgetState } from '../../core/Widget';
@@ -56,21 +57,27 @@ export class SendScreen extends Screen {
         flex-wrap: wrap;
         gap: 6px;
         align-items: center;
+        margin-top: 10px;
+      }
+      .demo .eyebrow {
+        width: 100%;
       }
       .chip {
+        height: 25px;
+        padding: 0 10px;
         font: inherit;
-        font-size: 12px;
-        font-weight: 600;
-        padding: 4px 10px;
+        font-size: 10px;
         border-radius: 999px;
-        border: 1px dashed var(--sq-border);
-        background: transparent;
+        border: 1px solid var(--sq-border);
+        background: rgba(255, 255, 255, 0.03);
         color: var(--sq-text-muted);
         cursor: pointer;
+        transition: color var(--sq-duration) var(--sq-ease);
       }
       .chip:hover {
-        color: var(--sq-text);
-        border-color: var(--sq-accent);
+        color: #fff;
+        border-color: rgba(255, 61, 127, 0.35);
+        background: linear-gradient(100deg, rgba(255, 106, 26, 0.13), rgba(123, 92, 255, 0.14));
       }
       .chip:focus-visible {
         outline: 2px solid var(--sq-focus);
@@ -86,12 +93,7 @@ export class SendScreen extends Screen {
 
   override render(): TemplateResult {
     return html`
-      <div class="topbar">
-        <sq-button variant="ghost" ?disabled=${this.busy} @click=${() => this.router.go('home', undefined)}>
-          ← Retour
-        </sq-button>
-        <span class="eyebrow">Envoyer</span>
-      </div>
+      ${screenHeader({ title: 'Envoyer', onBack: () => this.router.go('home', undefined), backDisabled: this.busy })}
       ${this.#body()}
     `;
   }
@@ -124,7 +126,7 @@ export class SendScreen extends Screen {
             @address-changed=${(e: WidgetEvent<'address-changed'>) => (this.to = e.detail)}
           ></sq-address-input>
           <div class="demo" aria-label="Adresses de démonstration">
-            <span class="eyebrow">Démo</span>
+            <span class="eyebrow">Scénarios de démonstration</span>
             ${DEMO_RECIPIENTS.map(
               (r) => html`<button type="button" class="chip" @click=${() => (this.to = r.address)}>${r.label}</button>`,
             )}

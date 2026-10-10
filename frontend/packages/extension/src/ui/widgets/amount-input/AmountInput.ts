@@ -15,20 +15,35 @@ export class AmountInput extends LitElement {
   static override styles = [
     fieldStyles,
     css`
+      .card {
+        position: relative;
+        display: grid;
+        gap: 9px;
+        padding: 14px;
+        border-radius: 20px;
+        border: 1px solid var(--sq-border);
+        background: var(--sq-surface);
+      }
       .row {
         display: flex;
-        align-items: center;
+        align-items: baseline;
         gap: var(--sq-space-2);
-        border-radius: var(--sq-radius-md);
       }
       input {
         flex: 1;
-        font-size: 20px;
-        font-weight: 650;
+        height: auto;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        font: 600 35px var(--sq-font-display);
+        letter-spacing: -0.05em;
         font-variant-numeric: tabular-nums;
       }
+      input:focus-visible {
+        box-shadow: none;
+      }
       .symbol {
-        font-weight: 650;
+        font: 600 13px var(--sq-font-display);
         color: var(--sq-text-muted);
       }
       .meta {
@@ -37,14 +52,16 @@ export class AmountInput extends LitElement {
         align-items: center;
       }
       .max {
+        position: absolute;
+        top: 12px;
+        right: 14px;
         font: inherit;
-        font-size: 12px;
-        font-weight: 650;
-        padding: 2px 8px;
+        font-size: 10px;
+        padding: 4px 9px;
         border-radius: 999px;
-        border: 1px solid var(--sq-border);
-        background: transparent;
-        color: var(--sq-accent);
+        border: 1px solid rgba(255, 61, 127, 0.2);
+        background: rgba(255, 61, 127, 0.08);
+        color: #ff91b6;
         cursor: pointer;
       }
       .max:focus-visible {
@@ -56,7 +73,7 @@ export class AmountInput extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <div class="field">
+      <div class="field card">
         <label for="amount">Montant</label>
         <div class="row">
           <input

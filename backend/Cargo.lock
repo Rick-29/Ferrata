@@ -1160,7 +1160,10 @@ dependencies = [
 name = "ferra-verify"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
  "clap",
+ "ed25519-dalek",
+ "hex",
  "serde",
  "serde_json",
  "sq-adapters",

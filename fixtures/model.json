@@ -29,13 +29,15 @@
     "kind_escape_exit": 3.0,
     "kind_external": 0.3,
     "family_bitcoin": 0.2,
-    "signer_webauthn": -0.3
+    "signer_webauthn": -0.3,
+    "counterparty_reports": 1.4
   },
   "transforms": {
     "policy_exposure_hops": "log1p",
     "velocity_ratio": "log1p",
     "sender_out_count_24h": "log1p",
     "decision_latency_secs": 600.0,
-    "sender_age_days": "log1p"
+    "sender_age_days": "log1p",
+    "counterparty_reports": "log1p"
   }
 }

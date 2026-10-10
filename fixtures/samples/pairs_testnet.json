@@ -1,0 +1,22 @@
+[
+  {
+    "network": "ton-testnet",
+    "from": "kQDMo9xJIt6qMhYJg5luhIK18XkRJVKUPeOgrA0ORJoTgewC",
+    "to": "0QD6a-uyjiAX8gRmtPi2ztdeBEliw6GrBa6dQBeM8wlQfJ5K"
+  },
+  {
+    "network": "ton-testnet",
+    "from": "0QA6oEoI7UaSejc-igtDQibuo4CNXDRqRdyup_B7JTr-COj8",
+    "to": "0QA6oEoI7UaSejc-igtDQibuo4CNXDRqRdyup_B7JTr-COj8"
+  },
+  {
+    "network": "eth-sepolia",
+    "from": "0x56E2269d4B304790aaCB97d5FB55aED39bf03DDD",
+    "to": "0x9cb7Fd7F7a60A7F0C35cF63A2Df1c3966c267Fa1"
+  },
+  {
+    "network": "eth-sepolia",
+    "from": "0x03eEb73365BEEDEdB0b643Ffe67d11309b1c08D5",
+    "to": "0x04485542eE9f8975f1Be6f5220C3d075bE8D3AB6"
+  }
+]

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 pub use sq_adapters::chain::{
+    AddressReport, ReportedAddress,
     ActivityLevel, Archetype, Intent, IntentOutcome, IntentOutcomeKind, WalletProfile, WalletSettings,
     AccountView, AssetBalance, Block, BlockWithTxs, ChainFamily, ChainInfo, ChainTx, ChainVerification, DatasetRow,
     EscapeStatus, ExternalRef, Flag, FlagSource, ModelInfo, Network, OwnerKey, OwnerSignature, PolicySnapshot, PreparedOp,
@@ -108,6 +109,67 @@ pub struct SettingsResponse {
 pub struct IntentState {
     pub intent: Intent,
     pub outcome: Option<IntentOutcomeKind>,
+}
+
+/// "This address is a scam." Filed by a client session; Swissquote attests it onto the chain.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AddressReportRequest {
+    pub network: String,
+    pub address: String,
+    /// `scam` (default), `phishing`, `hack`, `mixer`, `other`.
+    #[serde(default)]
+    pub category: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AddressReportResponse {
+    pub report: AddressReport,
+    pub tx: SubmitResult,
+    #[ts(type = "number")]
+    pub total_reports: u64,
+    /// Events already on the chain that touch this address, and how many got a new flag.
+    #[ts(type = "number")]
+    pub events_involved: u64,
+    #[ts(type = "number")]
+    pub events_flagged: u64,
+}
+
+/// One pass of the automatic validation worker.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ValidationPass {
+    #[ts(type = "number")]
+    pub checked: u64,
+    #[ts(type = "number")]
+    pub failed: u64,
+    #[ts(type = "number")]
+    pub flags_written: u64,
+    pub validation: ValidationStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ValidatorStatus {
+    pub enabled: bool,
+    #[ts(type = "number")]
+    pub interval_secs: u64,
+    #[ts(type = "number")]
+    pub batch: u64,
+    #[ts(type = "number")]
+    pub passes: u64,
+    #[ts(type = "number")]
+    pub events_checked: u64,
+    #[ts(type = "number")]
+    pub flags_written: u64,
+    #[ts(type = "number | null")]
+    pub last_pass_at: Option<u64>,
+    pub last_error: Option<String>,
+    #[ts(type = "number")]
+    pub retrying: u64,
+    pub validation: ValidationStatus,
 }
 
 /// Pre-transaction risk: "how risky is paying `counterparty` on `network`, for this wallet".

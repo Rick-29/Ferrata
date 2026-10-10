@@ -57,6 +57,10 @@ pub struct Config {
     pub dev_signer: bool,
     /// Require `Authorization: Bearer <token>` from `/auth/session` on every non-public route.
     pub require_auth: bool,
+    /// Seconds between automatic validation passes; 0 disables the worker.
+    pub validator_interval_secs: u64,
+    /// Events judged concurrently per pass.
+    pub validator_batch: usize,
     pub policy: PolicyConfig,
     pub seed: DemoSeed,
     pub clients: Vec<Client>,
@@ -98,6 +102,8 @@ impl Config {
         let mut cfg = Self::load(fixtures_dir, port, snapshot_path, signing_seed, dev_signer, require_auth)?;
         cfg.validator_seed = validator_seed;
         cfg.chain_file = chain_file;
+        cfg.validator_interval_secs = std::env::var("SQ_VALIDATOR_INTERVAL_SECS").ok().and_then(|v| v.parse().ok()).unwrap_or(30);
+        cfg.validator_batch = std::env::var("SQ_VALIDATOR_BATCH").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
         Ok(cfg)
     }
 
@@ -118,6 +124,8 @@ impl Config {
             validator_seed: None,
             dev_signer,
             require_auth,
+            validator_interval_secs: 0,
+            validator_batch: 4,
             policy,
             seed,
             clients: accounts.clients,

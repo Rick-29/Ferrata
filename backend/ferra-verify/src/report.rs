@@ -7,7 +7,6 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use serde::Deserialize;
-use sq_connectors::SourceRegistry;
 use sq_connectors::provenance::Watchlists;
 use sq_adapters::{LinearModel, RiskModel};
 use sq_connectors::report::{ReportConfig, transfer_report};
@@ -41,28 +40,13 @@ struct Cli {
     model: PathBuf,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct Pair {
     network: String,
     from: String,
     to: String,
 }
 
-fn registry() -> SourceRegistry {
-    let tonapi = std::env::var("SQ_TONAPI_KEY").ok();
-    let toncenter = std::env::var("SQ_TONCENTER_API_KEY").ok();
-    let mut reg = SourceRegistry::new()
-        .register(Box::new(sq_conn_ton::TonSource::new(true, tonapi.clone(), toncenter.clone())))
-        .register(Box::new(sq_conn_ton::TonSource::new(false, tonapi, toncenter)))
-        .register(Box::new(sq_conn_btc::EsploraBitcoinSource::testnet()))
-        .register(Box::new(sq_conn_btc::EsploraBitcoinSource::mainnet()))
-        .register(Box::new(sq_conn_sol::SolanaSource::new(true, std::env::var("SQ_SOLANA_RPC").ok())))
-        .register(Box::new(sq_conn_sol::SolanaSource::new(false, std::env::var("SQ_SOLANA_RPC").ok())));
-    for s in sq_conn_evm::well_known() {
-        reg = reg.register(Box::new(s));
-    }
-    reg
-}
 
 fn pairs(cli: &Cli) -> Result<Vec<Pair>, String> {
     let mut out = Vec::new();
@@ -94,7 +78,7 @@ pub fn main() -> ExitCode {
         }
     };
     let cfg = ReportConfig { max_pages: cli.pages, max_funding_sources: cli.max_funding, with_exposure: !cli.no_exposure, ..Default::default() };
-    let reg = registry();
+    let reg = crate::common::registry();
     let lists = Watchlists::default();
     let model: Option<Box<dyn RiskModel>> = match LinearModel::load(&cli.model) {
         Ok(m) => Some(Box::new(m)),
@@ -111,21 +95,38 @@ pub fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut reports = Vec::new();
-    for p in &pairs {
-        eprintln!("· {} {} → {}", p.network, p.from, p.to);
-        let source = match reg.get(&p.network) {
-            Ok(s) => s,
-            Err(e) => {
-                reports.push(serde_json::json!({ "network": p.network, "from_input": p.from, "to_input": p.to, "error": e.to_string() }));
-                continue;
-            }
-        };
-        match rt.block_on(transfer_report(source, &p.from, &p.to, &lists, cfg, model.as_deref(), now)) {
-            Ok(r) => reports.push(serde_json::to_value(&r).unwrap_or_default()),
-            Err(e) => reports.push(serde_json::json!({ "network": p.network, "from_input": p.from, "to_input": p.to, "error": e.to_string() })),
+    // Every pair is its own tokio task: all of them are researched at once, the per-network
+    // in-flight limit inside the connectors keeps public indexers from being burst.
+    let reg = std::sync::Arc::new(reg);
+    let lists = std::sync::Arc::new(lists);
+    let model: Option<std::sync::Arc<dyn RiskModel>> = model.map(std::sync::Arc::from);
+    let reports: Vec<serde_json::Value> = rt.block_on(async {
+        let mut set = tokio::task::JoinSet::new();
+        for (i, p) in pairs.iter().cloned().enumerate() {
+            eprintln!("· {} {} → {}", p.network, p.from, p.to);
+            let (reg, lists, model) = (reg.clone(), lists.clone(), model.clone());
+            set.spawn(async move {
+                let value = match reg.get(&p.network) {
+                    Err(e) => serde_json::json!({ "network": p.network, "from_input": p.from, "to_input": p.to, "error": e.to_string() }),
+                    Ok(source) => match transfer_report(source, &p.from, &p.to, &lists, cfg, model.as_deref(), now).await {
+                        Ok(r) => serde_json::to_value(&r).unwrap_or_default(),
+                        Err(e) => serde_json::json!({ "network": p.network, "from_input": p.from, "to_input": p.to, "error": e.to_string() }),
+                    },
+                };
+                eprintln!("✓ {} {} → {}", p.network, p.from, p.to);
+                (i, value)
+            });
         }
-    }
+        let mut done: Vec<(usize, serde_json::Value)> = Vec::new();
+        while let Some(r) = set.join_next().await {
+            match r {
+                Ok(v) => done.push(v),
+                Err(e) => eprintln!("error: task failed: {e}"),
+            }
+        }
+        done.sort_by_key(|(i, _)| *i);
+        done.into_iter().map(|(_, v)| v).collect()
+    });
     let text = serde_json::to_string_pretty(&reports).unwrap_or_default();
     match &cli.out {
         Some(path) => match std::fs::write(path, &text) {

@@ -52,7 +52,10 @@ export class TestnetWalletsPanel extends Screen {
         font-size: 12px;
       }
       .error {
-        color: var(--sq-danger, #b42318);
+        color: var(--sq-risk-critical);
+      }
+      .section-title {
+        font: 600 13px var(--sq-font-display);
       }
       a {
         color: var(--sq-accent);
@@ -67,7 +70,7 @@ export class TestnetWalletsPanel extends Screen {
 
   override render(): TemplateResult {
     return html`
-      <span class="eyebrow">Réseaux de test</span>
+      <span class="section-title">Réseaux de test</span>
       ${this.#renderWallets()}
     `;
   }

@@ -62,6 +62,8 @@ pub struct RiskInputs<'a> {
     pub receiver_info: Option<&'a AccountInfo>,
     pub provenance: Option<&'a ProvenanceAssessment>,
     pub now: u64,
+    /// Reports filed against the counterparty (from the Ferra chain), when the caller knows them.
+    pub counterparty_reports: u64,
 }
 
 fn band(score: u32) -> RiskBand {
@@ -178,6 +180,7 @@ pub fn features_from_history(i: &RiskInputs<'_>) -> TxFeatures {
         counterparty_first_seen_age_secs: i.receiver_history.iter().filter_map(|e| e.external.timestamp).min().map(|f| ts.saturating_sub(f)),
         counterparty_prior_flags: u64::from(i.receiver_info.is_some_and(|r| r.is_scam)),
         counterparty_prior_max_severity: i.receiver_info.filter(|r| r.is_scam).map(|_| RiskBand::Critical),
+        counterparty_reports: i.provenance.map(|p| p.reasons.iter().filter(|r| r.code == "REPORTED_ADDRESS").count() as u64).unwrap_or(0).max(i.counterparty_reports),
         reciprocal,
         counterparty_fan_out_ratio: if cp_out.is_empty() { 0.0 } else { cp_recipients.len() as f64 / cp_out.len() as f64 },
         counterparty_pass_through: pass_through,
@@ -218,6 +221,9 @@ pub fn assess_features(i: &RiskInputs<'_>, f: TxFeatures, model: Option<&dyn Ris
 
     if i.receiver_info.is_some_and(|r| r.is_scam) || i.transfer.scam_flag {
         push("SCAM_COUNTERPARTY", 100, "the indexer marks the counterparty as a scam".into());
+    }
+    if f.counterparty_reports > 0 {
+        push("REPORTED_COUNTERPARTY", if f.counterparty_reports >= 3 { 100 } else { 60 }, format!("{} Swissquote user(s) reported this address as a scam or fraud", f.counterparty_reports));
     }
     if let Some(p) = i.provenance {
         if p.reasons.iter().any(|r| r.code == "SANCTIONED_ADDRESS") {

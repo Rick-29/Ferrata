@@ -3,6 +3,7 @@ import { css, html, nothing, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { UiError } from '../../core/errors';
 import type { WidgetEvent } from '../../core/events';
+import { screenHeader } from '../../core/header';
 import { Screen } from '../../core/Screen';
 import { screenStyles, textStyles } from '../../core/styles';
 import { failed, loading, ready, type WidgetState } from '../../core/Widget';
@@ -43,12 +44,7 @@ export class SettingsScreen extends Screen {
 
   override render(): TemplateResult {
     return html`
-      <div class="topbar">
-        <sq-button variant="ghost" ?disabled=${this.busy} @click=${() => this.router.go('home', undefined)}>
-          ← Retour
-        </sq-button>
-        <span class="eyebrow">Réglages</span>
-      </div>
+      ${screenHeader({ title: 'Réglages', onBack: () => this.router.go('home', undefined), backDisabled: this.busy })}
       <section>
         <span class="eyebrow">Mes limites</span>
         <p class="muted">

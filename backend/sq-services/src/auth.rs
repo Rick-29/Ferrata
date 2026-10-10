@@ -58,12 +58,13 @@ impl<S: Send + Sync> FromRequestParts<S> for Caller {
 
 /// Routes reachable without a session: login itself, public chain reads, dev helpers.
 fn is_public(path: &str) -> bool {
-    path == "/auth/session" || path == "/chains" || path.starts_with("/networks") || path == "/model" || path.starts_with("/chain/") || path.starts_with("/dev/")
+    path == "/auth/session" || path == "/chains" || path.starts_with("/networks") || path == "/model" || path.starts_with("/chain/") || path.starts_with("/dev/") || path == "/validator"
 }
 
 /// Rejects any non-public request without a valid `Authorization: Bearer <token>`.
 pub async fn require_session(State(state): State<SharedState>, req: Request, next: Next) -> Result<Response, ServiceError> {
-    if !state.config.require_auth || is_public(req.uri().path()) || req.method() == axum::http::Method::OPTIONS {
+    let read_only_public = req.method() == axum::http::Method::GET && req.uri().path().starts_with("/reports/");
+    if !state.config.require_auth || is_public(req.uri().path()) || read_only_public || req.method() == axum::http::Method::OPTIONS {
         return Ok(next.run(req).await);
     }
     let (mut parts, body) = req.into_parts();

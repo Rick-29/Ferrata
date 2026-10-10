@@ -313,7 +313,7 @@ pub async fn transfer_report(source: &dyn NetworkSource, from_input: &str, to_in
         let effective: &ObservedEvent = if t.external.amount == "0" { history.iter().find(|e| base_id(&e.external.tx_id) == id && !e.incoming && e.external.amount != "0").unwrap_or(t) } else { t };
         let (funding, coverage) = funding_for(source, t, effective, &history, cfg, &mut notes).await;
         let risk = crate::risk::assess(
-            &RiskInputs { network: &network, transfer: effective, sender_history: &history, sender_info: from_info.as_ref(), receiver_history: &receiver_history, receiver_info: to_info.as_ref(), provenance: receiver_provenance.as_ref(), now },
+            &RiskInputs { network: &network, transfer: effective, sender_history: &history, sender_info: from_info.as_ref(), receiver_history: &receiver_history, receiver_info: to_info.as_ref(), provenance: receiver_provenance.as_ref(), now, counterparty_reports: lists.report_count(&network.name, &to) },
             model,
         );
         transfers.push(TransferDetail { event: EventSummary::from_event(t), related, funding, funding_coverage: coverage, risk: Some(risk) });
@@ -374,7 +374,7 @@ pub async fn report_for_event(source: &dyn NetworkSource, tx: &ChainTx, lists: &
     let (funding, coverage) = if incoming { funding_for(source, &event, &event, &cp_history, cfg, &mut notes).await } else { (Vec::new(), 0.0) };
     // The wallet's own history lives on the Ferra chain, not here; the counterparty's history is
     // what the model gets on the receiver side.
-    let risk = crate::risk::assess(&RiskInputs { network: &network, transfer: &event, sender_history: &[], sender_info: None, receiver_history: &cp_history, receiver_info: cp_info.as_ref(), provenance: Some(&provenance), now }, model);
+    let risk = crate::risk::assess(&RiskInputs { network: &network, transfer: &event, sender_history: &[], sender_info: None, receiver_history: &cp_history, receiver_info: cp_info.as_ref(), provenance: Some(&provenance), now, counterparty_reports: lists.report_count(&network.name, &counterparty) }, model);
     let max_risk = risk.combined;
     let (from, to) = if incoming { (counterparty.clone(), wallet.clone()) } else { (wallet.clone(), counterparty.clone()) };
     let mut seen: BTreeSet<String> = BTreeSet::new();

@@ -103,6 +103,7 @@ fn phrase(code: &str, value: f64, f: &TxFeatures) -> String {
         "counterparty_pass_through" => "the recipient forwards what it receives".into(),
         "counterparty_fan_out_ratio" => "the recipient spreads funds across many addresses".into(),
         "counterparty_prior_max_severity" => "the recipient was flagged before".into(),
+        "counterparty_reports" => format!("{} user(s) reported the recipient as a scam", f.counterparty_reports),
         "reciprocal" => "funds have gone back and forth with this address".into(),
         "fraction_of_balance" => format!("moves {:.0}% of your balance", f.fraction_of_balance * 100.0),
         "share_of_lifetime_volume" => format!("this is {:.0}% of everything you ever sent", f.share_of_lifetime_volume * 100.0),
@@ -288,7 +289,7 @@ pub async fn risk_preview(
     };
     let provenance = judge(&Evidence { network: &network, counterparty: &counterparty, wallet: &wallet, event: &ext, event_time: now, history: &history, info: info.as_ref(), exposure: exposure.as_ref(), lists, verified });
     let transfer = ObservedEvent { external: ext, incoming: false, counterparty: None, counterparty_label: info.as_ref().and_then(|i| i.name.clone()), scam_flag: info.as_ref().is_some_and(|i| i.is_scam) };
-    let inputs = RiskInputs { network: &network, transfer: &transfer, sender_history: &[], sender_info: None, receiver_history: &history, receiver_info: info.as_ref(), provenance: Some(&provenance), now };
+    let inputs = RiskInputs { network: &network, transfer: &transfer, sender_history: &[], sender_info: None, receiver_history: &history, receiver_info: info.as_ref(), provenance: Some(&provenance), now, counterparty_reports: lists.report_count(&network.name, &counterparty) };
     let mut features = crate::risk::features_from_history(&inputs);
     match sender {
         Some(ctx) => apply_sender(&mut features, ctx),

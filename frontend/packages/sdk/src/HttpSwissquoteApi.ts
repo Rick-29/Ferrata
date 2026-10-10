@@ -13,12 +13,14 @@ import type { LoginRequest } from '@sqw/types/LoginRequest';
 import type { LogResponse } from '@sqw/types/LogResponse';
 import type { OwnerKey } from '@sqw/types/OwnerKey';
 import type { OwnerSignature } from '@sqw/types/OwnerSignature';
+import type { RecoveryState } from '@sqw/types/RecoveryState';
 import type { RegisterWalletRequest } from '@sqw/types/RegisterWalletRequest';
 import type { RegisterWalletResponse } from '@sqw/types/RegisterWalletResponse';
 import type { Session } from '@sqw/types/Session';
 import type { SetSettingsRequest } from '@sqw/types/SetSettingsRequest';
 import type { SettingsResponse } from '@sqw/types/SettingsResponse';
 import type { SignedUserOp } from '@sqw/types/SignedUserOp';
+import type { StartRecoveryRequest } from '@sqw/types/StartRecoveryRequest';
 import type { SubmitResult } from '@sqw/types/SubmitResult';
 import type { SyncRequest } from '@sqw/types/SyncRequest';
 import type { SyncResponse } from '@sqw/types/SyncResponse';
@@ -101,6 +103,22 @@ export class HttpSwissquoteApi implements SwissquoteApi {
 
   setSettings(address: string, request: SetSettingsRequest): Call<SettingsResponse> {
     return this.#http.post(`/settings/${seg(address)}`, request);
+  }
+
+  startRecovery(request: StartRecoveryRequest): Call<RecoveryState> {
+    return this.#http.post('/recovery/start', request);
+  }
+
+  recovery(id: string): Call<RecoveryState> {
+    return this.#http.get(`/recovery/${seg(id)}`);
+  }
+
+  cancelRecovery(id: string, signature: OwnerSignature): Call<RecoveryState> {
+    return this.#http.post(`/recovery/${seg(id)}/cancel`, { signature });
+  }
+
+  executeRecovery(id: string): Call<RecoveryState> {
+    return this.#http.post(`/recovery/${seg(id)}/execute`);
   }
 
   devPasskey(name: string): Call<DevPasskey> {

@@ -56,6 +56,14 @@ fn run(cli: &Cli) -> Result<bool, String> {
     let now = head.timestamp;
     let events = chain.events();
 
+    let reported = chain.reported_addresses();
+    if !reported.is_empty() {
+        println!("reported addresses: {}", reported.len());
+        for r in &reported {
+            println!("  {:<14} {:<48} {} report(s): {}", r.network, r.address, r.count, r.categories.join(", "));
+        }
+    }
+
     if cli.events {
         println!("\n{:>5}  {:<16} {:<16} {:<9} {:<9} {}", "block", "kind", "network", "wallet", "reviewed", "flags");
         for tx in &events {
