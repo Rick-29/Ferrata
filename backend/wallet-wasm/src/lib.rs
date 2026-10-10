@@ -42,6 +42,8 @@ struct EntryInput {
     #[serde(default)]
     step_up: bool,
     #[serde(default)]
+    risk_accepted: bool,
+    #[serde(default)]
     warnings: Vec<String>,
     timestamp: u64,
 }
@@ -119,6 +121,7 @@ impl WalletCore {
             assessment: i.assessment,
             outcome: i.outcome,
             step_up: i.step_up,
+            risk_accepted: i.risk_accepted,
             warnings: i.warnings,
             timestamp: i.timestamp,
         };

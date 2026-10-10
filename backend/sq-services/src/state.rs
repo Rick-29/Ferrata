@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use alloy_primitives::{Address, B256, keccak256};
 use api_types::{PolicySnapshot, SubmitMeta};
-use api_types::{HoldState, RecoveryState, Session};
+use api_types::{RecoveryState, Session};
 use ed25519_dalek::SigningKey;
 use sq_adapters::chain::ChainGuard;
 use sq_adapters::{
@@ -34,7 +34,6 @@ pub struct AppState {
     pub clock: Arc<dyn Clock>,
     pub sessions: Mutex<HashMap<String, Session>>,
     pub challenges: Mutex<HashMap<B256, u64>>,
-    pub holds: Mutex<HashMap<String, HoldState>>,
     pub recoveries: Mutex<HashMap<String, RecoveryState>>,
     /// Which Swissquote client registered each wallet address. A session may only act on its own.
     pub owners: Mutex<HashMap<Address, String>>,
@@ -120,7 +119,6 @@ impl AppState {
             clock,
             sessions: Mutex::new(HashMap::new()),
             challenges: Mutex::new(HashMap::new()),
-            holds: Mutex::new(HashMap::new()),
             recoveries: Mutex::new(HashMap::new()),
             owners: Mutex::new(HashMap::new()),
             prepared: Mutex::new(HashMap::new()),
@@ -149,7 +147,7 @@ impl AppState {
         Ok(Box::new(chain))
     }
 
-    /// Fresh chains, empty logs, no holds or recoveries. Sessions and dev passkeys survive.
+    /// Fresh chains, empty logs, no recoveries. Sessions and dev passkeys survive.
     pub fn reset(&self) -> Result<(), ServiceError> {
         let now = self.now();
         let signer = match self.config.signing_seed {
@@ -161,7 +159,6 @@ impl AppState {
         }
         self.chains.reset(|_| Self::make_mock_chain(&self.config, &signer, self.validator_seed, now))?;
         self.log.clear()?;
-        self.lock(&self.holds)?.clear();
         self.lock(&self.recoveries)?.clear();
         self.lock(&self.challenges)?.clear();
         self.lock(&self.owners)?.clear();
@@ -229,6 +226,7 @@ impl AppState {
             reasons: e.entry.assessment.reasons.iter().map(|r| format!("{:?}", r.code)).collect(),
             sanctions_hit: None,
             exposure_hops: None,
+            risk_accepted: e.entry.risk_accepted,
         });
         Ok(SubmitMeta { prepared_at, step_up: entry.is_some_and(|e| e.entry.step_up), policy, fee: None })
     }

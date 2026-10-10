@@ -282,10 +282,25 @@ pub struct CosignRequest {
     pub seq: u64,
     #[ts(type = "string")]
     pub prev_head: B256,
-    /// Medium band only: a fresh owner signature over `step_up_hash` from the `step_up` outcome.
+    /// A fresh owner signature over `step_up_hash` from the `step_up` outcome.
     /// Proves the user re-authenticated; the server verifies it against the account's owner key.
     pub step_up: Option<OwnerSignature>,
+    /// High / Critical only: the user ticked "I understand the risks". Required with the step-up
+    /// signature for a `high_risk` confirmation; recorded on the log entry and the intent.
+    #[serde(default)]
+    pub accepted_risk: bool,
     pub account: Option<AccountContext>,
+}
+
+/// What kind of second confirmation Swissquote asks for. It never blocks on risk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ConfirmationLevel {
+    /// e.g. a large amount: confirm again with the passkey.
+    Standard,
+    /// High or Critical (non-regulatory): warned, must accept the risk, then confirm again.
+    HighRisk,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -299,58 +314,17 @@ pub enum CosignOutcome {
     },
     StepUp {
         entry: SignedEntry,
-        /// Sign this with the passkey and resend `/cosign` with it in `step_up`.
+        /// Sign this with the passkey and resend `/cosign` with it in `step_up`
+        /// (and `accepted_risk: true` when `level` is `high_risk`).
         #[ts(type = "string")]
         step_up_hash: B256,
+        level: ConfirmationLevel,
     },
-    Held {
-        entry: SignedEntry,
-        hold_id: String,
-        #[ts(type = "number")]
-        expires_at: u64,
-    },
+    /// Regulatory refusal. The reasons are in the signed entry for the audit trail; the UI must not show them.
     Refused {
         entry: SignedEntry,
+        reason: String,
     },
-}
-
-// ---------- holds ----------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum HoldStatus {
-    Pending,
-    Released,
-    Rejected,
-    Expired,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct HoldState {
-    pub id: String,
-    #[ts(type = "string")]
-    pub address: Address,
-    pub status: HoldStatus,
-    #[ts(type = "number")]
-    pub created_at: u64,
-    #[ts(type = "number")]
-    pub expires_at: u64,
-    #[ts(type = "string")]
-    pub user_op_hash: B256,
-    pub assessment: RiskAssessment,
-    pub justification: Option<String>,
-    /// Filled when released: the co-signature plus the new `Cosigned` log entry to append.
-    #[ts(type = "string | null")]
-    pub cosignature: Option<Bytes>,
-    pub release_entry: Option<SignedEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct JustifyRequest {
-    pub text: String,
 }
 
 // ---------- log ----------

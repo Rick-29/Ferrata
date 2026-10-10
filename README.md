@@ -60,11 +60,12 @@ Hashes and amounts are `0x` hex strings; numbers are JSON numbers. Send the sess
    POST /wallet/register     { owner, challenge, signature }                 → { address, account, accounts[] }   (one account per chain)
 3. POST /chain/faucet        { address, asset: USDC|null, amount }           → { tx_hash, block_number }
 4. POST /assess              { tx, account? }                                → { action, assessment, signals, prepared: { user_op_hash, nonce }, next_seq, head }
-5. POST /cosign              { tx, user_op_hash, seq, prev_head, step_up?, account? }
+5. POST /cosign              { tx, user_op_hash, seq, prev_head, step_up?, accepted_risk, account? }
                                                                              → { kind: "cosigned", entry, cosignature }
-                                                                             | { kind: "step_up", entry, step_up_hash }   → sign step_up_hash with the passkey, resend with step_up
-                                                                             | { kind: "held", entry, hold_id }          → POST /holds/{id}/justify { text } → { cosignature, release_entry }
-                                                                             | { kind: "refused", entry }
+                                                                             | { kind: "step_up", entry, step_up_hash, level: "standard" }  → passkey signs step_up_hash, resend with step_up
+                                                                             | { kind: "step_up", entry, step_up_hash, level: "high_risk" } → user ticks "I understand the risks", passkey signs,
+                                                                                                                                              resend with step_up + accepted_risk: true
+                                                                             | { kind: "refused", entry, reason: "regulatory" }             → sanctions only; do not show the reasons
 6. POST /chain/submit        { tx, nonce, owner_signature, cosignature }     → { tx_hash, block_number, kind }
 ```
 
@@ -83,9 +84,9 @@ per name, in-memory only.
 | --- | --- | --- |
 | an address the account already paid, or one in `account.known_recipients` | Low | nothing fires |
 | any new address, small amount | Low | `NEW_RECIPIENT` (20) |
-| any new address, more than 1000 USDC | Medium → step-up | `LARGE_AMOUNT` + `NEW_RECIPIENT` (45) |
-| `0x…c0ffee` | High → hold | 2 hops from the mock mixer (`MIXER_EXPOSURE` 40 + 20) |
-| `0x…dead` | Critical → refused | sanctions list (100) |
+| any new address, more than 1000 USDC | Medium → second confirmation | `LARGE_AMOUNT` + `NEW_RECIPIENT` (45) |
+| `0x…c0ffee` | High → warning + acceptance + second confirmation | 2 hops from the mock mixer (`MIXER_EXPOSURE` 40 + 20) |
+| `0x…dead` | refused (regulatory) | sanctions list (100) |
 | unlimited `approve` from an unknown origin | High | `UNLIMITED_APPROVAL` 30 + `UNKNOWN_ORIGIN` 10 + 20 |
 
 USDC is `0xaaaa…aaaa` (6 decimals). ERC-20 calldata is the standard `transfer(address,uint256)` encoding.
@@ -132,7 +133,9 @@ POST /provenance/{tx_hash}                        → for an external event: the
                                                      recorded as a PROVENANCE flag (also: POST /review/{address}?provenance=true)
 ```
 
-The policy applies the owner's own per-transaction limit (`OWN_LIMIT_EXCEEDED`, 25 points). Features
+The policy applies the owner's own per-transaction limit (`OWN_LIMIT_EXCEEDED`, 25 points). Risk
+acceptance is recorded on the log entry (`risk_accepted`), the intent outcome (`risk_accepted`) and
+the event features, so "warned and went ahead" is itself data for the model. Features
 version 2 add profile-relative numbers (amount versus the user's mean and p95, cancel rate, cancels and
 settings changes in the last 24 h, compose-to-submit latency, archetype). The review raises behaviour
 flags: `CANCEL_STREAK`, `SETTINGS_THEN_RETRY`, `BEHAVIOUR_DEVIATION`, `DORMANT_BURST`, `OWN_LIMIT_BYPASS`.
@@ -167,7 +170,6 @@ format is backward and forward compatible.
 | POST | `/auth/session` | mock login (`fixtures/accounts.json`) |
 | GET | `/ownership/challenge` · POST `/wallet/register` · POST `/wallet/overview` | ownership proof, account on every chain, aggregated view |
 | POST | `/assess` · `/cosign` | risk preview; co-sign decision (server re-scores, verifies step-up, derives known recipients) |
-| GET | `/holds/{id}` · POST `/holds/{id}/justify` | hold review (mock compliance: ≥10 chars, no "fraud"/"urgent") |
 | GET | `/log/{address}` · POST `/log/{address}/anchor` | audit log with receipts; anchor head on-chain |
 | POST | `/recovery/start` · GET `/recovery/{id}` · POST `…/cancel` · POST `…/execute` | timelocked recovery; cancel needs the current owner's signature over `cancel_hash` |
 | POST | `/reconcile/{address}` · `/review/{address}` | compliance views |
@@ -182,7 +184,10 @@ format is backward and forward compatible.
 Errors are always `{ code, message, details }`. Codes: `CORE_*` (`SEQ_GAP`, `CHAIN_BROKEN`,
 `BAD_RECEIPT`, …), `CHAIN_*` (`BAD_NONCE`, `BAD_OWNER_SIGNATURE`, `BAD_COSIGNATURE`,
 `ESCAPE_LOCKED`, `TAMPERED`, …), `NOT_FOUND`, `UNAUTHORIZED`, `CONFLICT`, `BAD_REQUEST`.
-Held and refused are 200s, not errors.
+Step-up and refused are 200s, not errors. **Swissquote never holds or blocks on risk**: it warns,
+asks for an explicit acceptance and a second passkey signature, and the user decides. The only
+refusal is regulatory (sanctions), and its reasons are not shown to the user
+(`implementation/… Positionnement légal du blocage.md`).
 
 ## Pseudo-blockchain rules
 
@@ -202,7 +207,7 @@ backend/
 ├── sq-adapters/      chain/ (backend trait + registry, ledger, auth, store) · log_store · signer · signals · clock
 ├── api-types/        HTTP DTOs, #[derive(TS)]; re-exports core + chain types
 ├── wallet-wasm/      one #[wasm_bindgen] class: assess · build_entry · verify_log · rule_ids
-└── sq-services/      main · config · state · error · auth · ownership · assess · holds · log · recovery · reconcile · review · chain · dev
+└── sq-services/      main · config · state · error · auth · ownership · assess · log · recovery · reconcile · review · wallet · chain · dev
                       tests/flow.rs: the whole demo through the router with a FixedClock
 fixtures/             accounts · policy · sanctions · exposure-graph · kyc-scripts · demo-seed
 ```

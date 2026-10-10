@@ -10,8 +10,11 @@ use crate::{CoreError, DecodedAction, Hash32, Receipt, ReceiptVerifier, RiskAsse
 #[ts(export)]
 pub enum OutcomeKind {
     Cosigned,
+    /// A second passkey confirmation is required (and, above Medium, an explicit risk acceptance).
     StepUp,
+    /// Legacy: Swissquote no longer holds transactions (see the legal positioning doc). Kept so old logs still parse.
     Held,
+    /// Regulatory refusal (sanctions). The only case where Swissquote declines to co-sign.
     Refused,
 }
 
@@ -29,6 +32,9 @@ pub struct LogEntry {
     pub assessment: RiskAssessment,
     pub outcome: OutcomeKind,
     pub step_up: bool,
+    /// The user was warned (High / Critical, non-regulatory) and explicitly accepted the risk.
+    #[serde(default)]
+    pub risk_accepted: bool,
     pub warnings: Vec<String>,
     #[ts(type = "number")]
     pub timestamp: u64,
@@ -149,6 +155,7 @@ pub(crate) mod tests {
             assessment: RiskAssessment { score: 0, band: RiskBand::Low, reasons: vec![] },
             outcome: OutcomeKind::Cosigned,
             step_up: false,
+            risk_accepted: false,
             warnings: vec![],
             timestamp: 1_700_000_000 + seq,
         }

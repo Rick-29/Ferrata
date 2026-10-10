@@ -96,9 +96,15 @@ pub struct Intent {
 pub enum IntentOutcomeKind {
     Submitted,
     Cancelled,
+    /// A second confirmation was asked (standard or with a risk warning).
     StepUpRequired,
+    /// The user ticked "I understand the risks" and confirmed again.
+    RiskAccepted,
+    /// Legacy; Swissquote no longer holds.
     Held,
+    /// Regulatory refusal.
     Refused,
+    /// Legacy; paired with `Held`.
     Released,
 }
 

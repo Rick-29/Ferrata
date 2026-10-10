@@ -52,7 +52,7 @@ amount_vs_mean_out: number, amount_vs_p95_out: number, holding_ratio: number, pr
 /**
  * Compose → signed submission, from the matching `intent` event.
  */
-intent_to_submit_secs: number | null, exceeds_own_limit: boolean, 
+intent_to_submit_secs: number | null, exceeds_own_limit: boolean, risk_accepted: boolean, 
 /**
  * Open for future features without a schema change.
  */

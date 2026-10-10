@@ -5,7 +5,12 @@ import type { TxRequest } from "./TxRequest";
 
 export type CosignRequest = { tx: TxRequest, user_op_hash: string, seq: number, prev_head: string, 
 /**
- * Medium band only: a fresh owner signature over `step_up_hash` from the `step_up` outcome.
+ * A fresh owner signature over `step_up_hash` from the `step_up` outcome.
  * Proves the user re-authenticated; the server verifies it against the account's owner key.
  */
-step_up: OwnerSignature | null, account: AccountContext | null, };
+step_up: OwnerSignature | null, 
+/**
+ * High / Critical only: the user ticked "I understand the risks". Required with the step-up
+ * signature for a `high_risk` confirmation; recorded on the log entry and the intent.
+ */
+accepted_risk: boolean, account: AccountContext | null, };

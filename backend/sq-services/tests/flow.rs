@@ -123,15 +123,30 @@ impl App {
 
     /// assess → cosign with the current log head. Returns the outcome and the prepared op.
     async fn cosign(&self, tx: &TxRequest, account: &AccountContext, step_up: Option<OwnerSignature>) -> (CosignOutcome, PreparedOp) {
+        self.cosign_with(tx, account, step_up, false).await
+    }
+
+    async fn cosign_with(&self, tx: &TxRequest, account: &AccountContext, step_up: Option<OwnerSignature>, accepted_risk: bool) -> (CosignOutcome, PreparedOp) {
         let a: AssessResponse = self.post("/assess", AssessRequest { tx: tx.clone(), account: Some(account.clone()) }).await;
         let prepared = a.prepared.expect("account exists on chain");
         let outcome: CosignOutcome = self
             .post(
                 "/cosign",
-                CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: a.next_seq, prev_head: a.head, step_up, account: Some(account.clone()) },
+                CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: a.next_seq, prev_head: a.head, step_up, accepted_risk, account: Some(account.clone()) },
             )
             .await;
         (outcome, prepared)
+    }
+
+    /// Runs the full warn → accept → second signature path for a High-band transaction.
+    async fn accept_high_risk(&self, owner: &Owner, tx: &TxRequest) -> (SignedEntry, Bytes, PreparedOp) {
+        let (first, _) = self.cosign(tx, &AccountContext::default(), None).await;
+        let CosignOutcome::StepUp { step_up_hash: h, level, .. } = first else { panic!("{first:?}") };
+        assert_eq!(level, ConfirmationLevel::HighRisk);
+        let (second, prepared) = self.cosign_with(tx, &AccountContext::default(), Some(owner.sign(&h)), true).await;
+        let CosignOutcome::Cosigned { entry, cosignature } = second else { panic!("{second:?}") };
+        assert!(entry.entry.risk_accepted);
+        (entry, cosignature, prepared)
     }
 
     async fn submit(&self, owner: &Owner, tx: TxRequest, prepared: &PreparedOp, cosignature: Option<Bytes>) -> SubmitResult {
@@ -293,15 +308,16 @@ async fn medium_band_requires_a_verified_step_up_signature() {
     let tx = usdc_tx(addr, Address::repeat_byte(0x22), 2_000_000_000);
 
     let (first, prepared) = app.cosign(&tx, &account, None).await;
-    let CosignOutcome::StepUp { step_up_hash: h, .. } = first else { panic!("{first:?}") };
+    let CosignOutcome::StepUp { step_up_hash: h, level, .. } = first else { panic!("{first:?}") };
+    assert_eq!(level, ConfirmationLevel::Standard);
     assert_eq!(h, step_up_hash(&prepared.user_op_hash));
 
     // a signature from a different key, or over the wrong hash, is rejected
     let log: LogResponse = app.get(&format!("/log/{addr}")).await;
-    let forged = CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: log.next_seq, prev_head: log.head, step_up: Some(Owner::new(4).sign(&h)), account: None };
+    let forged = CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: log.next_seq, prev_head: log.head, step_up: Some(Owner::new(4).sign(&h)), accepted_risk: false, account: None };
     let (s, e) = app.post_err("/cosign", forged).await;
     assert_eq!((s, e.code.as_str()), (StatusCode::UNAUTHORIZED, "UNAUTHORIZED"));
-    let wrong_hash = CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: log.next_seq, prev_head: log.head, step_up: Some(owner.sign(&prepared.user_op_hash)), account: None };
+    let wrong_hash = CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: log.next_seq, prev_head: log.head, step_up: Some(owner.sign(&prepared.user_op_hash)), accepted_risk: false, account: None };
     let (s, _) = app.post_err("/cosign", wrong_hash).await;
     assert_eq!(s, StatusCode::UNAUTHORIZED);
 
@@ -313,7 +329,7 @@ async fn medium_band_requires_a_verified_step_up_signature() {
 }
 
 #[tokio::test]
-async fn high_band_is_held_then_released_with_justification() {
+async fn high_band_warns_and_needs_acceptance_plus_second_signature_never_a_hold() {
     let app = App::logged_in().await;
     let owner = Owner::new(4);
     let addr = app.onboard(&owner).await;
@@ -321,21 +337,29 @@ async fn high_band_is_held_then_released_with_justification() {
     let tx = usdc_tx(addr, MIXER_EXPOSED, 1_000_000);
 
     let (outcome, prepared) = app.cosign(&tx, &account, None).await;
-    let CosignOutcome::Held { hold_id, entry, .. } = outcome else { panic!("{outcome:?}") };
+    let CosignOutcome::StepUp { entry, step_up_hash: h, level } = outcome else { panic!("{outcome:?}") };
+    assert_eq!(level, ConfirmationLevel::HighRisk);
     assert_eq!(entry.entry.assessment.band, RiskBand::High);
     assert!(entry.entry.assessment.reasons.iter().any(|r| r.code == ReasonCode::MixerExposure));
 
-    let (s, _) = app.post_err(&format!("/holds/{hold_id}/justify"), JustifyRequest { text: "short".into() }).await;
-    assert_eq!(s, StatusCode::BAD_REQUEST);
+    // a second signature without the explicit acceptance is not enough
+    let (again, _) = app.cosign_with(&tx, &account, Some(owner.sign(&h)), false).await;
+    assert!(matches!(again, CosignOutcome::StepUp { level: ConfirmationLevel::HighRisk, .. }), "{again:?}");
+    // acceptance without a valid second signature is not enough either
+    let (s, _) = app
+        .post_err("/cosign", CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: 99, prev_head: B256::ZERO, step_up: Some(Owner::new(5).sign(&h)), accepted_risk: true, account: None })
+        .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
 
-    let hold: HoldState = app.post(&format!("/holds/{hold_id}/justify"), JustifyRequest { text: "Paying my cousin back for the ski trip".into() }).await;
-    assert_eq!(hold.status, HoldStatus::Released);
-    let release = hold.release_entry.unwrap();
-    assert_eq!(release.entry.seq, 1);
-    assert_eq!(release.entry.outcome, OutcomeKind::Cosigned);
-
-    let r = app.submit(&owner, tx, &prepared, hold.cosignature).await;
+    let (accepted, prepared) = app.cosign_with(&tx, &account, Some(owner.sign(&h)), true).await;
+    let CosignOutcome::Cosigned { entry, cosignature } = accepted else { panic!("{accepted:?}") };
+    assert!(entry.entry.risk_accepted && entry.entry.step_up);
+    assert!(entry.entry.warnings.iter().any(|w| w.contains("accepted the risk")));
+    let r = app.submit(&owner, tx, &prepared, Some(cosignature)).await;
     assert_eq!(r.kind, TxKind::Cosigned);
+    let t: ChainTx = app.get(&format!("/chain/tx/{}", r.tx_hash)).await;
+    assert!(t.features.unwrap().risk_accepted);
+    assert_eq!(t.risk_level, Some(RiskBand::High));
     let rec: ReconcileResponse = app.post(&format!("/reconcile/{addr}"), serde_json::json!({})).await;
     assert!(rec.findings.is_empty(), "{:?}", rec.findings);
 }
@@ -347,8 +371,10 @@ async fn critical_band_is_refused_and_chain_rejects_forged_cosignature() {
     let addr = app.onboard(&owner).await;
     let tx = usdc_tx(addr, SANCTIONED, 1);
     let (outcome, prepared) = app.cosign(&tx, &AccountContext::default(), None).await;
-    let CosignOutcome::Refused { entry } = outcome else { panic!("{outcome:?}") };
+    let CosignOutcome::Refused { entry, reason } = outcome else { panic!("{outcome:?}") };
+    assert_eq!(reason, "regulatory");
     assert_eq!(entry.entry.assessment.band, RiskBand::Critical);
+    // a non-regulatory Critical (no sanctions) is warned, not refused: the escape-active drain below shows it
 
     let forged = Bytes::from(vec![1u8; 64]);
     let (s, e) = app
@@ -366,7 +392,7 @@ async fn cosign_rejects_stale_log_head_and_unknown_chain() {
     let tx = usdc_tx(addr, KNOWN, 1);
     let prepared: PreparedOp = app.post("/chain/prepare", SimulateRequest { tx: tx.clone() }).await;
     let (s, e) = app
-        .post_err("/cosign", CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: 7, prev_head: B256::ZERO, step_up: None, account: None })
+        .post_err("/cosign", CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: 7, prev_head: B256::ZERO, step_up: None, accepted_risk: false, account: None })
         .await;
     assert_eq!(s, StatusCode::CONFLICT);
     assert_eq!(e.code, "CORE_SEQ_GAP");
@@ -541,12 +567,10 @@ async fn review_flags_sanctioned_counterparties_and_escape_exits_and_verdicts() 
     let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
     mallory.submit(&bad, pay, &prepared, Some(cosignature)).await;
 
-    // alice then pays the mixer-exposed address through a released hold
+    // alice then pays the mixer-exposed address after being warned and accepting the risk
     let risky = usdc_tx(addr, MIXER_EXPOSED, 500_000);
-    let (outcome, prepared) = app.cosign(&risky, &AccountContext::default(), None).await;
-    let CosignOutcome::Held { hold_id, .. } = outcome else { panic!("{outcome:?}") };
-    let hold: HoldState = app.post(&format!("/holds/{hold_id}/justify"), JustifyRequest { text: "Refund to a friend who moved abroad".into() }).await;
-    app.submit(&owner, risky, &prepared, hold.cosignature).await;
+    let (_, cosignature, prepared) = app.accept_high_risk(&owner, &risky).await;
+    app.submit(&owner, risky, &prepared, Some(cosignature)).await;
 
     let r: ReviewReport = app.post(&format!("/review/{addr}"), serde_json::json!({})).await;
     assert_eq!(r.verdict, ReviewVerdict::Suspicious, "{r:?}");
@@ -709,10 +733,8 @@ async fn events_expose_wallet_risk_and_reviewed_risk_separately() {
     let owner = Owner::new(19);
     let addr = app.onboard(&owner).await;
     let tx = usdc_tx(addr, MIXER_EXPOSED, 1_000_000);
-    let (outcome, prepared) = app.cosign(&tx, &AccountContext::default(), None).await;
-    let CosignOutcome::Held { hold_id, .. } = outcome else { panic!("{outcome:?}") };
-    let hold: HoldState = app.post(&format!("/holds/{hold_id}/justify"), JustifyRequest { text: "Paying back a friend from the trip".into() }).await;
-    let mined = app.submit(&owner, tx, &prepared, hold.cosignature).await;
+    let (_, cosignature, prepared) = app.accept_high_risk(&owner, &tx).await;
+    let mined = app.submit(&owner, tx, &prepared, Some(cosignature)).await;
 
     let t: ChainTx = app.get(&format!("/chain/tx/{}", mined.tx_hash)).await;
     assert_eq!(t.risk_level, Some(RiskBand::High), "what the wallet computed at co-sign time");

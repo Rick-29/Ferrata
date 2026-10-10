@@ -1,4 +1,4 @@
-//! Swissquote-side services: co-signing, holds, recovery, reconciliation, ownership, and the
+//! Swissquote-side services: co-signing, recovery, reconciliation, ownership, review, and the
 //! pseudo-blockchain(s) the demo runs against. One Axum router, one module per capability.
 
 pub mod assess;
@@ -7,7 +7,6 @@ pub mod chain;
 pub mod config;
 pub mod dev;
 pub mod error;
-pub mod holds;
 pub mod log;
 pub mod ownership;
 pub mod reconcile;
@@ -34,7 +33,6 @@ pub fn router(state: SharedState) -> Router {
         .merge(auth::routes())
         .merge(ownership::routes())
         .merge(assess::routes())
-        .merge(holds::routes())
         .merge(log::routes())
         .merge(recovery::routes())
         .merge(reconcile::routes())

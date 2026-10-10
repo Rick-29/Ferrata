@@ -3,7 +3,7 @@
 Status of everything in `backend/`, kept current by P1. The frontend has its own file.
 Legend: ✅ done and tested · 🟡 work in progress · ⬜ not started · ❌ dropped.
 
-Last update: 2026-10-10, step 14 (intents, settings, profile, behaviour flags, provenance, ferra-verify --behaviour/--provenance).
+Last update: 2026-10-10, step 15 (B1: no hold; warn + accept + second signature; regulatory refusal only).
 
 ## Verification snapshot
 
@@ -105,6 +105,7 @@ Last update: 2026-10-10, step 14 (intents, settings, profile, behaviour flags, p
 | --- | --- | --- |
 | No tx without owner passkey **and** Swissquote co-signature | `ledger.rs::authorize` | ✅ |
 | Server re-scores every request; never trusts the client's assessment | `assess.rs::cosign` | ✅ |
+| **Swissquote never blocks on risk**: Medium → second signature; High / Critical → warning, explicit acceptance and second signature, both verified; only sanctions refuse (reason not disclosed) | `assess.rs::cosign`, legal doc | ✅ |
 | Log is a hash chain; seq gap, wrong head, tampered entry, forged receipt rejected | `log/`, `receipt/` | ✅ |
 | Medium band needs a **verified** passkey step-up signature | `assess.rs::step_up_hash` | ✅ |
 | Known recipients derived from Swissquote's records; client can add, not hide | `assess.rs::known_recipients` | ✅ |
@@ -133,7 +134,7 @@ Last update: 2026-10-10, step 14 (intents, settings, profile, behaviour flags, p
 | Auth | `POST /auth/session` | ✅ |
 | Ownership | `GET /ownership/challenge`, `POST /wallet/register`, `POST /wallet/overview` | ✅ |
 | Risk | `POST /assess`, `POST /cosign` | ✅ |
-| Holds | `GET /holds/{id}`, `POST /holds/{id}/justify` | ✅ |
+| Holds | removed (legal decision 2026-10-10); `OutcomeKind::Held` kept so old logs parse | ❌ |
 | Log | `GET /log/{address}`, `POST /log/{address}/anchor` | ✅ |
 | Recovery | start / get / cancel / execute | ✅ |
 | Compliance | `POST /reconcile/{address}`, `POST /review/{address}` | ✅ |
@@ -147,9 +148,9 @@ Last update: 2026-10-10, step 14 (intents, settings, profile, behaviour flags, p
 | Config via env + `fixtures/` | ✅ |
 | Chain persistence (`SQ_CHAIN_FILE`) | ✅ |
 | Audit-log snapshot (`SQ_LOG_SNAPSHOT`) | ✅ |
-| Holds, recoveries, sessions, owner bindings persist across restarts | ⬜ in memory |
+| Recoveries, sessions, owner bindings persist across restarts | ⬜ in memory |
 | Request-id on every span | ⬜ |
-| Hold expiry | 🟡 lazy on read |
+| Hold expiry | ❌ holds removed |
 | Docker / one-command run | ⬜ |
 
 ## Open decisions and known gaps

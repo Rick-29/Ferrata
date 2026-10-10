@@ -6,4 +6,8 @@ import type { RiskAssessment } from "./RiskAssessment";
 /**
  * One decision, as both the extension and Swissquote record it.
  */
-export type LogEntry = { seq: number, prev_head: string, user_op_hash: string, action: DecodedAction, assessment: RiskAssessment, outcome: OutcomeKind, step_up: boolean, warnings: Array<string>, timestamp: number, };
+export type LogEntry = { seq: number, prev_head: string, user_op_hash: string, action: DecodedAction, assessment: RiskAssessment, outcome: OutcomeKind, step_up: boolean, 
+/**
+ * The user was warned (High / Critical, non-regulatory) and explicitly accepted the risk.
+ */
+risk_accepted: boolean, warnings: Array<string>, timestamp: number, };

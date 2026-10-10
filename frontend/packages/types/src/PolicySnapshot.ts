@@ -5,4 +5,8 @@ import type { RiskBand } from "./RiskBand";
  * What the policy engine concluded when Swissquote co-signed. Recorded for learning, never
  * trusted for enforcement (the chain enforces signatures, not scores).
  */
-export type PolicySnapshot = { score: number | null, band: RiskBand | null, reasons: Array<string>, sanctions_hit: boolean | null, exposure_hops: number | null, };
+export type PolicySnapshot = { score: number | null, band: RiskBand | null, reasons: Array<string>, sanctions_hit: boolean | null, exposure_hops: number | null, 
+/**
+ * The user was warned and accepted the risk before this was co-signed.
+ */
+risk_accepted: boolean, };

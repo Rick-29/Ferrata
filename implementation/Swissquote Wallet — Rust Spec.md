@@ -143,8 +143,10 @@ Handlers stay thin: parse, call, map. Bearer-token middleware on everything exce
 `user_op_hash` → verify the step-up signature if present (owner key, over
 `keccak("SQW-STEPUP-v1" ‖ user_op_hash)`) → derive known recipients from log + chain history and
 merge with the client's → decode, simulate, signals, score → `check_extends(seq, prev_head)` →
-by band: Low co-sign · Medium step-up unless verified · High hold · Critical refuse → sign receipt,
-append entry → return outcome (every outcome is logged).
+regulatory (`SANCTIONED`) → refuse without disclosing reasons; else Low co-sign · Medium step-up
+(`standard`) unless verified · High / Critical step-up (`high_risk`) unless verified **and**
+`accepted_risk` → sign receipt, append entry (`risk_accepted` recorded) → return outcome. Swissquote
+never holds or blocks on risk (`Positionnement légal du blocage.md`).
 
 Endpoints, DTOs and the demo flow are listed in `backend_timeline.md` and the repo README.
 

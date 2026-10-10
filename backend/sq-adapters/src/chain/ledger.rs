@@ -1436,7 +1436,7 @@ mod tests {
         let (mut chain, sq, owner, addr) = setup();
         let to = Address::repeat_byte(0x22);
         let op = cosigned(&chain, &sq, &owner, usdc_tx(addr, to, 100_000_000));
-        let policy = super::super::PolicySnapshot { score: Some(20), band: Some(RiskBand::Low), reasons: vec!["NEW_RECIPIENT".into()], sanctions_hit: Some(false), exposure_hops: None };
+        let policy = super::super::PolicySnapshot { score: Some(20), band: Some(RiskBand::Low), reasons: vec!["NEW_RECIPIENT".into()], sanctions_hit: Some(false), exposure_hops: None, risk_accepted: false };
         let meta = SubmitMeta { prepared_at: Some(1_590), step_up: true, policy: Some(policy), fee: None };
         let r = chain.submit(&op, &meta, 1_600).unwrap();
         assert_eq!(chain.tx(r.tx_hash).unwrap().risk_level, Some(RiskBand::Low), "wallet's risk is on the record");

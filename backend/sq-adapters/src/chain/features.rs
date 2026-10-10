@@ -39,6 +39,9 @@ pub struct PolicySnapshot {
     pub sanctions_hit: Option<bool>,
     #[ts(type = "number | null")]
     pub exposure_hops: Option<u32>,
+    /// The user was warned and accepted the risk before this was co-signed.
+    #[serde(default)]
+    pub risk_accepted: bool,
 }
 
 /// Context the services know and the chain does not. All optional.
@@ -178,6 +181,8 @@ pub struct TxFeatures {
     pub intent_to_submit_secs: Option<u64>,
     #[serde(default)]
     pub exceeds_own_limit: bool,
+    #[serde(default)]
+    pub risk_accepted: bool,
 
     /// Open for future features without a schema change.
     #[serde(default)]
@@ -268,6 +273,7 @@ impl TxFeatures {
         put("secs_since_settings_change", self.secs_since_settings_change.map(|s| s as f64).unwrap_or(-1.0));
         put("intent_to_submit_secs", self.intent_to_submit_secs.map(|s| s as f64).unwrap_or(-1.0));
         put("exceeds_own_limit", b(self.exceeds_own_limit));
+        put("risk_accepted", b(self.risk_accepted));
         for (k, x) in &self.extra {
             put(&format!("extra_{k}"), *x);
         }
@@ -464,6 +470,7 @@ impl MockChain {
             secs_since_settings_change,
             intent_to_submit_secs,
             exceeds_own_limit,
+            risk_accepted: meta.policy.as_ref().is_some_and(|p| p.risk_accepted),
             extra: BTreeMap::new(),
         }
     }

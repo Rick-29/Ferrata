@@ -4,15 +4,15 @@
 use std::collections::BTreeSet;
 
 use alloy_primitives::{Address, B256, keccak256};
-use api_types::{AssessRequest, AssessResponse, CosignOutcome, CosignRequest, HoldState, HoldStatus};
+use api_types::{AssessRequest, AssessResponse, ConfirmationLevel, CosignOutcome, CosignRequest};
 use axum::extract::State;
 use axum::routing::post;
 use axum::{Json, Router};
 use sq_adapters::chain::auth::verify_owner;
 use sq_adapters::{Intent, IntentOutcome, IntentOutcomeKind, TxKind};
 use wallet_core::{
-    AccountContext, DecodedAction, EvalContext, ExternalSignals, LogEntry, OutcomeKind, RiskAssessment, RiskBand,
-    SignedEntry, TxRequest,
+    AccountContext, DecodedAction, EvalContext, ExternalSignals, LogEntry, OutcomeKind, ReasonCode, RiskAssessment,
+    RiskBand, SignedEntry, TxRequest,
 };
 
 use crate::auth::Caller;
@@ -166,16 +166,28 @@ async fn cosign(State(state): State<SharedState>, caller: Caller, Json(req): Jso
     let scored = score(&state, &req.tx, &account)?;
     let band = scored.assessment.band;
 
-    let outcome = match band {
-        RiskBand::Low => OutcomeKind::Cosigned,
-        RiskBand::Medium if stepped_up => OutcomeKind::Cosigned,
-        RiskBand::Medium => OutcomeKind::StepUp,
-        RiskBand::High => OutcomeKind::Held,
-        RiskBand::Critical => OutcomeKind::Refused,
+    // Swissquote never blocks on risk (Positionnement légal du blocage): it warns and asks for a
+    // second confirmation; the user decides. The only refusal is regulatory.
+    let regulatory = scored.assessment.reasons.iter().any(|r| r.code == ReasonCode::Sanctioned);
+    let warned = matches!(band, RiskBand::High | RiskBand::Critical);
+    let risk_accepted = warned && stepped_up && req.accepted_risk;
+    let (outcome, level) = if regulatory {
+        (OutcomeKind::Refused, None)
+    } else {
+        match band {
+            RiskBand::Low => (OutcomeKind::Cosigned, None),
+            RiskBand::Medium if stepped_up => (OutcomeKind::Cosigned, None),
+            RiskBand::Medium => (OutcomeKind::StepUp, Some(ConfirmationLevel::Standard)),
+            RiskBand::High | RiskBand::Critical if risk_accepted => (OutcomeKind::Cosigned, None),
+            RiskBand::High | RiskBand::Critical => (OutcomeKind::StepUp, Some(ConfirmationLevel::HighRisk)),
+        }
     };
     let mut warnings = Vec::new();
-    if band == RiskBand::Medium && stepped_up {
+    if outcome == OutcomeKind::Cosigned && stepped_up {
         warnings.push("approved after passkey step-up".to_string());
+    }
+    if risk_accepted {
+        warnings.push(format!("user was warned ({band:?}) and explicitly accepted the risk"));
     }
     let entry = LogEntry {
         seq: req.seq,
@@ -185,6 +197,7 @@ async fn cosign(State(state): State<SharedState>, caller: Caller, Json(req): Jso
         assessment: scored.assessment.clone(),
         outcome,
         step_up: stepped_up,
+        risk_accepted,
         warnings,
         timestamp: 0,
     };
@@ -192,35 +205,18 @@ async fn cosign(State(state): State<SharedState>, caller: Caller, Json(req): Jso
     tracing::info!(%address, seq = req.seq, ?band, ?outcome, "co-sign decision");
     let intent_outcome = match outcome {
         OutcomeKind::StepUp => Some(IntentOutcomeKind::StepUpRequired),
-        OutcomeKind::Held => Some(IntentOutcomeKind::Held),
         OutcomeKind::Refused => Some(IntentOutcomeKind::Refused),
-        OutcomeKind::Cosigned => None,
+        OutcomeKind::Cosigned if risk_accepted => Some(IntentOutcomeKind::RiskAccepted),
+        OutcomeKind::Cosigned | OutcomeKind::Held => None,
     };
     if let Some(k) = intent_outcome {
         record_intent_outcome(&state, req.tx.chain_id, address, req.user_op_hash, k, None)?;
     }
 
-    let result = match outcome {
-        OutcomeKind::Cosigned => CosignOutcome::Cosigned { cosignature: state.signer.cosign(&req.user_op_hash), entry: signed },
-        OutcomeKind::StepUp => CosignOutcome::StepUp { entry: signed, step_up_hash: step_up_hash(&req.user_op_hash) },
-        OutcomeKind::Refused => CosignOutcome::Refused { entry: signed },
-        OutcomeKind::Held => {
-            let now = state.now();
-            let hold = HoldState {
-                id: AppState::new_id("hold"),
-                address,
-                status: HoldStatus::Pending,
-                created_at: now,
-                expires_at: now + state.config.seed.hold_ttl_secs,
-                user_op_hash: req.user_op_hash,
-                assessment: scored.assessment,
-                justification: None,
-                cosignature: None,
-                release_entry: None,
-            };
-            state.lock(&state.holds)?.insert(hold.id.clone(), hold.clone());
-            CosignOutcome::Held { entry: signed, hold_id: hold.id, expires_at: hold.expires_at }
-        }
+    let result = match (outcome, level) {
+        (OutcomeKind::StepUp, Some(level)) => CosignOutcome::StepUp { entry: signed, step_up_hash: step_up_hash(&req.user_op_hash), level },
+        (OutcomeKind::Refused, _) => CosignOutcome::Refused { entry: signed, reason: "regulatory".into() },
+        _ => CosignOutcome::Cosigned { cosignature: state.signer.cosign(&req.user_op_hash), entry: signed },
     };
     Ok(Json(result))
 }
