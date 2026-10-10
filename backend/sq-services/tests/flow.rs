@@ -42,6 +42,7 @@ impl Owner {
 
 struct App {
     router: Router,
+    state: sq_services::state::SharedState,
     clock: Arc<FixedClock>,
     token: Option<String>,
 }
@@ -52,7 +53,15 @@ impl App {
         let config = Config::load(fixtures, 0, None, Some([42u8; 32]), true, true).unwrap();
         let clock = Arc::new(FixedClock::new(1_000_000));
         let state = AppState::build_with_clock(config, clock.clone()).unwrap();
-        Self { router: sq_services::router(state), clock, token: None }
+        Self { router: sq_services::router(state.clone()), state, clock, token: None }
+    }
+
+    /// A second session on the same server, as another Swissquote client.
+    async fn login_as(&self, username: &str) -> Self {
+        let mut other = Self { router: self.router.clone(), state: self.state.clone(), clock: self.clock.clone(), token: None };
+        let sess: Session = other.post("/auth/session", LoginRequest { username: username.into(), password: "demo".into() }).await;
+        other.token = Some(sess.token);
+        other
     }
 
     /// Logged-in app; every later call carries the bearer token.
@@ -184,6 +193,8 @@ async fn low_band_transfer_is_cosigned_submitted_logged_and_anchored() {
     let anchored: AnchorResponse = app.post(&format!("/log/{addr}/anchor"), serde_json::json!({})).await;
     assert_eq!(anchored.head, log.head);
     assert_eq!(anchored.tx.unwrap().kind, TxKind::Anchor);
+    let v: ChainVerification = app.get("/chain/verify").await;
+    assert!(v.ok, "{v:?}");
 
     let rec: ReconcileResponse = app.post(&format!("/reconcile/{addr}"), serde_json::json!({})).await;
     assert!(rec.findings.is_empty(), "{:?}", rec.findings);
@@ -413,4 +424,138 @@ async fn dev_passkeys_and_reset_drive_rehearsals() {
     assert_eq!((s, e.code.as_str()), (StatusCode::NOT_FOUND, "CHAIN_UNKNOWN_ACCOUNT"));
     // session survives the reset
     let _: ChallengeResponse = app.get("/ownership/challenge").await;
+}
+
+#[tokio::test]
+async fn sessions_are_bound_to_the_wallets_they_registered() {
+    let alice = App::logged_in().await;
+    let owner = Owner::new(12);
+    let addr = alice.onboard(&owner).await;
+    let mallory = alice.login_as("mallory").await;
+
+    let (s, e) = mallory.call::<ApiError>("GET", &format!("/log/{addr}"), None).await;
+    assert_eq!((s, e.code.as_str()), (StatusCode::UNAUTHORIZED, "UNAUTHORIZED"));
+    let tx = usdc_tx(addr, KNOWN, 1);
+    let (s, _) = mallory.post_err("/assess", AssessRequest { tx: tx.clone(), account: None }).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let prepared: PreparedOp = mallory.post("/chain/prepare", SimulateRequest { tx: tx.clone() }).await;
+    let (s, _) = mallory
+        .post_err("/chain/submit", SignedUserOp { tx: tx.clone(), nonce: prepared.nonce, owner_signature: owner.sign(&prepared.user_op_hash), cosignature: None })
+        .await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    // the owner, on a fresh session of the same client, still can
+    let alice_again = alice.login_as("alice").await;
+    let _: LogResponse = alice_again.get(&format!("/log/{addr}")).await;
+    // public reads stay public
+    let _: AccountView = mallory.get(&format!("/chain/accounts/{addr}")).await;
+}
+
+#[tokio::test]
+async fn rewritten_log_is_caught_by_anchor_mismatch() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(13);
+    let addr = app.onboard(&owner).await;
+    let tx = usdc_tx(addr, KNOWN, 1);
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN] }, None).await;
+    let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
+    app.submit(&owner, tx, &prepared, Some(cosignature)).await;
+    let _: AnchorResponse = app.post(&format!("/log/{addr}/anchor"), serde_json::json!({})).await;
+    let rec: ReconcileResponse = app.post(&format!("/reconcile/{addr}"), serde_json::json!({})).await;
+    assert!(rec.findings.is_empty(), "{:?}", rec.findings);
+
+    // Swissquote "loses" or rewrites the log: the anchor on the chain gives it away
+    app.state.log.clear().unwrap();
+    let rec: ReconcileResponse = app.post(&format!("/reconcile/{addr}"), serde_json::json!({})).await;
+    assert!(rec.findings.iter().any(|f| f.code == "ANCHOR_MISMATCH" && f.severity == RiskBand::Critical), "{:?}", rec.findings);
+    assert!(rec.findings.iter().any(|f| f.code == "UNLOGGED_COSIGNED_TX"), "{:?}", rec.findings);
+    assert_eq!(rec.anchors_checked, 1);
+}
+
+#[tokio::test]
+async fn review_flags_sanctioned_counterparties_and_escape_exits_and_verdicts() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(14);
+    let addr = app.onboard(&owner).await;
+
+    // clean account: one co-signed payment to a known merchant
+    let tx = usdc_tx(addr, KNOWN, 1_000_000);
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN] }, None).await;
+    let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
+    app.submit(&owner, tx, &prepared, Some(cosignature)).await;
+    let r: ReviewReport = app.post(&format!("/review/{addr}"), serde_json::json!({})).await;
+    assert_eq!(r.verdict, ReviewVerdict::Clean, "{r:?}");
+    assert_eq!(r.new_flags, 0);
+    assert!(r.chain.ok);
+
+    // another client pays alice: inbound events are reviewed too
+    let bad = Owner::new(15);
+    let mallory = app.login_as("mallory").await;
+    let bad_addr = mallory.onboard(&bad).await;
+    let pay = usdc_tx(bad_addr, addr, 2_000_000);
+    let (outcome, prepared) = mallory.cosign(&pay, &AccountContext::default(), None).await;
+    let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
+    mallory.submit(&bad, pay, &prepared, Some(cosignature)).await;
+
+    // alice then pays the mixer-exposed address through a released hold
+    let risky = usdc_tx(addr, MIXER_EXPOSED, 500_000);
+    let (outcome, prepared) = app.cosign(&risky, &AccountContext::default(), None).await;
+    let CosignOutcome::Held { hold_id, .. } = outcome else { panic!("{outcome:?}") };
+    let hold: HoldState = app.post(&format!("/holds/{hold_id}/justify"), JustifyRequest { text: "Refund to a friend who moved abroad".into() }).await;
+    app.submit(&owner, risky, &prepared, hold.cosignature).await;
+
+    let r: ReviewReport = app.post(&format!("/review/{addr}"), serde_json::json!({})).await;
+    assert_eq!(r.verdict, ReviewVerdict::Suspicious, "{r:?}");
+    assert!(r.flags.iter().any(|f| f.code == "MIXER_EXPOSURE" && f.source == FlagSource::Review), "{:?}", r.flags);
+    assert!(r.flags.iter().any(|f| f.code == "POLICY_REASONS" && f.source == FlagSource::Policy), "{:?}", r.flags);
+    let again: ReviewReport = app.post(&format!("/review/{addr}"), serde_json::json!({})).await;
+    assert_eq!(again.new_flags, 0, "review is idempotent");
+    assert_eq!(again.flags.len(), r.flags.len());
+
+    // flags are visible on the event itself and on the account
+    let history: HistoryResponse = app.get(&format!("/chain/history/{addr}")).await;
+    assert!(history.txs.iter().any(|t| t.flags.iter().any(|f| f.code == "MIXER_EXPOSURE")));
+    let acc: AccountView = app.get(&format!("/chain/accounts/{addr}")).await;
+    assert!(!acc.flags.is_empty());
+
+    // escape-hatch exit makes it Blocked
+    let exit_to = Address::repeat_byte(0x33);
+    let h: HashResponse = app.post("/chain/escape/hash", EscapeHashRequest { chain_id: None, address: addr, to: Some(exit_to) }).await;
+    let started: EscapeResponse = app.post("/chain/escape/start", StartEscapeRequest { chain_id: None, address: addr, to: exit_to, signature: owner.sign(&h.hash) }).await;
+    let EscapeStatus::Pending { unlock_at, .. } = started.escape else { panic!("{:?}", started.escape) };
+    app.clock.set(unlock_at + 1);
+    let exit = usdc_tx(addr, exit_to, 100);
+    let prepared: PreparedOp = app.post("/chain/prepare", SimulateRequest { tx: exit.clone() }).await;
+    app.submit(&owner, exit, &prepared, None).await;
+    let r: ReviewReport = app.post(&format!("/review/{addr}"), serde_json::json!({})).await;
+    assert_eq!(r.verdict, ReviewVerdict::Blocked, "{r:?}");
+    assert!(r.flags.iter().any(|f| f.code == "ESCAPE_HATCH_EXIT" && f.source == FlagSource::Reconciliation));
+    assert!(r.chain.ok, "flag events keep the chain consistent");
+}
+
+#[tokio::test]
+async fn tampering_is_visible_through_verify_blocks_and_review() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(16);
+    let addr = app.onboard(&owner).await;
+    let tx = usdc_tx(addr, KNOWN, 1);
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN] }, None).await;
+    let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
+    let mined = app.submit(&owner, tx, &prepared, Some(cosignature)).await;
+
+    let page: Vec<BlockWithTxs> = app.get("/chain/blocks?limit=3").await;
+    assert_eq!(page.len(), 3);
+    assert_eq!(page.last().unwrap().block.number, mined.block_number);
+    assert_eq!(page.last().unwrap().txs[0].hash, mined.tx_hash);
+    assert_eq!(page[1].block.hash, page[2].block.parent_hash);
+    let v: ChainVerification = app.get("/chain/verify").await;
+    assert!(v.ok);
+
+    let _: serde_json::Value = app.post("/dev/tamper", TamperRequest { chain_id: None, tamper: Tamper::TxValue { hash: mined.tx_hash, value: U256::from(7u64) } }).await;
+    let v: ChainVerification = app.get("/chain/verify").await;
+    assert!(!v.ok);
+    assert_eq!(v.first_bad_block, Some(mined.block_number));
+    let r: ReviewReport = app.post(&format!("/review/{addr}"), serde_json::json!({})).await;
+    assert_eq!(r.verdict, ReviewVerdict::Blocked);
+    assert!(r.flags.iter().any(|f| f.code == "CHAIN_TAMPERED" && f.source == FlagSource::Integrity), "{:?}", r.flags);
 }

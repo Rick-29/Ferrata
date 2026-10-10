@@ -15,6 +15,7 @@ use wallet_core::{
     SignedEntry, TxRequest,
 };
 
+use crate::auth::Caller;
 use crate::error::{ApiResult, ServiceError};
 use crate::state::{AppState, SharedState};
 
@@ -72,7 +73,8 @@ pub fn score(state: &AppState, tx: &TxRequest, client_account: &AccountContext) 
     Ok(Scored { action, signals, assessment })
 }
 
-async fn assess(State(state): State<SharedState>, Json(req): Json<AssessRequest>) -> ApiResult<AssessResponse> {
+async fn assess(State(state): State<SharedState>, caller: Caller, Json(req): Json<AssessRequest>) -> ApiResult<AssessResponse> {
+    state.check_owner(&caller, req.tx.from)?;
     let account = req.account.unwrap_or_default();
     let scored = score(&state, &req.tx, &account)?;
     let prepared = {
@@ -101,8 +103,9 @@ pub fn record(state: &AppState, address: Address, mut entry: LogEntry) -> Result
     Ok(signed)
 }
 
-async fn cosign(State(state): State<SharedState>, Json(req): Json<CosignRequest>) -> ApiResult<CosignOutcome> {
+async fn cosign(State(state): State<SharedState>, caller: Caller, Json(req): Json<CosignRequest>) -> ApiResult<CosignOutcome> {
     let address = req.tx.from;
+    state.check_owner(&caller, address)?;
     let (prepared, owner) = {
         let chain = state.chain_for(Some(req.tx.chain_id))?;
         (chain.prepare(&req.tx)?, chain.account(address, state.now())?.owner)

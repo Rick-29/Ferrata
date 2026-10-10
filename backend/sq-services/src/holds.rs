@@ -8,6 +8,7 @@ use axum::{Json, Router};
 use wallet_core::{LogEntry, OutcomeKind};
 
 use crate::assess::record;
+use crate::auth::Caller;
 use crate::error::{ApiResult, ServiceError};
 use crate::state::SharedState;
 
@@ -21,17 +22,19 @@ fn refresh(state: &SharedState, hold: &mut HoldState) {
     }
 }
 
-async fn get_hold(State(state): State<SharedState>, Path(id): Path<String>) -> ApiResult<HoldState> {
+async fn get_hold(State(state): State<SharedState>, caller: Caller, Path(id): Path<String>) -> ApiResult<HoldState> {
     let mut holds = state.lock(&state.holds)?;
     let hold = holds.get_mut(&id).ok_or_else(|| ServiceError::NotFound(format!("hold {id}")))?;
+    state.check_owner(&caller, hold.address)?;
     refresh(&state, hold);
     Ok(Json(hold.clone()))
 }
 
-async fn justify(State(state): State<SharedState>, Path(id): Path<String>, Json(req): Json<JustifyRequest>) -> ApiResult<HoldState> {
+async fn justify(State(state): State<SharedState>, caller: Caller, Path(id): Path<String>, Json(req): Json<JustifyRequest>) -> ApiResult<HoldState> {
     let mut hold = {
         let mut holds = state.lock(&state.holds)?;
         let h = holds.get_mut(&id).ok_or_else(|| ServiceError::NotFound(format!("hold {id}")))?;
+        state.check_owner(&caller, h.address)?;
         refresh(&state, h);
         if h.status != HoldStatus::Pending {
             return Err(ServiceError::Conflict(format!("hold is {:?}", h.status)));

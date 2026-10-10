@@ -1,22 +1,32 @@
-//! The pseudo-blockchain: an in-memory ledger that enforces the same rules the real
-//! smart account enforces on Base Sepolia. Every account is 2-of-2: the owner's passkey
-//! plus Swissquote's co-signature, except through the timelocked escape hatch.
+//! The pseudo-blockchain: an in-memory, tamper-evident ledger that enforces the same rules the
+//! real smart account enforces. Every account is 2-of-2: the owner's passkey plus Swissquote's
+//! co-signature, except through the timelocked escape hatch.
 //!
-//! It is deterministic, instant (one block per transaction), and has no I/O. Services wrap
-//! it in a mutex and expose it over HTTP so the UI can treat it as its RPC.
+//! Tamper evidence: every state change is an *event* (`ChainTx`) that carries the signatures that
+//! authorised it; events are grouped in blocks that commit to a state root and are signed by the
+//! chain's validator key; the whole chain can be rebuilt from its events alone and every hash,
+//! signature and state root re-checked (`MockChain::replay`, `MockChain::verify`).
 
 pub mod auth;
 pub mod backend;
 mod ledger;
+mod store;
 
 pub use auth::{OwnerKey, OwnerSignature};
 pub use backend::{ChainBackend, ChainGuard, ChainRegistry};
-pub use ledger::MockChain;
+pub use ledger::{ChainConfig, MockChain, Tamper};
+pub use store::{BlockStore, JsonlBlockStore, NullBlockStore};
+
+use std::collections::BTreeMap;
 
 use alloy_primitives::{Address, B256, Bytes, U256};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use wallet_core::{CoreError, DecodedAction, TxRequest};
+use wallet_core::{CoreError, DecodedAction, RiskBand, TxRequest};
+
+/// Bump when an event's hashed fields change. Readers accept older versions.
+pub const EVENT_VERSION: u32 = 1;
+pub const BLOCK_VERSION: u32 = 1;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ChainError {
@@ -50,6 +60,14 @@ pub enum ChainError {
     UnknownChain(u64),
     #[error("chain lock poisoned")]
     Poisoned,
+    #[error("malformed event: {0}")]
+    MalformedEvent(String),
+    #[error("tampering detected at block {block}: {reason}")]
+    Tampered { block: u64, reason: String },
+    #[error("chain is read-only (no validator key)")]
+    ReadOnly,
+    #[error("storage: {0}")]
+    Storage(String),
     #[error(transparent)]
     Decode(#[from] CoreError),
 }
@@ -72,6 +90,10 @@ impl ChainError {
             ChainError::UnknownTx(_) => "CHAIN_UNKNOWN_TX",
             ChainError::UnknownChain(_) => "CHAIN_UNKNOWN_CHAIN",
             ChainError::Poisoned => "CHAIN_INTERNAL",
+            ChainError::MalformedEvent(_) => "CHAIN_MALFORMED_EVENT",
+            ChainError::Tampered { .. } => "CHAIN_TAMPERED",
+            ChainError::ReadOnly => "CHAIN_READ_ONLY",
+            ChainError::Storage(_) => "CHAIN_STORAGE",
             ChainError::Decode(_) => "CHAIN_DECODE",
         }
     }
@@ -133,35 +155,84 @@ pub struct AccountView {
     pub escape: EscapeStatus,
     #[ts(type = "number")]
     pub created_block: u64,
+    /// Flags raised on any of this account's transactions, oldest first.
+    #[serde(default)]
+    pub flags: Vec<Flag>,
 }
 
+/// What kind of event this is. New kinds may be added; readers must treat unknown ones as opaque.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum TxKind {
-    /// Owner + Swissquote co-signature.
-    Cosigned,
+    /// Account registered with its owner key (`extra.owner`).
+    AccountCreated,
     /// Faucet / demo seeding, no signatures.
     Faucet,
+    /// Owner + Swissquote co-signature.
+    Cosigned,
     EscapeStart,
     EscapeCancel,
     /// Left through the escape hatch: owner signature only, no Swissquote involvement.
     EscapeExit,
-    /// Owner key rotated after a recovery timelock.
+    /// Owner key rotated after a recovery timelock (`extra.new_owner`), Swissquote co-signed.
     OwnerRotation,
-    /// Audit-log head anchored on-chain by Swissquote.
+    /// Audit-log head anchored by Swissquote (`user_op_hash` = anchored head), co-signed.
     Anchor,
+    /// A flag attached to an earlier event (`extra.flag`). Append-only: history is never edited.
+    Flag,
 }
 
+/// Who raised a flag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum FlagSource {
+    /// The risk policy at co-sign time.
+    Policy,
+    /// Log-versus-chain reconciliation.
+    Reconciliation,
+    /// The account review (`/review/{address}`).
+    Review,
+    /// A chain integrity check (`/chain/verify`).
+    Integrity,
+    /// A human.
+    Manual,
+}
+
+/// A finding about one event. Extensible: unknown `data` keys are kept, new fields default.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Flag {
+    pub code: String,
+    pub severity: RiskBand,
+    pub source: FlagSource,
+    pub message: String,
+    #[ts(type = "number")]
+    pub at: u64,
+    /// The event this flag is about.
+    #[ts(type = "string")]
+    pub target: B256,
+    #[serde(default)]
+    #[ts(type = "Record<string, unknown>")]
+    pub data: BTreeMap<String, serde_json::Value>,
+}
+
+/// One event on the chain. The hashed fields are fixed per `version`; `flags` is derived from
+/// later `Flag` events and `extra` carries kind-specific data (owner keys, flag payloads, …).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ChainTx {
+    #[serde(default = "default_version")]
+    #[ts(type = "number")]
+    pub version: u32,
     #[ts(type = "string")]
     pub hash: B256,
     #[ts(type = "number")]
     pub block_number: u64,
     #[ts(type = "number")]
     pub timestamp: u64,
+    pub kind: TxKind,
     #[ts(type = "string")]
     pub from: Address,
     #[ts(type = "string")]
@@ -172,16 +243,34 @@ pub struct ChainTx {
     pub data: Bytes,
     #[ts(type = "number")]
     pub nonce: u64,
-    /// Hash the signatures covered; zero for faucet transactions.
+    /// The hash the signatures below cover; zero for unsigned kinds.
     #[ts(type = "string")]
     pub user_op_hash: B256,
     pub action: DecodedAction,
-    pub kind: TxKind,
+    #[serde(default)]
+    pub owner_signature: Option<OwnerSignature>,
+    #[serde(default)]
+    #[ts(type = "string | null")]
+    pub cosignature: Option<Bytes>,
+    /// Kind-specific payload. Forward compatible: readers ignore keys they do not know.
+    #[serde(default)]
+    #[ts(type = "Record<string, unknown>")]
+    pub extra: BTreeMap<String, serde_json::Value>,
+    /// Derived from later `Flag` events; not part of the hash.
+    #[serde(default)]
+    pub flags: Vec<Flag>,
+}
+
+fn default_version() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Block {
+    #[serde(default = "default_version")]
+    #[ts(type = "number")]
+    pub version: u32,
     #[ts(type = "number")]
     pub number: u64,
     #[ts(type = "number")]
@@ -192,6 +281,26 @@ pub struct Block {
     pub parent_hash: B256,
     #[ts(type = "string[]")]
     pub tx_hashes: Vec<B256>,
+    /// keccak over the ordered tx hashes.
+    #[serde(default)]
+    #[ts(type = "string")]
+    pub txs_root: B256,
+    /// Commitment to every account (owner, nonce, escape, balances, allowances) after this block.
+    #[serde(default)]
+    #[ts(type = "string")]
+    pub state_root: B256,
+    /// Ed25519 signature of the validator over `hash`.
+    #[serde(default)]
+    #[ts(type = "string")]
+    pub validator_signature: Bytes,
+}
+
+/// A block with its events, as the explorer / visualiser wants it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BlockWithTxs {
+    pub block: Block,
+    pub txs: Vec<ChainTx>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -201,10 +310,37 @@ pub struct ChainInfo {
     pub chain_id: u64,
     #[ts(type = "number")]
     pub latest_block: u64,
+    #[ts(type = "string")]
+    pub head: B256,
+    #[ts(type = "string")]
+    pub state_root: B256,
+    /// Swissquote's co-signing public key, hex.
     pub cosigner: String,
+    /// The chain's block-signing public key, hex. Distinct from the co-signer.
+    pub validator: String,
     #[ts(type = "number")]
     pub escape_delay_secs: u64,
     pub tokens: Vec<TokenInfo>,
+    pub persisted: bool,
+}
+
+/// Result of a full replay-and-check of the chain.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ChainVerification {
+    pub ok: bool,
+    #[ts(type = "number")]
+    pub blocks_checked: u64,
+    #[ts(type = "number")]
+    pub txs_checked: u64,
+    /// First block that failed, with the reason; `None` when `ok`.
+    #[ts(type = "number | null")]
+    pub first_bad_block: Option<u64>,
+    pub reason: Option<String>,
+    #[ts(type = "string")]
+    pub head: B256,
+    #[ts(type = "string")]
+    pub state_root: B256,
 }
 
 /// What the account must sign before submitting.

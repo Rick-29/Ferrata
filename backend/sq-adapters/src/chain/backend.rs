@@ -11,8 +11,8 @@ use alloy_primitives::{Address, B256, Bytes, U256};
 use wallet_core::{BalanceDelta, TxRequest};
 
 use super::{
-    AccountView, Block, ChainError, ChainInfo, ChainTx, EscapeStatus, OwnerKey, OwnerSignature, PreparedOp, SignedUserOp,
-    SubmitResult,
+    AccountView, Block, BlockWithTxs, ChainError, ChainInfo, ChainTx, ChainVerification, EscapeStatus, Flag, OwnerKey,
+    OwnerSignature, PreparedOp, SignedUserOp, SubmitResult, Tamper,
 };
 
 /// Everything the Swissquote services need from a settlement layer.
@@ -27,7 +27,7 @@ pub trait ChainBackend: Send + Sync {
 
     // ----- accounts -----
     fn address_for(&self, owner: &OwnerKey) -> Address;
-    fn create_account(&mut self, owner: OwnerKey) -> Result<Address, ChainError>;
+    fn create_account(&mut self, owner: OwnerKey, now: u64) -> Result<Address, ChainError>;
     fn has_account(&self, address: Address) -> bool;
     fn account(&self, address: Address, now: u64) -> Result<AccountView, ChainError>;
     fn fund(&mut self, to: Address, asset: Option<Address>, amount: U256, now: u64) -> Result<SubmitResult, ChainError>;
@@ -47,15 +47,23 @@ pub trait ChainBackend: Send + Sync {
     fn rotate_hash(&self, address: Address, new_owner: &OwnerKey, nonce: u64) -> B256;
     fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
 
+    // ----- audit: anchoring, flags, integrity -----
+    fn anchor_hash(&self, address: Address, head: B256) -> B256;
+    fn anchor(&mut self, address: Address, head: B256, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
+    /// Append a flag event; `None` when an identical `(target, source, code)` flag already exists.
+    fn flag(&mut self, flag: Flag, now: u64) -> Result<Option<SubmitResult>, ChainError>;
+    fn verify(&self) -> ChainVerification;
+    /// Demo-only corruption of live state. Backends that cannot be tampered return `ReadOnly`.
+    fn tamper(&mut self, _t: &Tamper) -> Result<(), ChainError> {
+        Err(ChainError::ReadOnly)
+    }
+
     // ----- reads -----
     fn latest_block(&self) -> Block;
-    fn block(&self, number: u64) -> Option<Block>;
+    fn block(&self, number: u64) -> Option<BlockWithTxs>;
+    fn blocks(&self, from: u64, limit: usize) -> Vec<BlockWithTxs>;
     fn tx(&self, hash: B256) -> Result<ChainTx, ChainError>;
     fn history(&self, address: Address) -> Vec<ChainTx>;
-    /// Hash of the current log head, if this backend supports anchoring (see timeline).
-    fn anchor(&mut self, _address: Address, _head: B256, _now: u64) -> Result<Option<SubmitResult>, ChainError> {
-        Ok(None)
-    }
 }
 
 pub type ChainGuard<'a> = MutexGuard<'a, Box<dyn ChainBackend>>;
@@ -104,11 +112,92 @@ impl ChainRegistry {
     }
 
     /// Swaps every backend for a fresh one built by `make`. Used by `/dev/reset`.
-    pub fn reset(&self, mut make: impl FnMut(u64) -> Box<dyn ChainBackend>) -> Result<(), ChainError> {
+    pub fn reset(&self, mut make: impl FnMut(u64) -> Result<Box<dyn ChainBackend>, ChainError>) -> Result<(), ChainError> {
         for (id, m) in &self.chains {
             let mut guard = m.lock().map_err(|_| ChainError::Poisoned)?;
-            *guard = make(*id);
+            *guard = make(*id)?;
         }
         Ok(())
+    }
+}
+
+impl ChainBackend for super::MockChain {
+    fn chain_id(&self) -> u64 {
+        super::MockChain::chain_id(self)
+    }
+    fn info(&self) -> ChainInfo {
+        super::MockChain::info(self)
+    }
+    fn address_for(&self, owner: &OwnerKey) -> Address {
+        super::MockChain::address_for(owner)
+    }
+    fn create_account(&mut self, owner: OwnerKey, now: u64) -> Result<Address, ChainError> {
+        super::MockChain::create_account(self, owner, now)
+    }
+    fn has_account(&self, address: Address) -> bool {
+        super::MockChain::has_account(self, address)
+    }
+    fn account(&self, address: Address, now: u64) -> Result<AccountView, ChainError> {
+        super::MockChain::account(self, address, now)
+    }
+    fn fund(&mut self, to: Address, asset: Option<Address>, amount: U256, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::fund(self, to, asset, amount, now)
+    }
+    fn prepare(&self, tx: &TxRequest) -> Result<PreparedOp, ChainError> {
+        super::MockChain::prepare(self, tx)
+    }
+    fn simulate(&self, tx: &TxRequest) -> Result<Vec<BalanceDelta>, ChainError> {
+        super::MockChain::simulate(self, tx)
+    }
+    fn submit(&mut self, op: &SignedUserOp, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::submit(self, op, now)
+    }
+    fn escape_hash(&self, address: Address, to: Address, nonce: u64) -> B256 {
+        super::MockChain::escape_hash(self, address, to, nonce)
+    }
+    fn escape_cancel_hash(&self, address: Address, nonce: u64) -> B256 {
+        super::MockChain::escape_cancel_hash(self, address, nonce)
+    }
+    fn start_escape_hatch(&mut self, address: Address, to: Address, sig: &OwnerSignature, now: u64) -> Result<(EscapeStatus, SubmitResult), ChainError> {
+        super::MockChain::start_escape_hatch(self, address, to, sig, now)
+    }
+    fn cancel_escape_hatch(&mut self, address: Address, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::cancel_escape_hatch(self, address, sig, now)
+    }
+    fn rotate_hash(&self, address: Address, new_owner: &OwnerKey, nonce: u64) -> B256 {
+        super::MockChain::rotate_hash(self, address, new_owner, nonce)
+    }
+    fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::rotate_owner(self, address, new_owner, cosignature, now)
+    }
+    fn anchor_hash(&self, address: Address, head: B256) -> B256 {
+        super::MockChain::anchor_hash(self, address, head)
+    }
+    fn anchor(&mut self, address: Address, head: B256, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::anchor(self, address, head, cosignature, now)
+    }
+    fn flag(&mut self, flag: Flag, now: u64) -> Result<Option<SubmitResult>, ChainError> {
+        super::MockChain::flag(self, flag, now)
+    }
+    fn verify(&self) -> ChainVerification {
+        super::MockChain::verify(self)
+    }
+    fn tamper(&mut self, t: &Tamper) -> Result<(), ChainError> {
+        super::MockChain::tamper(self, t)
+    }
+    fn latest_block(&self) -> Block {
+        super::MockChain::latest(self)
+    }
+    fn block(&self, number: u64) -> Option<BlockWithTxs> {
+        super::MockChain::block(self, number)
+    }
+    fn blocks(&self, from: u64, limit: usize) -> Vec<BlockWithTxs> {
+        super::MockChain::blocks(self, from, limit)
+    }
+    fn tx(&self, hash: B256) -> Result<ChainTx, ChainError> {
+        super::MockChain::tx(self, hash)
+    }
+    fn history(&self, address: Address) -> Vec<ChainTx> {
+        super::MockChain::history(self, address)
     }
 }

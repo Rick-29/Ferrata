@@ -1,7 +1,9 @@
-//! Mock Swissquote login (`fixtures/accounts.json`) and the bearer-token gate.
+//! Mock Swissquote login (`fixtures/accounts.json`), the bearer-token gate, and the `Caller`
+//! extractor handlers use to bind wallets to the client that registered them.
 
-use axum::extract::{Request, State};
+use axum::extract::{FromRequestParts, Request, State};
 use axum::http::header;
+use axum::http::request::Parts;
 use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::post;
@@ -31,9 +33,32 @@ async fn login(State(state): State<SharedState>, Json(req): Json<api_types::Logi
     Ok(Json(session))
 }
 
+/// The bearer token on a request, if any. Resolved to a client through `AppState::client_of`.
+#[derive(Debug, Clone, Default)]
+pub struct Caller {
+    pub token: Option<String>,
+}
+
+fn bearer(parts: &Parts) -> Option<String> {
+    parts
+        .headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|t| t.trim().to_string())
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for Caller {
+    type Rejection = ServiceError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(Caller { token: bearer(parts) })
+    }
+}
+
 /// Routes reachable without a session: login itself, public chain reads, dev helpers.
 fn is_public(path: &str) -> bool {
-    path == "/auth/session" || path == "/chains" || path == "/chain/info" || path.starts_with("/dev/")
+    path == "/auth/session" || path == "/chains" || path.starts_with("/chain/") || path.starts_with("/dev/")
 }
 
 /// Rejects any non-public request without a valid `Authorization: Bearer <token>`.
@@ -41,15 +66,11 @@ pub async fn require_session(State(state): State<SharedState>, req: Request, nex
     if !state.config.require_auth || is_public(req.uri().path()) || req.method() == axum::http::Method::OPTIONS {
         return Ok(next.run(req).await);
     }
-    let token = req
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .map(str::trim)
-        .ok_or(ServiceError::Unauthorized)?;
-    if !state.lock(&state.sessions)?.contains_key(token) {
+    let (mut parts, body) = req.into_parts();
+    let token = bearer(&parts).ok_or(ServiceError::Unauthorized)?;
+    if !state.lock(&state.sessions)?.contains_key(&token) {
         return Err(ServiceError::Unauthorized);
     }
-    Ok(next.run(req).await)
+    parts.extensions.insert(Caller { token: Some(token) });
+    Ok(next.run(Request::from_parts(parts, body)).await)
 }

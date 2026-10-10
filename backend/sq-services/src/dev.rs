@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use alloy_primitives::Bytes;
-use api_types::{DevPasskey, DevPasskeyRequest, DevSignRequest, OwnerKey, OwnerSignature};
+use api_types::{DevPasskey, DevPasskeyRequest, DevSignRequest, OwnerKey, OwnerSignature, TamperRequest};
 use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
@@ -33,6 +33,14 @@ pub fn routes() -> Router<SharedState> {
         .route("/passkeys", post(create).get(list))
         .route("/passkeys/{name}/sign", post(sign))
         .route("/reset", post(reset))
+        .route("/tamper", post(tamper))
+}
+
+/// Corrupts live chain state so `/chain/verify` and the visualiser can show detection. Demo only.
+async fn tamper(State(state): State<SharedState>, Json(req): Json<TamperRequest>) -> ApiResult<serde_json::Value> {
+    state.chain_for(req.chain_id)?.tamper(&req.tamper)?;
+    tracing::error!(tamper = ?req.tamper, "DEMO: live chain state corrupted on purpose");
+    Ok(Json(serde_json::json!({ "ok": true, "hint": "GET /chain/verify" })))
 }
 
 /// Fresh chains, empty logs, no holds or recoveries. For demo rehearsals.

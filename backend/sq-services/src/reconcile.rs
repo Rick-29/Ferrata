@@ -7,11 +7,11 @@ use api_types::{Finding, ReconcileResponse};
 use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
-use sq_adapters::TxKind;
-use wallet_core::{OutcomeKind, RiskBand};
+use sq_adapters::{ChainTx, TxKind};
+use wallet_core::{AuditLog, OutcomeKind, RiskBand};
 
-use crate::error::ApiResult;
-use crate::state::SharedState;
+use crate::error::{ApiResult, ServiceError};
+use crate::state::{AppState, SharedState};
 
 pub fn routes() -> Router<SharedState> {
     Router::new().route("/reconcile/{address}", post(reconcile))
@@ -21,10 +21,8 @@ fn finding(severity: RiskBand, code: &str, message: impl Into<String>, tx_hash: 
     Finding { severity, code: code.into(), message: message.into(), tx_hash, user_op_hash }
 }
 
-async fn reconcile(State(state): State<SharedState>, Path(address): Path<Address>) -> ApiResult<ReconcileResponse> {
-    // Every chain the wallet spans; a tx on any of them must be explained by the log.
-    let txs: Vec<_> = state.chains.for_each(|c| Ok(c.history(address)))?.into_iter().flatten().collect();
-    let log = state.log.load(address)?;
+/// Pure diff between an account's chain events and its audit log. Shared with the review.
+pub fn diff(address: Address, txs: &[ChainTx], log: &AuditLog) -> (Vec<Finding>, u64) {
     let mut findings = Vec::new();
     let mut anchors_checked = 0;
 
@@ -67,7 +65,7 @@ async fn reconcile(State(state): State<SharedState>, Path(address): Path<Address
                     ));
                 }
             }
-            TxKind::Faucet | TxKind::EscapeCancel => {}
+            TxKind::AccountCreated | TxKind::Faucet | TxKind::EscapeCancel | TxKind::Flag => {}
         }
     }
 
@@ -82,6 +80,17 @@ async fn reconcile(State(state): State<SharedState>, Path(address): Path<Address
             ));
         }
     }
+    (findings, anchors_checked)
+}
 
-    Ok(Json(ReconcileResponse { address, chain_txs: txs.len() as u64, log_entries: log.len() as u64, anchors_checked, findings }))
+pub fn reconcile_account(state: &AppState, address: Address) -> Result<ReconcileResponse, ServiceError> {
+    // Every chain the wallet spans; a tx on any of them must be explained by the log.
+    let txs: Vec<ChainTx> = state.chains.for_each(|c| Ok(c.history(address)))?.into_iter().flatten().collect();
+    let log = state.log.load(address)?;
+    let (findings, anchors_checked) = diff(address, &txs, &log);
+    Ok(ReconcileResponse { address, chain_txs: txs.len() as u64, log_entries: log.len() as u64, anchors_checked, findings })
+}
+
+async fn reconcile(State(state): State<SharedState>, Path(address): Path<Address>) -> ApiResult<ReconcileResponse> {
+    Ok(Json(reconcile_account(&state, address)?))
 }

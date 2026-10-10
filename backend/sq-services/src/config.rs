@@ -48,8 +48,12 @@ pub struct Config {
     pub port: u16,
     pub fixtures_dir: PathBuf,
     pub snapshot_path: Option<PathBuf>,
+    /// Append-only block file for the pseudo-chain; in memory only if unset.
+    pub chain_file: Option<PathBuf>,
     /// 32-byte Ed25519 seed for Swissquote's receipt and co-signing key; random if unset.
     pub signing_seed: Option<[u8; 32]>,
+    /// Seed of the chain's block-signing key; derived from `signing_seed` if unset, random if neither.
+    pub validator_seed: Option<[u8; 32]>,
     pub dev_signer: bool,
     /// Require `Authorization: Bearer <token>` from `/auth/session` on every non-public route.
     pub require_auth: bool,
@@ -68,9 +72,17 @@ impl Config {
             Ok(h) => Some(parse_seed(&h).context("SQ_SIGNING_SEED")?),
             Err(_) => None,
         };
+        let validator_seed = match std::env::var("SQ_VALIDATOR_SEED") {
+            Ok(h) => Some(parse_seed(&h).context("SQ_VALIDATOR_SEED")?),
+            Err(_) => None,
+        };
+        let chain_file = std::env::var("SQ_CHAIN_FILE").ok().map(PathBuf::from);
         let dev_signer = std::env::var("SQ_DEV_SIGNER").map(|v| v != "0").unwrap_or(true);
         let require_auth = std::env::var("SQ_REQUIRE_AUTH").map(|v| v != "0").unwrap_or(true);
-        Self::load(fixtures_dir, port, snapshot_path, signing_seed, dev_signer, require_auth)
+        let mut cfg = Self::load(fixtures_dir, port, snapshot_path, signing_seed, dev_signer, require_auth)?;
+        cfg.validator_seed = validator_seed;
+        cfg.chain_file = chain_file;
+        Ok(cfg)
     }
 
     pub fn load(fixtures_dir: PathBuf, port: u16, snapshot_path: Option<PathBuf>, signing_seed: Option<[u8; 32]>, dev_signer: bool, require_auth: bool) -> anyhow::Result<Self> {
@@ -83,7 +95,9 @@ impl Config {
             port,
             fixtures_dir,
             snapshot_path,
+            chain_file: None,
             signing_seed,
+            validator_seed: None,
             dev_signer,
             require_auth,
             policy,

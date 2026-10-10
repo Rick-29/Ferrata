@@ -103,12 +103,19 @@ pub trait ChainBackend: Send + Sync {
     fn submit(&mut self, op: &SignedUserOp, now) -> Result<SubmitResult, ChainError>;   // owner sig + cosig, or unlocked escape
     fn escape_hash / escape_cancel_hash / start_escape_hatch / cancel_escape_hatch;
     fn rotate_hash / rotate_owner;                   // Swissquote-only, after its timelock
-    fn latest_block / block / tx / history;
-    fn anchor(&mut self, address, head: B256, now) -> Result<Option<SubmitResult>, ChainError> { Ok(None) }
+    fn anchor_hash / anchor (co-signed) / flag / verify / tamper (dev);
+    fn latest_block / block / blocks(from, limit) / tx / history;
 }
 ```
 
-`MockChain` rules: address = `keccak(owner)[12..]`; one block per tx; `user_op_hash =
+**Tamper evidence.** Every state change is an event (`ChainTx`) carrying `version`, `timestamp`,
+`kind`, the signatures that authorised it, an open `extra` map and derived `flags`. Events are
+hashed against their parent block; blocks commit to a state root and are signed by a validator
+key distinct from the co-signer; an append-only JSON-lines store is replayed and re-verified on
+start (`MockChain::new`), and `verify()` replays the live chain and compares state roots.
+Flags (`TxKind::Flag`) are append-only events that reference a target event; history is never edited.
+
+`MockChain` rules: address = `keccak(owner)[12..]`; one block per event; `user_op_hash =
 keccak("SQW-USEROP-v1" ‖ chain_id ‖ from ‖ to ‖ value ‖ keccak(data) ‖ nonce)`; co-signature =
 Ed25519 over `"SQW-COSIGN-v1" ‖ hash`; owner signatures are Ed25519 over the raw hash or WebAuthn
 (`challenge = base64url(hash)`, ECDSA P-256 over `authenticatorData ‖ sha256(clientDataJSON)`).

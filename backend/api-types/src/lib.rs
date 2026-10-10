@@ -8,9 +8,62 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 pub use sq_adapters::chain::{
-    AccountView, AssetBalance, Block, ChainInfo, ChainTx, EscapeStatus, OwnerKey, OwnerSignature, PreparedOp,
-    SignedUserOp, SubmitResult, TokenInfo, TxKind,
+    AccountView, AssetBalance, Block, BlockWithTxs, ChainInfo, ChainTx, ChainVerification, EscapeStatus, Flag, FlagSource,
+    OwnerKey, OwnerSignature, PreparedOp, SignedUserOp, SubmitResult, Tamper, TokenInfo, TxKind,
 };
+
+/// Page of blocks for explorers: `?from=0&limit=50` (newest first when `from` is omitted).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BlocksQuery {
+    #[ts(type = "number | null")]
+    pub chain_id: Option<u64>,
+    #[ts(type = "number | null")]
+    pub from: Option<u64>,
+    #[ts(type = "number | null")]
+    pub limit: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TamperRequest {
+    #[ts(type = "number | null")]
+    pub chain_id: Option<u64>,
+    pub tamper: Tamper,
+}
+
+// ---------- account review ----------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum ReviewVerdict {
+    /// Nothing above Low. The account can be served normally.
+    Clean,
+    /// Medium or High findings: a human should look before Swissquote keeps co-signing.
+    Suspicious,
+    /// At least one Critical finding (sanctions, escape exit, tampering, unlogged tx).
+    Blocked,
+}
+
+/// Outcome of walking an account's whole on-chain history against the policy, the audit log and
+/// the external signals, with every finding written back to the chain as a `Flag` event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ReviewReport {
+    #[ts(type = "string")]
+    pub address: Address,
+    pub verdict: ReviewVerdict,
+    #[ts(type = "number")]
+    pub score: u32,
+    #[ts(type = "number")]
+    pub txs_reviewed: u64,
+    #[ts(type = "number")]
+    pub new_flags: u64,
+    /// Every flag on the account after this review, oldest first.
+    pub flags: Vec<Flag>,
+    pub chain: ChainVerification,
+}
 
 /// Optional chain selector for `/chain/*` reads; defaults to the registry's default chain.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
