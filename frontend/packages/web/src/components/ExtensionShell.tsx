@@ -50,7 +50,7 @@ const tierLabels: Record<RiskTier, string> = {
   low: "Low risk",
   moderate: "Moderate risk",
   high: "High risk",
-  refused: "Not co-signed",
+  refused: "Not signed",
 }
 
 export default function ExtensionShell({
@@ -241,7 +241,7 @@ function ExtensionHome({
         <div className="balance-topline">
           <span>Total balance</span>
           <Badge tone="low">
-            <ShieldCheck size={12} /> Co-signed
+            <ShieldCheck size={12} /> Dual signature
           </Badge>
         </div>
         <strong>$184,392.60</strong>
@@ -633,7 +633,7 @@ function ReviewScreen({
           <span>Policy status</span>
           <strong>
             {report.tier === "refused"
-              ? "Not co-signed"
+              ? "Not signed by Swissquote"
               : report.tier === "low"
                 ? "Within limits"
                 : "Exception required"}
@@ -662,7 +662,7 @@ function ReviewScreen({
           </Button>
           <p>
             <Info size={14} /> This is the only case where Swissquote does not
-            co-sign: a regulatory obligation, not a risk score.
+            sign: a regulatory obligation, not a risk score.
           </p>
         </div>
       ) : (
@@ -707,7 +707,7 @@ function PasskeyScreen({ onConfirm }: { onConfirm: () => void }) {
       <span className="eyebrow">FINAL APPROVAL</span>
       <h2>Confirm with your passkey</h2>
       <p className="screen-lede">
-        Your approval authorises this action. Swissquote then co-signs it under
+        Your approval authorises this action. Swissquote then adds its signature under
         your {APP_NAME} policy.
       </p>
       <div className="signing-steps">
@@ -726,7 +726,7 @@ function PasskeyScreen({ onConfirm }: { onConfirm: () => void }) {
             <ShieldCheck size={17} />
           </span>
           <div>
-            <strong>Swissquote co-sign</strong>
+            <strong>Swissquote signature</strong>
             <small>Policy confirmation</small>
           </div>
           <Badge>Next</Badge>
@@ -750,7 +750,7 @@ function PasskeyScreen({ onConfirm }: { onConfirm: () => void }) {
           window.setTimeout(onConfirm, 850)
         }}
       >
-        {signing ? "Co-signing…" : "Confirm and co-sign"}
+        {signing ? "Signing…" : "Confirm and sign"}
       </Button>
       <p className="screen-footnote">
         <LockKeyhole size={14} /> {APP_NAME} never receives your passkey.
@@ -771,10 +771,10 @@ function SuccessScreen({
       <span className="success-mark">
         <CheckCircle2 size={44} />
       </span>
-      <Badge tone="low">CO-SIGNED BY SWISSQUOTE</Badge>
+      <Badge tone="low">SIGNED BY SWISSQUOTE</Badge>
       <h2>Transaction submitted</h2>
       <p className="screen-lede">
-        Your approval was co-signed by Swissquote and sent to the network.
+        Your approval was signed by Swissquote too and sent to the network.
       </p>
       <Card className="receipt-card">
         <div className="receipt-row">
@@ -869,7 +869,7 @@ function ActivityScreen() {
         <ShieldCheck size={18} />
         <p>
           <strong>Complete audit trail</strong>
-          <span>Every assessment, approval, and co-sign is recorded.</span>
+          <span>Every assessment, approval, and signature is recorded.</span>
         </p>
       </Card>
     </div>

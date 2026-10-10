@@ -28,7 +28,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   UI_INVALID_SETTINGS: 'Réglages invalides : les pourcentages doivent être entre 0 et 100.',
   SQ_UNREACHABLE: 'Le service Swissquote est injoignable.',
   SQ_CHAIN_BAD_OWNER_SIGNATURE: 'Signature de la passkey refusée.',
-  SQ_CHAIN_BAD_COSIGNATURE: 'Co-signature Swissquote invalide.',
+  SQ_CHAIN_BAD_COSIGNATURE: 'Signature Swissquote invalide.',
   SQ_CORE_SEQ_GAP: "Le journal d'audit n'est pas synchronisé. Recommencez l'envoi.",
 };
 
