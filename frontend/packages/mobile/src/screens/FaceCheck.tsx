@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Linking, StyleSheet, Text, View } from 'react-native';
 import { Body, Button, Card, Eyebrow } from '../ui/components';
 import { useTheme } from '../ui/theme';
 
@@ -64,8 +64,12 @@ export function FaceCheck({ onDone }: Props) {
   }, [phase, sweep]);
 
   const start = async (): Promise<void> => {
-    const granted = permission?.granted ?? (await requestPermission()).granted;
-    if (!granted) return;
+    // "Not granted yet" is also the state before the first prompt: ask, don't stop.
+    const granted = permission?.granted === true || (await requestPermission()).granted;
+    if (!granted) {
+      setCameraError("l'accès à la caméra a été refusé");
+      return;
+    }
     setStepIndex(0);
     setCameraError(null);
     // Liveness prompts start only once the camera actually streams (onCameraReady).
@@ -88,7 +92,10 @@ export function FaceCheck({ onDone }: Props) {
           </Body>
           {cameraError ? <Body muted>La caméra n'a pas pu démarrer : {cameraError}</Body> : null}
           {isDenied ? (
-            <Body muted>L'accès à la caméra est refusé dans les réglages. Vous pouvez continuer sans cette étape.</Body>
+            <>
+              <Body muted>L'accès à la caméra est refusé dans les réglages du téléphone.</Body>
+              <Button label="Ouvrir les réglages" onPress={() => void Linking.openSettings()} />
+            </>
           ) : (
             <Button label={cameraError ? 'Réessayer' : 'Démarrer la vérification faciale'} onPress={() => void start()} />
           )}
