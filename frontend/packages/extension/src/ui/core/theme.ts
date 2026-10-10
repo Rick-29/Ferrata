@@ -1,61 +1,56 @@
 import { css } from 'lit';
 
-// Design tokens as CSS custom properties. Set once on the app shell; they inherit through
-// every widget's shadow root, so widgets only ever read var(--sq-*).
+// Design tokens from the Figma Make design (design system frame "Système visuel"). Set once on
+// the app shell; they inherit through every widget's shadow root, so widgets only read var(--sq-*).
+// The design is dark-first and has no light variant yet.
 export const themeStyles = css`
   :host {
     --sq-font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-    --sq-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
+    --sq-font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+    --sq-font-mono: ui-monospace, 'Cascadia Code', Menlo, monospace;
 
-    --sq-bg: #f6f5f2;
-    --sq-surface: #ffffff;
-    --sq-surface-sunken: #eeece7;
-    --sq-text: #15171c;
-    --sq-text-muted: #5f6470;
-    --sq-border: #dedbd3;
-    --sq-accent: #e8590c;
+    --sq-bg: #0a0c16;
+    --sq-surface: #141726;
+    --sq-surface-high: #1a1e30;
+    --sq-surface-sunken: #10131f;
+    --sq-text: #f7f8fc;
+    --sq-text-muted: #9198ad;
+    --sq-text-faint: #676e83;
+    --sq-border: rgba(255, 255, 255, 0.07);
+    --sq-border-strong: rgba(255, 255, 255, 0.12);
+
+    --sq-orange: #ff6a1a;
+    --sq-accent: #ff4b1f;
+    --sq-pink: #ff3d3d;
+    --sq-violet: #bd315f;
+    --sq-lilac: #7b5cff;
     --sq-accent-text: #ffffff;
-    --sq-focus: #1f6feb;
+    --sq-focus: #ff3d7f;
+    --sq-gradient: linear-gradient(118deg, var(--sq-orange), var(--sq-accent) 48%, var(--sq-violet));
+    --sq-brand-gradient: linear-gradient(122deg, #ff743d, #ff4b1f 56%, #e93b1b);
+    --sq-soft-gradient: linear-gradient(110deg, rgba(255, 61, 127, 0.06), rgba(123, 92, 255, 0.07));
 
-    --sq-risk-low: #1a7f4b;
-    --sq-risk-medium: #b7791f;
-    --sq-risk-high: #d1480f;
-    --sq-risk-critical: #c0182e;
+    --sq-risk-low: #2ed598;
+    --sq-risk-medium: #ffb547;
+    --sq-risk-high: #ff7a3d;
+    --sq-risk-critical: #ff4d6a;
 
-    --sq-radius-sm: 6px;
-    --sq-radius-md: 12px;
-    --sq-radius-lg: 18px;
+    --sq-radius-sm: 12px;
+    --sq-radius-md: 16px;
+    --sq-radius-lg: 24px;
     --sq-space-1: 4px;
     --sq-space-2: 8px;
     --sq-space-3: 12px;
     --sq-space-4: 16px;
     --sq-space-6: 24px;
-    --sq-shadow: 0 1px 2px rgb(21 23 28 / 6%), 0 8px 24px rgb(21 23 28 / 8%);
+    --sq-shadow: 0 22px 55px rgba(0, 0, 0, 0.38);
 
-    --sq-duration: 160ms;
-    --sq-ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --sq-duration: 200ms;
+    --sq-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
-    color-scheme: light dark;
+    color-scheme: dark;
     font-family: var(--sq-font);
     color: var(--sq-text);
     background: var(--sq-bg);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :host {
-      --sq-bg: #0f1114;
-      --sq-surface: #181b20;
-      --sq-surface-sunken: #121418;
-      --sq-text: #eceae5;
-      --sq-text-muted: #9a9fa9;
-      --sq-border: #2a2e35;
-      --sq-accent: #f2702a;
-      --sq-focus: #58a6ff;
-      --sq-risk-low: #3fb37a;
-      --sq-risk-medium: #e0a33a;
-      --sq-risk-high: #f0753a;
-      --sq-risk-critical: #f2555f;
-      --sq-shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
-    }
   }
 `;

@@ -40,6 +40,7 @@ const KIND_LABELS: Readonly<Record<TxKind, string>> = {
   settings_changed: 'Réglages modifiés',
   intent: 'Transaction préparée',
   intent_outcome: 'Suite de transaction',
+  address_report: 'Adresse signalée',
 };
 
 /** Internal bookkeeping events the user does not need to see one by one. */

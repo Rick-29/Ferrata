@@ -3,66 +3,62 @@ import type { AssetBalance } from '@sqw/types/AssetBalance';
 import { css, html, type TemplateResult } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import { formatUnits } from '../../core/format';
-import { surfaceStyles, textStyles } from '../../core/styles';
 import { Widget } from '../../core/Widget';
 import '../copy-address/CopyAddress';
+import '../gasless-badge/GaslessBadge';
 
 const HEADLINE_SYMBOL = 'USDC';
 
-/** The headline balance (USDC, the demo's main asset) and the account address. */
+/** The headline balance (USDC, the demo's main asset), the address and the gasless badge (design: .balance). */
 @customElement('sq-balance-card')
 export class BalanceCard extends Widget<AccountView> {
-  static override styles = [
-    textStyles,
-    surfaceStyles,
-    css`
-      .card {
-        display: grid;
-        gap: var(--sq-space-3);
-        position: relative;
-        overflow: hidden;
-        isolation: isolate;
-      }
-      .card::after {
-        content: '';
-        position: absolute;
-        inset: auto -40px -60px auto;
-        width: 160px;
-        height: 160px;
-        border-radius: 50%;
-        background: radial-gradient(circle, color-mix(in srgb, var(--sq-accent) 22%, transparent), transparent 70%);
-        z-index: -1;
-      }
-      .amount {
-        display: flex;
-        align-items: baseline;
-        gap: var(--sq-space-2);
-      }
-      .value {
-        font-size: 36px;
-        font-weight: 700;
-        letter-spacing: -0.03em;
-        font-variant-numeric: tabular-nums;
-        line-height: 1;
-      }
-      .symbol {
-        font-size: 15px;
-        font-weight: 650;
-        color: var(--sq-text-muted);
-      }
-    `,
-  ];
+  static override styles = css`
+    section {
+      display: grid;
+      justify-items: center;
+      gap: 11px;
+      margin-top: 10px;
+      text-align: center;
+    }
+    .label {
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--sq-text-muted);
+    }
+    .amount {
+      margin: 0;
+      font: 600 42px/1 var(--sq-font-display);
+      letter-spacing: -0.06em;
+      text-shadow: 0 0 30px rgba(255, 61, 127, 0.24);
+      font-variant-numeric: tabular-nums;
+    }
+    .symbol {
+      font-size: 17px;
+      color: #d7d9e5;
+      letter-spacing: -0.03em;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 5px;
+    }
+  `;
 
   protected override renderReady(account: AccountView): TemplateResult {
     const headline = headlineBalance(account.balances);
     return html`
-      <section class="card" aria-label="Solde">
-        <span class="eyebrow">Solde disponible</span>
-        <div class="amount">
-          <span class="value">${headline ? formatUnits(headline.amount, headline.decimals) : '0'}</span>
+      <section aria-label="Solde">
+        <span class="label">Solde disponible</span>
+        <p class="amount">
+          ${headline ? formatUnits(headline.amount, headline.decimals) : '0'}
           <span class="symbol">${headline?.symbol ?? HEADLINE_SYMBOL}</span>
+        </p>
+        <div class="chips">
+          <sq-copy-address .address=${account.address}></sq-copy-address>
+          <sq-gasless-badge></sq-gasless-badge>
         </div>
-        <div><sq-copy-address .address=${account.address}></sq-copy-address></div>
       </section>
     `;
   }

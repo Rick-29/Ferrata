@@ -20,9 +20,38 @@ export class AppShell extends LitElement {
     css`
       :host {
         display: block;
+        position: relative;
         min-height: 100%;
-        padding: var(--sq-space-4);
+        overflow: hidden;
         box-sizing: border-box;
+      }
+      /* Soft blurred glows behind the content (design: .ambient). */
+      .ambient {
+        position: absolute;
+        border-radius: 999px;
+        filter: blur(60px);
+        pointer-events: none;
+      }
+      .one {
+        width: 210px;
+        height: 180px;
+        left: -85px;
+        top: -90px;
+        background: var(--sq-pink);
+        opacity: 0.18;
+      }
+      .two {
+        width: 190px;
+        height: 180px;
+        right: -100px;
+        top: 175px;
+        background: var(--sq-violet);
+        opacity: 0.12;
+      }
+      main {
+        position: relative;
+        z-index: 1;
+        padding: 20px;
       }
     `,
   ];
@@ -44,7 +73,9 @@ export class AppShell extends LitElement {
   }
 
   override render(): TemplateResult {
-    return html`<main>${this.router.render()}</main>`;
+    return html`<div class="ambient one"></div>
+      <div class="ambient two"></div>
+      <main>${this.router.render()}</main>`;
   }
 
   readonly #onRouteChange = (): void => {
