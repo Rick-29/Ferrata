@@ -1,11 +1,11 @@
 //! Proof of wallet ownership (FINMA-style): Swissquote issues a challenge, the passkey signs it,
-//! and the pseudo-chain account is created for that key.
+//! and an account for that key is created on every registered chain. One owner key, one wallet.
 
 use alloy_primitives::B256;
+use api_types::{WalletOverview, WalletOverviewRequest};
 use axum::extract::State;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use sq_adapters::MockChain;
 use sq_adapters::chain::auth::verify_owner;
 
 use crate::error::{ApiResult, ServiceError};
@@ -14,16 +14,19 @@ use crate::state::SharedState;
 const CHALLENGE_TTL_SECS: u64 = 300;
 
 pub fn routes() -> Router<SharedState> {
-    Router::new().route("/ownership/challenge", get(challenge)).route("/wallet/register", post(register))
+    Router::new()
+        .route("/ownership/challenge", get(challenge))
+        .route("/wallet/register", post(register))
+        .route("/wallet/overview", post(overview))
 }
 
 async fn challenge(State(state): State<SharedState>) -> ApiResult<api_types::ChallengeResponse> {
     let mut bytes = [0u8; 32];
     rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut bytes);
     let challenge = B256::from(bytes);
-    let expires_at = state.now() + CHALLENGE_TTL_SECS;
-    let mut challenges = state.lock(&state.challenges)?;
     let now = state.now();
+    let expires_at = now + CHALLENGE_TTL_SECS;
+    let mut challenges = state.lock(&state.challenges)?;
     challenges.retain(|_, exp| *exp > now);
     challenges.insert(challenge, expires_at);
     Ok(Json(api_types::ChallengeResponse { challenge, expires_at }))
@@ -42,12 +45,34 @@ async fn register(State(state): State<SharedState>, Json(req): Json<api_types::R
     if !verify_owner(&req.owner, &req.challenge, &req.signature) {
         return Err(ServiceError::Unauthorized);
     }
-    let address = MockChain::address_for(&req.owner);
-    let mut chain = state.chain()?;
-    if !chain.has_account(address) {
-        chain.create_account(req.owner.clone())?;
-    }
-    let account = chain.account(address, now)?;
-    tracing::info!(%address, "wallet registered with ownership proof");
-    Ok(Json(api_types::RegisterWalletResponse { address, account }))
+
+    let accounts = state.chains.for_each(|chain| {
+        let address = chain.address_for(&req.owner);
+        if !chain.has_account(address) {
+            chain.create_account(req.owner.clone())?;
+        }
+        chain.account(address, now)
+    })?;
+    let default_id = state.chains.default_chain();
+    let account = {
+        let chain = state.chain()?;
+        chain.account(chain.address_for(&req.owner), now)?
+    };
+    tracing::info!(address = %account.address, chains = accounts.len(), default_chain = default_id, "wallet registered with ownership proof");
+    Ok(Json(api_types::RegisterWalletResponse { address: account.address, account, accounts }))
+}
+
+/// The wallet as the user sees it: every chain account behind one owner key.
+async fn overview(State(state): State<SharedState>, Json(req): Json<WalletOverviewRequest>) -> ApiResult<WalletOverview> {
+    let now = state.now();
+    let accounts = state
+        .chains
+        .for_each(|chain| {
+            let address = chain.address_for(&req.owner);
+            Ok(if chain.has_account(address) { Some(chain.account(address, now)?) } else { None })
+        })?
+        .into_iter()
+        .flatten()
+        .collect();
+    Ok(Json(WalletOverview { owner: req.owner, accounts }))
 }

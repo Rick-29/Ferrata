@@ -1,5 +1,6 @@
-//! End-to-end demo flow through the HTTP router: register → fund → assess → co-sign → submit,
-//! the four risk bands, hold release, escape hatch + reconciliation, recovery with cancel.
+//! End-to-end demo flow through the HTTP router: login → register → fund → assess → co-sign →
+//! submit, the four risk bands, verified step-up, hold release, escape hatch + reconciliation,
+//! anchoring, recovery with cancel, auth gate, dev reset.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -15,6 +16,7 @@ use ed25519_dalek::{Signer, SigningKey};
 use http_body_util::BodyExt;
 use serde::de::DeserializeOwned;
 use sq_adapters::{FixedClock, MockChain};
+use sq_services::assess::step_up_hash;
 use sq_services::config::Config;
 use sq_services::state::AppState;
 use tower::ServiceExt;
@@ -41,19 +43,31 @@ impl Owner {
 struct App {
     router: Router,
     clock: Arc<FixedClock>,
+    token: Option<String>,
 }
 
 impl App {
     fn new() -> Self {
         let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
-        let config = Config::load(fixtures, 0, None, Some([42u8; 32]), true).unwrap();
+        let config = Config::load(fixtures, 0, None, Some([42u8; 32]), true, true).unwrap();
         let clock = Arc::new(FixedClock::new(1_000_000));
         let state = AppState::build_with_clock(config, clock.clone()).unwrap();
-        Self { router: sq_services::router(state), clock }
+        Self { router: sq_services::router(state), clock, token: None }
+    }
+
+    /// Logged-in app; every later call carries the bearer token.
+    async fn logged_in() -> Self {
+        let mut app = Self::new();
+        let sess: Session = app.post("/auth/session", LoginRequest { username: "alice".into(), password: "demo".into() }).await;
+        app.token = Some(sess.token);
+        app
     }
 
     async fn call<T: DeserializeOwned>(&self, method: &str, path: &str, body: Option<serde_json::Value>) -> (StatusCode, T) {
-        let req = Request::builder().method(method).uri(path).header("content-type", "application/json");
+        let mut req = Request::builder().method(method).uri(path).header("content-type", "application/json");
+        if let Some(t) = &self.token {
+            req = req.header("authorization", format!("Bearer {t}"));
+        }
         let req = match body {
             Some(b) => req.body(Body::from(serde_json::to_vec(&b).unwrap())),
             None => req.body(Body::empty()),
@@ -82,20 +96,21 @@ impl App {
         self.call("POST", path, Some(serde_json::to_value(body).unwrap())).await
     }
 
-    /// Ownership proof + account creation + faucet. Returns the address.
+    /// Ownership proof + account creation on every chain + faucet. Returns the default-chain address.
     async fn onboard(&self, owner: &Owner) -> Address {
         let ch: ChallengeResponse = self.get("/ownership/challenge").await;
         let reg: RegisterWalletResponse = self
             .post("/wallet/register", RegisterWalletRequest { owner: owner.key(), challenge: ch.challenge, signature: owner.sign(&ch.challenge) })
             .await;
         assert_eq!(reg.address, MockChain::address_for(&owner.key()));
-        let _: SubmitResult = self.post("/chain/faucet", FaucetRequest { address: reg.address, asset: None, amount: U256::from(10u64.pow(18)) }).await;
-        let _: SubmitResult = self.post("/chain/faucet", FaucetRequest { address: reg.address, asset: Some(USDC), amount: U256::from(500_000_000u64) }).await;
+        assert_eq!(reg.accounts.len(), 1, "one account per registered chain");
+        let _: SubmitResult = self.post("/chain/faucet", FaucetRequest { chain_id: None, address: reg.address, asset: None, amount: U256::from(10u64.pow(18)) }).await;
+        let _: SubmitResult = self.post("/chain/faucet", FaucetRequest { chain_id: None, address: reg.address, asset: Some(USDC), amount: U256::from(500_000_000u64) }).await;
         reg.address
     }
 
     /// assess → cosign with the current log head. Returns the outcome and the prepared op.
-    async fn cosign(&self, tx: &TxRequest, account: &AccountContext, step_up: bool) -> (CosignOutcome, PreparedOp) {
+    async fn cosign(&self, tx: &TxRequest, account: &AccountContext, step_up: Option<OwnerSignature>) -> (CosignOutcome, PreparedOp) {
         let a: AssessResponse = self.post("/assess", AssessRequest { tx: tx.clone(), account: Some(account.clone()) }).await;
         let prepared = a.prepared.expect("account exists on chain");
         let outcome: CosignOutcome = self
@@ -121,23 +136,36 @@ fn usdc_balance(acc: &AccountView) -> U256 {
 }
 
 #[tokio::test]
-async fn login_rejects_bad_credentials_and_issues_sessions() {
+async fn auth_gate_rejects_missing_or_bad_tokens_but_not_public_routes() {
     let app = App::new();
     let (s, _) = app.post_err("/auth/session", LoginRequest { username: "alice".into(), password: "wrong".into() }).await;
     assert_eq!(s, StatusCode::UNAUTHORIZED);
-    let sess: Session = app.post("/auth/session", LoginRequest { username: "alice".into(), password: "demo".into() }).await;
-    assert_eq!(sess.client_id, "SQ-100001");
+
+    let (s, e) = app.call::<ApiError>("GET", "/ownership/challenge", None).await;
+    assert_eq!((s, e.code.as_str()), (StatusCode::UNAUTHORIZED, "UNAUTHORIZED"));
+    let (s, _) = app.call::<serde_json::Value>("GET", "/chain/info", None).await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, _) = app.call::<serde_json::Value>("GET", "/chains", None).await;
+    assert_eq!(s, StatusCode::OK);
+
+    let mut bad = App::new();
+    bad.token = Some("sess_nope".into());
+    let (s, _) = bad.call::<ApiError>("GET", "/ownership/challenge", None).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    let app = App::logged_in().await;
+    let _: ChallengeResponse = app.get("/ownership/challenge").await;
 }
 
 #[tokio::test]
-async fn low_band_transfer_is_cosigned_submitted_and_logged() {
-    let app = App::new();
+async fn low_band_transfer_is_cosigned_submitted_logged_and_anchored() {
+    let app = App::logged_in().await;
     let owner = Owner::new(1);
     let addr = app.onboard(&owner).await;
     let account = AccountContext { known_recipients: vec![KNOWN] };
 
     let tx = usdc_tx(addr, KNOWN, 50_000_000);
-    let (outcome, prepared) = app.cosign(&tx, &account, false).await;
+    let (outcome, prepared) = app.cosign(&tx, &account, None).await;
     let CosignOutcome::Cosigned { entry, cosignature } = outcome else { panic!("expected cosigned, got {outcome:?}") };
     assert_eq!(entry.entry.assessment.band, RiskBand::Low);
     assert_eq!(entry.entry.seq, 0);
@@ -153,13 +181,42 @@ async fn low_band_transfer_is_cosigned_submitted_and_logged() {
     assert_eq!(log.entries.len(), 1);
     assert_eq!(log.head, entry.entry_hash);
 
+    let anchored: AnchorResponse = app.post(&format!("/log/{addr}/anchor"), serde_json::json!({})).await;
+    assert_eq!(anchored.head, log.head);
+    assert_eq!(anchored.tx.unwrap().kind, TxKind::Anchor);
+
     let rec: ReconcileResponse = app.post(&format!("/reconcile/{addr}"), serde_json::json!({})).await;
     assert!(rec.findings.is_empty(), "{:?}", rec.findings);
+    assert_eq!(rec.anchors_checked, 1);
+
+    let overview: WalletOverview = app.post("/wallet/overview", WalletOverviewRequest { owner: owner.key() }).await;
+    assert_eq!(overview.accounts.len(), 1);
+    assert_eq!(overview.accounts[0].address, addr);
+}
+
+#[tokio::test]
+async fn server_derived_known_recipients_make_second_payment_low() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(11);
+    let addr = app.onboard(&owner).await;
+    let fresh = Address::repeat_byte(0x55);
+    let empty = AccountContext::default();
+
+    let tx = usdc_tx(addr, fresh, 1_000_000);
+    let a: AssessResponse = app.post("/assess", AssessRequest { tx: tx.clone(), account: None }).await;
+    assert!(a.assessment.reasons.iter().any(|r| r.code == ReasonCode::NewRecipient));
+    let (outcome, prepared) = app.cosign(&tx, &empty, None).await;
+    let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
+    app.submit(&owner, tx, &prepared, Some(cosignature)).await;
+
+    // same recipient again, client sends no list: the server already knows it
+    let a: AssessResponse = app.post("/assess", AssessRequest { tx: usdc_tx(addr, fresh, 1_000_000), account: None }).await;
+    assert!(a.assessment.reasons.is_empty(), "{:?}", a.assessment.reasons);
 }
 
 #[tokio::test]
 async fn chain_rejects_submission_without_cosignature() {
-    let app = App::new();
+    let app = App::logged_in().await;
     let owner = Owner::new(2);
     let addr = app.onboard(&owner).await;
     let tx = usdc_tx(addr, KNOWN, 1);
@@ -172,18 +229,28 @@ async fn chain_rejects_submission_without_cosignature() {
 }
 
 #[tokio::test]
-async fn medium_band_requires_step_up_then_cosigns() {
-    let app = App::new();
+async fn medium_band_requires_a_verified_step_up_signature() {
+    let app = App::logged_in().await;
     let owner = Owner::new(3);
     let addr = app.onboard(&owner).await;
     let account = AccountContext::default();
-    let _: SubmitResult = app.post("/chain/faucet", FaucetRequest { address: addr, asset: Some(USDC), amount: U256::from(2_000_000_000u64) }).await;
+    let _: SubmitResult = app.post("/chain/faucet", FaucetRequest { chain_id: None, address: addr, asset: Some(USDC), amount: U256::from(2_000_000_000u64) }).await;
     let tx = usdc_tx(addr, Address::repeat_byte(0x22), 2_000_000_000);
 
-    let (first, _) = app.cosign(&tx, &account, false).await;
-    assert!(matches!(first, CosignOutcome::StepUp { .. }), "{first:?}");
+    let (first, prepared) = app.cosign(&tx, &account, None).await;
+    let CosignOutcome::StepUp { step_up_hash: h, .. } = first else { panic!("{first:?}") };
+    assert_eq!(h, step_up_hash(&prepared.user_op_hash));
 
-    let (second, prepared) = app.cosign(&tx, &account, true).await;
+    // a signature from a different key, or over the wrong hash, is rejected
+    let log: LogResponse = app.get(&format!("/log/{addr}")).await;
+    let forged = CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: log.next_seq, prev_head: log.head, step_up: Some(Owner::new(4).sign(&h)), account: None };
+    let (s, e) = app.post_err("/cosign", forged).await;
+    assert_eq!((s, e.code.as_str()), (StatusCode::UNAUTHORIZED, "UNAUTHORIZED"));
+    let wrong_hash = CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: log.next_seq, prev_head: log.head, step_up: Some(owner.sign(&prepared.user_op_hash)), account: None };
+    let (s, _) = app.post_err("/cosign", wrong_hash).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    let (second, prepared) = app.cosign(&tx, &account, Some(owner.sign(&h))).await;
     let CosignOutcome::Cosigned { entry, cosignature } = second else { panic!("{second:?}") };
     assert_eq!(entry.entry.seq, 1);
     assert!(entry.entry.step_up);
@@ -192,13 +259,13 @@ async fn medium_band_requires_step_up_then_cosigns() {
 
 #[tokio::test]
 async fn high_band_is_held_then_released_with_justification() {
-    let app = App::new();
+    let app = App::logged_in().await;
     let owner = Owner::new(4);
     let addr = app.onboard(&owner).await;
     let account = AccountContext::default();
     let tx = usdc_tx(addr, MIXER_EXPOSED, 1_000_000);
 
-    let (outcome, prepared) = app.cosign(&tx, &account, false).await;
+    let (outcome, prepared) = app.cosign(&tx, &account, None).await;
     let CosignOutcome::Held { hold_id, entry, .. } = outcome else { panic!("{outcome:?}") };
     assert_eq!(entry.entry.assessment.band, RiskBand::High);
     assert!(entry.entry.assessment.reasons.iter().any(|r| r.code == ReasonCode::MixerExposure));
@@ -220,11 +287,11 @@ async fn high_band_is_held_then_released_with_justification() {
 
 #[tokio::test]
 async fn critical_band_is_refused_and_chain_rejects_forged_cosignature() {
-    let app = App::new();
+    let app = App::logged_in().await;
     let owner = Owner::new(5);
     let addr = app.onboard(&owner).await;
     let tx = usdc_tx(addr, SANCTIONED, 1);
-    let (outcome, prepared) = app.cosign(&tx, &AccountContext::default(), false).await;
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext::default(), None).await;
     let CosignOutcome::Refused { entry } = outcome else { panic!("{outcome:?}") };
     assert_eq!(entry.entry.assessment.band, RiskBand::Critical);
 
@@ -237,28 +304,33 @@ async fn critical_band_is_refused_and_chain_rejects_forged_cosignature() {
 }
 
 #[tokio::test]
-async fn cosign_rejects_stale_log_head() {
-    let app = App::new();
+async fn cosign_rejects_stale_log_head_and_unknown_chain() {
+    let app = App::logged_in().await;
     let owner = Owner::new(6);
     let addr = app.onboard(&owner).await;
     let tx = usdc_tx(addr, KNOWN, 1);
     let prepared: PreparedOp = app.post("/chain/prepare", SimulateRequest { tx: tx.clone() }).await;
     let (s, e) = app
-        .post_err("/cosign", CosignRequest { tx, user_op_hash: prepared.user_op_hash, seq: 7, prev_head: B256::ZERO, step_up: false, account: None })
+        .post_err("/cosign", CosignRequest { tx: tx.clone(), user_op_hash: prepared.user_op_hash, seq: 7, prev_head: B256::ZERO, step_up: None, account: None })
         .await;
     assert_eq!(s, StatusCode::CONFLICT);
     assert_eq!(e.code, "CORE_SEQ_GAP");
+
+    let mut other = tx;
+    other.chain_id = 1;
+    let (s, e) = app.post_err("/chain/prepare", SimulateRequest { tx: other }).await;
+    assert_eq!((s, e.code.as_str()), (StatusCode::UNPROCESSABLE_ENTITY, "CHAIN_UNKNOWN_CHAIN"));
 }
 
 #[tokio::test]
 async fn escape_hatch_exit_is_flagged_by_reconciliation() {
-    let app = App::new();
+    let app = App::logged_in().await;
     let owner = Owner::new(7);
     let addr = app.onboard(&owner).await;
     let exit_to = Address::repeat_byte(0x33);
 
-    let h: HashResponse = app.post("/chain/escape/hash", EscapeHashRequest { address: addr, to: Some(exit_to) }).await;
-    let started: EscapeResponse = app.post("/chain/escape/start", StartEscapeRequest { address: addr, to: exit_to, signature: owner.sign(&h.hash) }).await;
+    let h: HashResponse = app.post("/chain/escape/hash", EscapeHashRequest { chain_id: None, address: addr, to: Some(exit_to) }).await;
+    let started: EscapeResponse = app.post("/chain/escape/start", StartEscapeRequest { chain_id: None, address: addr, to: exit_to, signature: owner.sign(&h.hash) }).await;
     let EscapeStatus::Pending { unlock_at, .. } = started.escape else { panic!("{:?}", started.escape) };
 
     let tx = usdc_tx(addr, exit_to, 500_000_000);
@@ -280,7 +352,7 @@ async fn escape_hatch_exit_is_flagged_by_reconciliation() {
 
 #[tokio::test]
 async fn recovery_cancel_during_timelock_wins_and_execute_after_timelock_rotates_owner() {
-    let app = App::new();
+    let app = App::logged_in().await;
     let real = Owner::new(8);
     let addr = app.onboard(&real).await;
 
@@ -317,7 +389,7 @@ async fn recovery_cancel_during_timelock_wins_and_execute_after_timelock_rotates
     assert!(matches!(done.status, RecoveryStatus::Completed { .. }));
 
     let tx = usdc_tx(addr, KNOWN, 1);
-    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN] }, false).await;
+    let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN] }, None).await;
     let CosignOutcome::Cosigned { cosignature, .. } = outcome else { panic!("{outcome:?}") };
     let (s, e) = app
         .post_err("/chain/submit", SignedUserOp { tx: tx.clone(), nonce: prepared.nonce, owner_signature: real.sign(&prepared.user_op_hash), cosignature: Some(cosignature.clone()) })
@@ -328,11 +400,17 @@ async fn recovery_cancel_during_timelock_wins_and_execute_after_timelock_rotates
 }
 
 #[tokio::test]
-async fn dev_passkeys_drive_the_flow_without_client_side_crypto() {
-    let app = App::new();
+async fn dev_passkeys_and_reset_drive_rehearsals() {
+    let app = App::logged_in().await;
     let pk: DevPasskey = app.post("/dev/passkeys", DevPasskeyRequest { name: "alice-phone".into() }).await;
     let ch: ChallengeResponse = app.get("/ownership/challenge").await;
     let sig: OwnerSignature = app.post("/dev/passkeys/alice-phone/sign", DevSignRequest { hash: ch.challenge }).await;
     let reg: RegisterWalletResponse = app.post("/wallet/register", RegisterWalletRequest { owner: pk.owner, challenge: ch.challenge, signature: sig }).await;
     assert_eq!(reg.address, pk.address);
+
+    let _: serde_json::Value = app.post("/dev/reset", serde_json::json!({})).await;
+    let (s, e) = app.call::<ApiError>("GET", &format!("/chain/accounts/{}", pk.address), None).await;
+    assert_eq!((s, e.code.as_str()), (StatusCode::NOT_FOUND, "CHAIN_UNKNOWN_ACCOUNT"));
+    // session survives the reset
+    let _: ChallengeResponse = app.get("/ownership/challenge").await;
 }

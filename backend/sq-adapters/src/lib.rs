@@ -8,8 +8,8 @@ pub mod signals;
 pub mod signer;
 
 pub use chain::{
-    AccountView, Block, ChainError, ChainTx, EscapeStatus, MockChain, OwnerKey, OwnerSignature, PreparedOp,
-    SignedUserOp, SubmitResult, TokenInfo, TxKind,
+    AccountView, Block, ChainBackend, ChainError, ChainRegistry, ChainTx, EscapeStatus, MockChain, OwnerKey, OwnerSignature,
+    PreparedOp, SignedUserOp, SubmitResult, TokenInfo, TxKind,
 };
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use log_store::{InMemoryLogStore, LogStore};

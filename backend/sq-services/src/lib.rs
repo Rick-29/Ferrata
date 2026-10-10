@@ -1,5 +1,5 @@
 //! Swissquote-side services: co-signing, holds, recovery, reconciliation, ownership, and the
-//! pseudo-blockchain the demo runs against. One Axum router, one module per capability.
+//! pseudo-blockchain(s) the demo runs against. One Axum router, one module per capability.
 
 pub mod assess;
 pub mod auth;
@@ -16,6 +16,7 @@ pub mod state;
 
 use axum::Router;
 use axum::http::{Method, header};
+use axum::middleware;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -35,11 +36,15 @@ pub fn router(state: SharedState) -> Router {
         .merge(log::routes())
         .merge(recovery::routes())
         .merge(reconcile::routes())
+        .merge(chain::wallet_routes())
         .nest("/chain", chain::routes());
 
     if state.config.dev_signer {
         app = app.nest("/dev", dev::routes());
     }
 
-    app.layer(cors).layer(TraceLayer::new_for_http()).with_state(state)
+    app.layer(middleware::from_fn_with_state(state.clone(), auth::require_session))
+        .layer(cors)
+        .layer(TraceLayer::new_for_http())
+        .with_state(state)
 }

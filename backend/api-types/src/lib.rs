@@ -11,6 +11,28 @@ pub use sq_adapters::chain::{
     AccountView, AssetBalance, Block, ChainInfo, ChainTx, EscapeStatus, OwnerKey, OwnerSignature, PreparedOp,
     SignedUserOp, SubmitResult, TokenInfo, TxKind,
 };
+
+/// Optional chain selector for `/chain/*` reads; defaults to the registry's default chain.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ChainQuery {
+    #[ts(type = "number | null")]
+    pub chain_id: Option<u64>,
+}
+
+/// One wallet, many settlement layers: one account per registered chain for the same owner key.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WalletOverviewRequest {
+    pub owner: OwnerKey,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct WalletOverview {
+    pub owner: OwnerKey,
+    pub accounts: Vec<AccountView>,
+}
 pub use wallet_core::{
     AccountContext, AuditLog, BalanceDelta, DecodedAction, ExternalSignals, LogEntry, OutcomeKind, PolicyConfig,
     Receipt, Reason, ReasonCode, RiskAssessment, RiskBand, SignedEntry, TxRequest,
@@ -66,9 +88,12 @@ pub struct RegisterWalletRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct RegisterWalletResponse {
+    /// Address on the default chain.
     #[ts(type = "string")]
     pub address: Address,
     pub account: AccountView,
+    /// One account per registered chain, all created for this owner key.
+    pub accounts: Vec<AccountView>,
 }
 
 // ---------- assess / cosign ----------
@@ -107,8 +132,9 @@ pub struct CosignRequest {
     pub seq: u64,
     #[ts(type = "string")]
     pub prev_head: B256,
-    /// Set after the user completed a step-up for a Medium-band request.
-    pub step_up: bool,
+    /// Medium band only: a fresh owner signature over `step_up_hash` from the `step_up` outcome.
+    /// Proves the user re-authenticated; the server verifies it against the account's owner key.
+    pub step_up: Option<OwnerSignature>,
     pub account: Option<AccountContext>,
 }
 
@@ -123,6 +149,9 @@ pub enum CosignOutcome {
     },
     StepUp {
         entry: SignedEntry,
+        /// Sign this with the passkey and resend `/cosign` with it in `step_up`.
+        #[ts(type = "string")]
+        step_up_hash: B256,
     },
     Held {
         entry: SignedEntry,
@@ -261,6 +290,8 @@ pub struct CreateAccountRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct FaucetRequest {
+    #[ts(type = "number | null")]
+    pub chain_id: Option<u64>,
     #[ts(type = "string")]
     pub address: Address,
     #[ts(type = "string | null")]
@@ -285,6 +316,8 @@ pub struct SimulateResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct StartEscapeRequest {
+    #[ts(type = "number | null")]
+    pub chain_id: Option<u64>,
     #[ts(type = "string")]
     pub address: Address,
     #[ts(type = "string")]
@@ -295,6 +328,8 @@ pub struct StartEscapeRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct EscapeHashRequest {
+    #[ts(type = "number | null")]
+    pub chain_id: Option<u64>,
     #[ts(type = "string")]
     pub address: Address,
     #[ts(type = "string | null")]
@@ -313,6 +348,8 @@ pub struct HashResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct CancelEscapeRequest {
+    #[ts(type = "number | null")]
+    pub chain_id: Option<u64>,
     #[ts(type = "string")]
     pub address: Address,
     pub signature: OwnerSignature,
@@ -331,6 +368,18 @@ pub struct HistoryResponse {
     #[ts(type = "string")]
     pub address: Address,
     pub txs: Vec<ChainTx>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AnchorResponse {
+    #[ts(type = "string")]
+    pub address: Address,
+    #[ts(type = "string")]
+    pub head: B256,
+    #[ts(type = "number")]
+    pub seq_anchored: u64,
+    pub tx: Option<SubmitResult>,
 }
 
 // ---------- reconciliation ----------
@@ -356,6 +405,8 @@ pub struct ReconcileResponse {
     pub chain_txs: u64,
     #[ts(type = "number")]
     pub log_entries: u64,
+    #[ts(type = "number")]
+    pub anchors_checked: u64,
     pub findings: Vec<Finding>,
 }
 

@@ -454,6 +454,76 @@ impl MockChain {
     }
 }
 
+impl super::ChainBackend for MockChain {
+    fn chain_id(&self) -> u64 {
+        self.chain_id
+    }
+    fn info(&self) -> ChainInfo {
+        MockChain::info(self)
+    }
+    fn address_for(&self, owner: &OwnerKey) -> Address {
+        MockChain::address_for(owner)
+    }
+    fn create_account(&mut self, owner: OwnerKey) -> Result<Address, ChainError> {
+        MockChain::create_account(self, owner)
+    }
+    fn has_account(&self, address: Address) -> bool {
+        MockChain::has_account(self, address)
+    }
+    fn account(&self, address: Address, now: u64) -> Result<AccountView, ChainError> {
+        MockChain::account(self, address, now)
+    }
+    fn fund(&mut self, to: Address, asset: Option<Address>, amount: U256, now: u64) -> Result<SubmitResult, ChainError> {
+        MockChain::fund(self, to, asset, amount, now)
+    }
+    fn prepare(&self, tx: &TxRequest) -> Result<PreparedOp, ChainError> {
+        MockChain::prepare(self, tx)
+    }
+    fn simulate(&self, tx: &TxRequest) -> Result<Vec<BalanceDelta>, ChainError> {
+        MockChain::simulate(self, tx)
+    }
+    fn submit(&mut self, op: &SignedUserOp, now: u64) -> Result<SubmitResult, ChainError> {
+        MockChain::submit(self, op, now)
+    }
+    fn escape_hash(&self, address: Address, to: Address, nonce: u64) -> B256 {
+        MockChain::escape_hash(self, address, to, nonce)
+    }
+    fn escape_cancel_hash(&self, address: Address, nonce: u64) -> B256 {
+        MockChain::escape_cancel_hash(self, address, nonce)
+    }
+    fn start_escape_hatch(&mut self, address: Address, to: Address, sig: &OwnerSignature, now: u64) -> Result<(EscapeStatus, SubmitResult), ChainError> {
+        MockChain::start_escape_hatch(self, address, to, sig, now)
+    }
+    fn cancel_escape_hatch(&mut self, address: Address, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError> {
+        MockChain::cancel_escape_hatch(self, address, sig, now)
+    }
+    fn rotate_hash(&self, address: Address, new_owner: &OwnerKey, nonce: u64) -> B256 {
+        MockChain::rotate_hash(self, address, new_owner, nonce)
+    }
+    fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        MockChain::rotate_owner(self, address, new_owner, cosignature, now)
+    }
+    fn latest_block(&self) -> Block {
+        MockChain::latest(self).clone()
+    }
+    fn block(&self, number: u64) -> Option<Block> {
+        MockChain::block(self, number).cloned()
+    }
+    fn tx(&self, hash: B256) -> Result<ChainTx, ChainError> {
+        MockChain::tx(self, hash).cloned()
+    }
+    fn history(&self, address: Address) -> Vec<ChainTx> {
+        MockChain::history(self, address)
+    }
+    fn anchor(&mut self, address: Address, head: B256, now: u64) -> Result<Option<SubmitResult>, ChainError> {
+        if !self.accounts.contains_key(&address) {
+            return Err(ChainError::UnknownAccount(address));
+        }
+        let action = DecodedAction::ContractCall { target: address, selector: Bytes::copy_from_slice(&keccak256(b"anchorLogHead(bytes32)")[..4]), value: U256::ZERO };
+        Ok(Some(self.mine(address, address, U256::ZERO, Bytes::copy_from_slice(head.as_slice()), 0, head, action, TxKind::Anchor, now)))
+    }
+}
+
 /// The genesis block is pushed in `new`, so `blocks` is never empty.
 fn unreachable_genesis() -> &'static Block {
     static GENESIS: std::sync::OnceLock<Block> = std::sync::OnceLock::new();

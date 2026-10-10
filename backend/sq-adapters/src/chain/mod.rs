@@ -6,9 +6,11 @@
 //! it in a mutex and expose it over HTTP so the UI can treat it as its RPC.
 
 pub mod auth;
+pub mod backend;
 mod ledger;
 
 pub use auth::{OwnerKey, OwnerSignature};
+pub use backend::{ChainBackend, ChainGuard, ChainRegistry};
 pub use ledger::MockChain;
 
 use alloy_primitives::{Address, B256, Bytes, U256};
@@ -44,6 +46,10 @@ pub enum ChainError {
     UnknownToken(Address),
     #[error("unknown transaction {0}")]
     UnknownTx(B256),
+    #[error("unknown chain {0}")]
+    UnknownChain(u64),
+    #[error("chain lock poisoned")]
+    Poisoned,
     #[error(transparent)]
     Decode(#[from] CoreError),
 }
@@ -64,6 +70,8 @@ impl ChainError {
             ChainError::EscapeWrongRecipient(_) => "CHAIN_ESCAPE_WRONG_RECIPIENT",
             ChainError::UnknownToken(_) => "CHAIN_UNKNOWN_TOKEN",
             ChainError::UnknownTx(_) => "CHAIN_UNKNOWN_TX",
+            ChainError::UnknownChain(_) => "CHAIN_UNKNOWN_CHAIN",
+            ChainError::Poisoned => "CHAIN_INTERNAL",
             ChainError::Decode(_) => "CHAIN_DECODE",
         }
     }
@@ -141,6 +149,8 @@ pub enum TxKind {
     EscapeExit,
     /// Owner key rotated after a recovery timelock.
     OwnerRotation,
+    /// Audit-log head anchored on-chain by Swissquote.
+    Anchor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

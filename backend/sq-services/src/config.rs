@@ -51,6 +51,8 @@ pub struct Config {
     /// 32-byte Ed25519 seed for Swissquote's receipt and co-signing key; random if unset.
     pub signing_seed: Option<[u8; 32]>,
     pub dev_signer: bool,
+    /// Require `Authorization: Bearer <token>` from `/auth/session` on every non-public route.
+    pub require_auth: bool,
     pub policy: PolicyConfig,
     pub seed: DemoSeed,
     pub clients: Vec<Client>,
@@ -67,10 +69,11 @@ impl Config {
             Err(_) => None,
         };
         let dev_signer = std::env::var("SQ_DEV_SIGNER").map(|v| v != "0").unwrap_or(true);
-        Self::load(fixtures_dir, port, snapshot_path, signing_seed, dev_signer)
+        let require_auth = std::env::var("SQ_REQUIRE_AUTH").map(|v| v != "0").unwrap_or(true);
+        Self::load(fixtures_dir, port, snapshot_path, signing_seed, dev_signer, require_auth)
     }
 
-    pub fn load(fixtures_dir: PathBuf, port: u16, snapshot_path: Option<PathBuf>, signing_seed: Option<[u8; 32]>, dev_signer: bool) -> anyhow::Result<Self> {
+    pub fn load(fixtures_dir: PathBuf, port: u16, snapshot_path: Option<PathBuf>, signing_seed: Option<[u8; 32]>, dev_signer: bool, require_auth: bool) -> anyhow::Result<Self> {
         let policy: PolicyConfig = read_json(&fixtures_dir.join("policy.json"))?;
         policy.validate().map_err(|e| anyhow::anyhow!("policy.json: {e}"))?;
         let seed: DemoSeed = read_json(&fixtures_dir.join("demo-seed.json"))?;
@@ -82,6 +85,7 @@ impl Config {
             snapshot_path,
             signing_seed,
             dev_signer,
+            require_auth,
             policy,
             seed,
             clients: accounts.clients,

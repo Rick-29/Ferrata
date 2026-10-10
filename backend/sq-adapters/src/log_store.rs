@@ -18,6 +18,8 @@ pub enum StoreError {
 pub trait LogStore: Send + Sync {
     fn load(&self, address: Address) -> Result<AuditLog, StoreError>;
     fn append(&self, address: Address, entry: SignedEntry) -> Result<AuditLog, StoreError>;
+    /// Drops every log (demo reset).
+    fn clear(&self) -> Result<(), StoreError>;
 }
 
 /// Per-account logs in memory, optionally mirrored to one JSON file after every append.
@@ -68,5 +70,11 @@ impl LogStore for InMemoryLogStore {
         let out = log.clone();
         self.persist(&logs)?;
         Ok(out)
+    }
+
+    fn clear(&self) -> Result<(), StoreError> {
+        let mut logs = self.logs.lock().map_err(|_| StoreError::Poisoned)?;
+        logs.clear();
+        self.persist(&logs)
     }
 }

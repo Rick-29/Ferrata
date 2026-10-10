@@ -32,6 +32,13 @@ pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/passkeys", post(create).get(list))
         .route("/passkeys/{name}/sign", post(sign))
+        .route("/reset", post(reset))
+}
+
+/// Fresh chains, empty logs, no holds or recoveries. For demo rehearsals.
+async fn reset(State(state): State<SharedState>) -> ApiResult<serde_json::Value> {
+    state.reset()?;
+    Ok(Json(serde_json::json!({ "ok": true, "chains": state.chains.chain_ids() })))
 }
 
 /// Creates (or returns) a named mock passkey. Deterministic per name so the demo is repeatable.
