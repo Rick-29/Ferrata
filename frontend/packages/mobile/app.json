@@ -28,7 +28,13 @@
           "cameraPermission": "La caméra sert uniquement à la vérification faciale simulée. Aucune image n'est enregistrée ni envoyée."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Ferrata utilise une photo de votre pièce d'identité choisie dans la galerie, uniquement sur ce téléphone."
+        }
+      ]
     ]
   }
 }
