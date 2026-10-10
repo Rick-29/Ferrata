@@ -1,0 +1,5 @@
+backend/target/
+node_modules/
+frontend/packages/core-wasm/
+*.snapshot.json
+.env

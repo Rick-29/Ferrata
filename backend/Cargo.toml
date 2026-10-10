@@ -1,0 +1,42 @@
+[workspace]
+members = ["api-types", "sq-adapters", "sq-services", "wallet-core", "wallet-wasm"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+wallet-core = { path = "wallet-core" }
+api-types = { path = "api-types" }
+sq-adapters = { path = "sq-adapters" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+sha2 = "0.10"
+hex = "0.4"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+alloy-primitives = { version = "1", features = ["serde"] }
+ts-rs = { version = "12", features = ["serde-compat"] }
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-trait = "0.1"
+rand = "0.8"
+p256 = { version = "0.13", features = ["ecdsa"] }
+base64 = "0.22"
+anyhow = "1"
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.release]
+opt-level = "z"
+lto = true

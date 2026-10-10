@@ -1,0 +1,15 @@
+[package]
+name = "api-types"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+wallet-core.workspace = true
+sq-adapters.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ts-rs.workspace = true
+alloy-primitives.workspace = true
+
+[lints]
+workspace = true

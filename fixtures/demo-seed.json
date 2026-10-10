@@ -1,0 +1,19 @@
+{
+  "_comment": "Pseudo-chain world. Timelocks are minutes for the demo (14 days / 24h in production).",
+  "chain_id": 84532,
+  "tokens": [
+    { "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "symbol": "USDC", "decimals": 6 }
+  ],
+  "escape_delay_secs": 120,
+  "recovery_delay_secs": 120,
+  "hold_ttl_secs": 600,
+  "faucet": {
+    "native": "0xde0b6b3a7640000",
+    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": "0x1dcd6500"
+  },
+  "demo_addresses": {
+    "known_merchant": "0x00000000000000000000000000000000000000aa",
+    "sanctioned": "0x000000000000000000000000000000000000dead",
+    "mixer_exposed": "0x0000000000000000000000000000000000c0ffee"
+  }
+}

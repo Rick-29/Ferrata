@@ -1,0 +1,17 @@
+[package]
+name = "wallet-wasm"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wallet-core.workspace = true
+serde.workspace = true
+hex.workspace = true
+wasm-bindgen.workspace = true
+serde-wasm-bindgen.workspace = true
+
+[lints]
+workspace = true

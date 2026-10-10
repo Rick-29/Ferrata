@@ -1,0 +1,7 @@
+{
+  "_comment": "Mock Swissquote clients. Demo credentials only.",
+  "clients": [
+    { "username": "alice", "password": "demo", "client_id": "SQ-100001", "display_name": "Alice Keller" },
+    { "username": "mallory", "password": "demo", "client_id": "SQ-100002", "display_name": "Mallory (attacker persona)" }
+  ]
+}

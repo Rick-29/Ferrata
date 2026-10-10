@@ -1,0 +1,12 @@
+{
+  "_comment": "PolicyConfig. Amounts in base units: USDC has 6 decimals, ETH 18. Bands: Low <25, Medium <50, High <80, Critical >=80.",
+  "thresholds": { "medium": 25, "high": 50, "critical": 80 },
+  "allowlisted_assets": ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+  "allowlisted_origins": ["https://app.uniswap.org", "https://app.aave.com"],
+  "amount_limits": {
+    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": "0x3b9aca00",
+    "native": "0xde0b6b3a7640000"
+  },
+  "default_amount_limit": "0xde0b6b3a7640000",
+  "max_exposure_hops": 2
+}

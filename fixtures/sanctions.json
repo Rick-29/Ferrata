@@ -1,0 +1,7 @@
+{
+  "_comment": "Mock sanctions list. Sending to any of these is Critical.",
+  "addresses": [
+    "0x000000000000000000000000000000000000dead",
+    "0x00000000000000000000000000000000000bad01"
+  ]
+}

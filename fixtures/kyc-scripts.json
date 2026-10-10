@@ -1,0 +1,7 @@
+{
+  "_comment": "Scripted outcomes for the 'Simulated video identification' screen.",
+  "scripts": [
+    { "id": "kyc-pass", "outcome": "pass", "label": "Real user, documents match" },
+    { "id": "kyc-fail", "outcome": "fail", "label": "Attacker, face does not match ID" }
+  ]
+}

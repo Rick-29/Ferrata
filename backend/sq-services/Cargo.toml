@@ -1,0 +1,33 @@
+[package]
+name = "sq-services"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "sq-services"
+path = "src/main.rs"
+
+[dependencies]
+wallet-core.workspace = true
+api-types.workspace = true
+sq-adapters.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+alloy-primitives.workspace = true
+tokio.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+rand.workspace = true
+ed25519-dalek.workspace = true
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+
+[lints]
+workspace = true
