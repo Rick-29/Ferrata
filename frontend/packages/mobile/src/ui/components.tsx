@@ -26,7 +26,7 @@ export function Body({ children, muted = false }: { readonly children: ReactNode
 
 export function Card({ children }: { readonly children: ReactNode }) {
   const t = useTheme();
-  return <View style={[styles.card, { backgroundColor: t.surface, borderColor: t.border }]}>{children}</View>;
+  return <View style={[styles.card, { backgroundColor: t.glass, borderColor: t.glassEdge }]}>{children}</View>;
 }
 
 /** Swissquote mark + product wordmark (APP_NAME) on a white plate (design: .brand-compact-official). */
@@ -118,11 +118,11 @@ export function ErrorBanner({ message }: { readonly message: string | null }) {
 export function Steps({ current, labels }: { readonly current: number; readonly labels: readonly string[] }) {
   const t = useTheme();
   return (
-    <View style={styles.steps} accessibilityLabel={`Étape ${current + 1} sur ${labels.length}`}>
+    <View style={styles.steps} accessibilityLabel={`Ã‰tape ${current + 1} sur ${labels.length}`}>
       <View style={[styles.stepLine, { backgroundColor: t.borderStrong }]} />
       {labels.map((label, i) => {
         const on = i <= current;
-        const dot = <Text style={styles.stepDotText}>{i < current ? '✓' : i + 1}</Text>;
+        const dot = <Text style={styles.stepDotText}>{i < current ? 'âœ“' : i + 1}</Text>;
         return (
           <View key={label} style={styles.step}>
             {on ? (
@@ -155,7 +155,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 30,
     shadowOffset: { width: 0, height: 24 },
-    elevation: 8,
   },
   brand: {
     flexDirection: 'row',

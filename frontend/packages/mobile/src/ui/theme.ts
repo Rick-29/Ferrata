@@ -5,6 +5,9 @@ export interface Theme {
   readonly bg: string;
   readonly surface: string;
   readonly surfaceHigh: string;
+  /** Translucent card over the blurred backdrop (glass). */
+  readonly glass: string;
+  readonly glassEdge: string;
   readonly text: string;
   readonly muted: string;
   readonly faint: string;
@@ -23,6 +26,8 @@ const DARK: Theme = {
   bg: '#0a0c16',
   surface: '#141726',
   surfaceHigh: '#1a1e30',
+  glass: 'rgba(20,23,38,0.62)',
+  glassEdge: 'rgba(255,255,255,0.14)',
   text: '#f7f8fc',
   muted: '#9198ad',
   faint: '#676e83',
