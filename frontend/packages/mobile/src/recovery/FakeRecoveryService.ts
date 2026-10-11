@@ -1,7 +1,7 @@
 import { err, ok, sdkError } from '@sqw/sdk';
 import type { OwnerKey } from '@sqw/types/OwnerKey';
 import type { RecoveryState } from '@sqw/types/RecoveryState';
-import type { KycScript, NewPasskey, RecoveryService, ServiceResult } from './RecoveryService';
+import type { KycScript, RecoveryService, ServiceResult } from './RecoveryService';
 
 /** Shorter than the backend's 120 s so an offline demo does not drag. */
 const FAKE_TIMELOCK_SECS = 30;
@@ -20,11 +20,6 @@ export class FakeRecoveryService implements RecoveryService {
     }
     this.#loggedIn = true;
     return ok({ displayName: username === 'alice' ? 'Alice Keller' : 'Mallory (attacker persona)' });
-  }
-
-  async createPasskey(): ServiceResult<NewPasskey> {
-    const key = `0x${Array.from({ length: 32 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('')}`;
-    return ok({ name: 'fake-recovery', owner: { kind: 'ed25519', key } });
   }
 
   async start(address: string, newOwner: OwnerKey, kyc: { readonly script: KycScript; readonly fullName: string }): ServiceResult<RecoveryState> {

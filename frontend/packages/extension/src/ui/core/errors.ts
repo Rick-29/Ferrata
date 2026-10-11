@@ -17,6 +17,9 @@ const MESSAGES: Readonly<Record<string, string>> = {
   CORE_CHAIN_BROKEN: "Le journal d'audit a été altéré.",
   CORE_BAD_RECEIPT: 'Reçu Swissquote invalide.',
   PASSKEY_CANCELLED: 'Signature annulée.',
+  PASSKEY_UNAVAILABLE: 'Gardez le popup ouvert pendant la signature avec votre passkey.',
+  PASSKEY_UNKNOWN: 'Passkey introuvable sur cet appareil. Reconnectez-vous pour en créer une.',
+  PASSKEY_FAILED: 'La passkey n’a pas pu signer. Réessayez.',
   PASSKEY_UNSUPPORTED: 'Ce navigateur ne prend pas en charge les passkeys.',
   CHAIN_UNAVAILABLE: 'Réseau indisponible.',
   UI_INVALID_ADDRESS: 'Adresse invalide.',
@@ -28,7 +31,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   UI_INVALID_SETTINGS: 'Réglages invalides : les pourcentages doivent être entre 0 et 100.',
   SQ_UNREACHABLE: 'Le service Swissquote est injoignable.',
   SQ_CHAIN_BAD_OWNER_SIGNATURE: 'Signature de la passkey refusée.',
-  SQ_CHAIN_BAD_COSIGNATURE: 'Co-signature Swissquote invalide.',
+  SQ_CHAIN_BAD_COSIGNATURE: 'Signature Swissquote invalide.',
   SQ_CORE_SEQ_GAP: "Le journal d'audit n'est pas synchronisé. Recommencez l'envoi.",
 };
 

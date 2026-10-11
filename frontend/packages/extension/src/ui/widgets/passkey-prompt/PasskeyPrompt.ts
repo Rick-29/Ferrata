@@ -1,6 +1,7 @@
 import { css, html, nothing, type TemplateResult } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import type { UiError } from '../../core/errors';
+import { isSimulatedPasskey } from '../../core/config';
 import { icon } from '../../core/icons';
 import { textStyles } from '../../core/styles';
 import { Widget } from '../../core/Widget';
@@ -52,6 +53,15 @@ export class PasskeyPrompt extends Widget<PasskeyPromptData> {
         display: grid;
         gap: 3px;
       }
+      .simulated {
+        justify-self: start;
+        padding: 2px 7px;
+        border-radius: 999px;
+        font-size: 9px;
+        font-weight: 600;
+        color: var(--sq-risk-medium);
+        background: rgba(255, 181, 71, 0.1);
+      }
       h2 {
         font: 600 12px/1.3 var(--sq-font);
       }
@@ -79,6 +89,7 @@ export class PasskeyPrompt extends Widget<PasskeyPromptData> {
           <span class="icon ${data.busy ? 'busy' : ''}" aria-hidden="true">${icon('fingerprint')}</span>
           <div class="copy">
             <h2>${data.title}</h2>
+            ${isSimulatedPasskey ? html`<span class="simulated">Passkey simulée · démo</span>` : nothing}
             <p class="muted">${data.busy ? 'Suivez les instructions de votre appareil…' : data.description}</p>
           </div>
         </div>

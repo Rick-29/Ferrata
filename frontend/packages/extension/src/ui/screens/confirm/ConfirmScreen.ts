@@ -41,7 +41,7 @@ interface PromptCopy {
 const PROMPT_COPY: Readonly<Record<'review' | ConfirmationLevel, PromptCopy>> = {
   review: {
     title: 'Signer avec votre passkey',
-    description: 'Votre signature autorise la transaction. Swissquote la co-signe et l’inscrit au journal d’audit.',
+    description: 'Votre signature autorise la transaction. Swissquote ajoute la seconde signature et l’inscrit au journal d’audit.',
     actionLabel: 'Confirmer et signer',
   },
   standard: {
@@ -56,7 +56,7 @@ const PROMPT_COPY: Readonly<Record<'review' | ConfirmationLevel, PromptCopy>> = 
   },
 };
 
-/** Shows exactly what will happen and how risky it is, then gets the passkey signature(s) and the co-signature. */
+/** Shows exactly what will happen and how risky it is, then gets the passkey signature(s) and Swissquote's second signature. */
 @customElement('sq-confirm-screen')
 export class ConfirmScreen extends Screen {
   @property({ attribute: false }) preview!: SendPreview;

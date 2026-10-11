@@ -26,7 +26,7 @@ export function Body({ children, muted = false }: { readonly children: ReactNode
 
 export function Card({ children }: { readonly children: ReactNode }) {
   const t = useTheme();
-  return <View style={[styles.card, { backgroundColor: t.surface, borderColor: t.border }]}>{children}</View>;
+  return <View style={[styles.card, { backgroundColor: t.glass, borderColor: t.glassEdge }]}>{children}</View>;
 }
 
 /** Swissquote mark + product wordmark (APP_NAME) on a white plate (design: .brand-compact-official). */
@@ -155,7 +155,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 30,
     shadowOffset: { width: 0, height: 24 },
-    elevation: 8,
   },
   brand: {
     flexDirection: 'row',

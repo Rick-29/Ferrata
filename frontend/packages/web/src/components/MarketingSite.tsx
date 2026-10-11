@@ -59,12 +59,12 @@ export default function MarketingSite({
           <div className="hero-copy">
             <Badge tone="brand">
               <ShieldCheck size={14} />
-              Co-signed by Swissquote
+              Dual signature with Swissquote
             </Badge>
             <h1>Your crypto wallet, with a second signature.</h1>
             <p className="hero-lede">
               {APP_NAME} gives you direct access to Ethereum and Solana while
-              Swissquote assesses, co-signs, and records every critical action.
+              Swissquote assesses, signs, and records every critical action.
             </p>
             <div className="hero-actions">
               <Button
@@ -192,8 +192,8 @@ export default function MarketingSite({
               {
                 icon: <Fingerprint />,
                 number: "03",
-                title: "Co-sign",
-                copy: "Approve with your passkey. Swissquote co-signs allowed actions and records the audit trail.",
+                title: "Sign",
+                copy: "Approve with your passkey. Swissquote adds the second signature and records the audit trail.",
               },
             ].map((item) => (
               <Card key={item.number} className="process-card">

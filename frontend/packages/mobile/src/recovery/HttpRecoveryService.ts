@@ -1,7 +1,7 @@
 import { HttpSwissquoteApi, ok, type SwissquoteApi } from '@sqw/sdk';
 import type { OwnerKey } from '@sqw/types/OwnerKey';
 import type { RecoveryState } from '@sqw/types/RecoveryState';
-import type { KycScript, NewPasskey, RecoveryService, ServiceResult } from './RecoveryService';
+import type { KycScript, RecoveryService, ServiceResult } from './RecoveryService';
 
 /**
  * Recovery against the real backend. The session token lives only in this object's memory:
@@ -20,14 +20,6 @@ export class HttpRecoveryService implements RecoveryService {
     if (!session.ok) return session;
     this.#token = session.value.token;
     return ok({ displayName: session.value.display_name });
-  }
-
-  async createPasskey(): ServiceResult<NewPasskey> {
-    // Mock passkey from the backend's /dev keyring until WebAuthn is wired; a fresh name per
-    // attempt so this phone never reuses the lost device's key.
-    const name = `recovery-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const created = await this.#api.devPasskey(name);
-    return created.ok ? ok({ name, owner: created.value.owner }) : created;
   }
 
   start(address: string, newOwner: OwnerKey, kyc: { readonly script: KycScript; readonly fullName: string }): ServiceResult<RecoveryState> {

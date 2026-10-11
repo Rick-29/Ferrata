@@ -5,9 +5,11 @@ import { err } from '../ui/core/result';
 import { isBridgeRequest } from '../ui/services/bridge-protocol';
 import { LocalAuditLog } from './bridge-state';
 import { dispatch } from './dispatch';
+import { isSimulatedPasskey } from '../ui/core/config';
 import { DevPasskeySigner } from './passkey';
 import { ChromeStore } from './storage';
 import { SwissquoteBridge } from './SwissquoteBridge';
+import { WebAuthnPasskeySigner } from './WebAuthnPasskeySigner';
 
 // Background service worker (frontend_tasks §2): holds the session token and the SDK, and serves
 // the real UiBridge to extension pages over chrome.runtime messaging.
@@ -18,7 +20,9 @@ let token: string | null = null;
 const api = new HttpSwissquoteApi({ baseUrl: API_URL, token: () => token });
 const bridge = new SwissquoteBridge({
   api,
-  passkey: new DevPasskeySigner(api),
+  passkey: isSimulatedPasskey
+    ? new DevPasskeySigner(api)
+    : new WebAuthnPasskeySigner((request) => chrome.runtime.sendMessage(request), new ChromeStore(chrome.storage.local)),
   store: new ChromeStore(chrome.storage.session),
   auditLog: new LocalAuditLog(new ChromeStore(chrome.storage.local)),
   onSession: (session: Session | null) => {
