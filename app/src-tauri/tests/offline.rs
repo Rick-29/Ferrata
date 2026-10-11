@@ -7,7 +7,6 @@ use std::sync::{Arc, Mutex};
 use ferra_visualizer_lib::graph;
 use ferra_visualizer_lib::online::Online;
 use ferra_visualizer_lib::report;
-use ferra_visualizer_lib::service::ServiceLink;
 use ferra_visualizer_lib::state::{AppState, NodeRef, open_file};
 
 fn fixtures() -> PathBuf {
@@ -15,7 +14,7 @@ fn fixtures() -> PathBuf {
 }
 
 fn state() -> AppState {
-    AppState { opened: Mutex::new(None), verdicts: Mutex::new(Default::default()), auto: Mutex::new(Default::default()), online: Arc::new(Online::new(Some(fixtures()))), service: Mutex::new(ServiceLink::default()), recent: Mutex::new(Vec::new()), data_dir: std::env::temp_dir().join("ferra-visualizer-test") }
+    AppState { opened: Mutex::new(None), verdicts: Mutex::new(Default::default()), auto: Mutex::new(Default::default()), online: Arc::new(Online::new(Some(fixtures()))), recent: Mutex::new(Vec::new()), data_dir: std::env::temp_dir().join("ferra-visualizer-test") }
 }
 
 #[test]
@@ -41,7 +40,7 @@ fn validated_chain_has_verdicts_and_report_orders_attention() {
     let o = open_file(&fixtures().join("chains").join("ferra-testnet.validated.jsonl")).unwrap();
     let v = o.chain.validation(5);
     assert!(v.percent > 50.0, "validated {}%", v.percent);
-    let r = report::build(&o, &o.events, None);
+    let r = report::build(&o, &o.events);
     assert!(!r.flag_summary.is_empty());
     assert!(r.flag_summary.iter().any(|f| f.code == "VALIDATED"));
     let ranks: Vec<u8> = r.attention.iter().map(|a| ferra_visualizer_lib::state::band_rank(a.risk)).collect();
@@ -115,7 +114,7 @@ async fn graph_expands_offline_and_explains() {
 #[test]
 fn reported_addresses_are_linked_to_events() {
     let o = open_file(&fixtures().join("chains").join("ferra-mainnet.jsonl")).unwrap();
-    let r = report::build(&o, &o.events, None);
+    let r = report::build(&o, &o.events);
     for rep in &r.reported {
         assert!(rep.node_id.contains(':'));
         println!("reported {} x{} -> {} events", rep.node_id, rep.reported.count, rep.events.len());
@@ -158,7 +157,7 @@ async fn dump_mock() {
     std::fs::create_dir_all(&out).unwrap();
     let summary = ferra_visualizer_lib::commands::ChainSummary { file: report::file_info(&o), header: o.header.clone(), verification: o.verification.clone(), validation: o.chain.validation(20) };
     std::fs::write(out.join("summary.json"), serde_json::to_string(&summary).unwrap()).unwrap();
-    std::fs::write(out.join("report.json"), serde_json::to_string(&report::build(&o, &o.events, None)).unwrap()).unwrap();
+    std::fs::write(out.join("report.json"), serde_json::to_string(&report::build(&o, &o.events)).unwrap()).unwrap();
     std::fs::write(out.join("events.json"), serde_json::to_string(&o.events).unwrap()).unwrap();
     let wallet = NodeRef::ferra(o.ferra_network(), o.wallets[0]).id;
     *st.opened.lock().unwrap() = Some(o);

@@ -74,7 +74,7 @@ export interface NodeRef {
 }
 
 export interface AppError {
-  code: "NO_CHAIN" | "NOT_FOUND" | "BAD_REQUEST" | "IO" | "CHAIN" | "OFFLINE" | "SERVICE" | "INTERNAL"
+  code: "NO_CHAIN" | "NOT_FOUND" | "BAD_REQUEST" | "IO" | "CHAIN" | "OFFLINE" | "INTERNAL"
 
   message: string
 }
@@ -521,38 +521,6 @@ export interface ReportedAddressView {
   events: string[]
 }
 
-export interface ValidatorStatus {
-  enabled: boolean
-
-  interval_secs: number
-
-  batch: number
-
-  passes: number
-
-  events_checked: number
-
-  flags_written: number
-
-  last_pass_at: number | null
-
-  last_error: string | null
-
-  retrying: number
-
-  validation: ValidationStatus
-}
-
-export interface ValidationPass {
-  checked: number
-
-  failed: number
-
-  flags_written: number
-
-  validation: ValidationStatus
-}
-
 export interface Report {
   file: FileInfo
 
@@ -570,7 +538,6 @@ export interface Report {
 
   reported: ReportedAddressView[]
 
-  worker: ValidatorStatus | null
 
   generated_at: number
 }
@@ -908,25 +875,6 @@ export interface TransferDetail {
   } | null
 }
 
-// ----- service -----
-
-export interface ServiceState {
-  url: string | null
-
-  connected: boolean
-
-  last_error: string | null
-
-  last_checked: number | null
-
-  validator: ValidatorStatus | null
-
-  chain: Record<string, unknown> | null
-  /** Client id of the session used for writes, when the login worked. */
-  client: string | null
-  auth_error: string | null
-}
-
 export interface ValidationSummary {
   validatable: number
   validated: number
@@ -968,9 +916,6 @@ export const ferra = {
 
   openDemo: (id: "testnet" | "testnet-validated" | "mainnet") =>
     invoke<ChainSummary>("open_demo", { id }),
-
-  openFromService: (url: string) =>
-    invoke<ChainSummary>("open_from_service", { url }),
 
   reloadChain: () => invoke<ChainSummary>("reload_chain"),
 
@@ -1045,18 +990,6 @@ export const ferra = {
   onVerdict: (cb: (v: VerdictEvent) => void): Promise<UnlistenFn> => listen<VerdictEvent>("validation://verdict", (e) => cb(e.payload)),
   onValidationStatus: (cb: (s: ValidationSummary) => void): Promise<UnlistenFn> => listen<ValidationSummary>("validation://status", (e) => cb(e.payload)),
 
-  // Swissquote service
-
-  serviceConnect: (url: string, username?: string, password?: string) =>
-    invoke<ServiceState>("service_connect", { url, username: username ?? null, password: password ?? null }),
-
-  serviceDisconnect: () => invoke<ServiceState>("service_disconnect"),
-
-  serviceState: () => invoke<ServiceState>("service_state"),
-
-  serviceValidateNow: (batch = 8) =>
-    invoke<ValidationPass>("service_validate_now", { batch }),
-
   // events pushed by the backend
 
   onChainOpened: (cb: (s: ChainSummary) => void): Promise<UnlistenFn> =>
@@ -1067,8 +1000,6 @@ export const ferra = {
   onChainClosed: (cb: () => void): Promise<UnlistenFn> =>
     listen("chain://closed", () => cb()),
 
-  onServiceStatus: (cb: (s: ServiceState) => void): Promise<UnlistenFn> =>
-    listen<ServiceState>("service://status", (e) => cb(e.payload)),
 }
 
 /** The node id for an address on a network, the way the backend keys its graph. */

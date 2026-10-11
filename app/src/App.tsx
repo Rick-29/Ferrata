@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ferra, isAppError, type ChainSummary, type EventView, type Report, type RiskBand, type ServiceState, type ValidationSummary } from "@/lib/ferra";
+import { ferra, isAppError, type ChainSummary, type EventView, type Report, type RiskBand, type ValidationSummary } from "@/lib/ferra";
 import { useGraph } from "@/lib/graphStore";
 import { Icon } from "@/components/ui";
 import ChainCanvas from "@/components/ChainCanvas";
@@ -18,7 +18,6 @@ export default function App() {
   const [report, setReport] = useState<Report | null>(null);
   const [events, setEvents] = useState<EventView[]>([]);
   const [summary, setSummary] = useState<ValidationSummary | null>(null);
-  const [service, setService] = useState<ServiceState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,9 +74,7 @@ export default function App() {
       .currentChain()
       .then((c) => c && afterOpen(c, false))
       .catch(() => {});
-    ferra.serviceState().then(setService).catch(() => {});
     const offs = [
-      ferra.onServiceStatus(setService),
       ferra.onProgress((p) => setProgress(p.total ? `${p.stage} · ${p.total} blocks` : p.stage)),
       // A file given on the command line opens before the UI listens: pick it up here.
       ferra.onChainOpened((c) => afterOpen(c, false)),
@@ -109,26 +106,6 @@ export default function App() {
     } finally {
       setBusy(null);
       setProgress(null);
-    }
-  };
-
-  const connect = async (url: string, username?: string, password?: string) => {
-    try {
-      setService(await ferra.serviceConnect(url, username, password));
-    } catch (e) {
-      setError(errText(e));
-    }
-  };
-
-  /// One pass of the service's worker (writes flags to the chain), then reload.
-  const servicePass = async () => {
-    try {
-      setBusy("Validating on the service…");
-      await ferra.serviceValidateNow(8);
-      await run("Reloading…", () => ferra.reloadChain(), true);
-    } catch (e) {
-      setError(errText(e));
-      setBusy(null);
     }
   };
 
@@ -175,11 +152,8 @@ export default function App() {
           onToggleTheme={toggleTheme}
           busy={busy}
           error={error}
-          service={service}
-          onConnect={connect}
           onOpenPath={(p) => void run("Opening chain…", () => ferra.openChain(p))}
           onOpenDemo={(id) => void run("Opening demo…", () => ferra.openDemo(id))}
-          onOpenService={(url) => void run("Fetching the chain from the service…", () => ferra.openFromService(url))}
         />
         {overlay}
       </>
@@ -231,10 +205,6 @@ export default function App() {
                 {error}
               </span>
             )}
-            <span className="connection" title={service?.client ? `logged in as ${service.client}` : service?.auth_error ?? ""}>
-              <span style={{ background: service?.connected ? "#2eb67d" : "#6b7280", boxShadow: "none" }} />
-              {service?.connected ? "Service" : "No service"}
-            </span>
             {summary && (
               <span className="validate-pill" title={summary.last_error ?? ""}>
                 <span className="bar">
@@ -262,13 +232,13 @@ export default function App() {
             <button className="secondary-button" onClick={toggleTheme} title="Switch between dark and light">
               <Icon name={theme === "dark" ? "sun" : "moon"} size={16} /> {theme === "dark" ? "Light" : "Dark"}
             </button>
-            <button className="secondary-button" onClick={() => void run("Re-verifying…", () => ferra.reloadChain(), true)} disabled={!!busy} title="Re-read the file or the service and verify it again; the canvas is rebuilt">
+            <button className="secondary-button" onClick={() => void run("Re-verifying…", () => ferra.reloadChain(), true)} disabled={!!busy} title="Re-read the file and verify it again; the canvas is rebuilt">
               <Icon name="shield" size={16} /> Verify again
             </button>
           </div>
         </header>
         {screen === "report" ? (
-          <ReportScreen report={report} service={service} onShowNode={showNode} onValidateNow={() => void validateStart()} onServicePass={() => void servicePass()} summary={summary} onReload={() => void run("Reloading…", () => ferra.reloadChain(), true)} />
+          <ReportScreen report={report} onShowNode={showNode} onValidateNow={() => void validateStart()} summary={summary} onReload={() => void run("Reloading…", () => ferra.reloadChain(), true)} />
         ) : (
           <ChainCanvas chain={chain} graph={graph} online={online} setOnline={setOnline} focus={focus} onFocused={() => setFocus(null)} refreshKey={refreshKey} theme={theme} events={events} summary={summary} onManual={(h, b, n) => void manual(h, b, n)} />
         )}

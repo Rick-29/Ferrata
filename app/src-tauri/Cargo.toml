@@ -27,7 +27,6 @@ sq-conn-evm = { path = "../../backend/sq-conn-evm" }
 sq-conn-btc = { path = "../../backend/sq-conn-btc" }
 sq-conn-sol = { path = "../../backend/sq-conn-sol" }
 wallet-core = { path = "../../backend/wallet-core" }
-api-types = { path = "../../backend/api-types" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }

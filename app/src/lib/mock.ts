@@ -114,7 +114,6 @@ export async function mockInvoke<T>(
     case "open_demo":
     case "open_chain":
     case "reload_chain":
-    case "open_from_service":
       opened = true
       return load("summary.json")
     case "get_report":
@@ -198,28 +197,6 @@ export async function mockInvoke<T>(
         message: "preview mode: no insight fixture for this address",
       }
     }
-    case "service_state":
-      return {
-        url: null,
-        connected: false,
-        last_error: null,
-        last_checked: null,
-        validator: null,
-        chain: null,
-        client: null,
-        auth_error: null,
-      } as T
-    case "service_connect":
-      return {
-        url: String(args.url),
-        connected: false,
-        last_error: "preview mode: no service",
-        last_checked: null,
-        validator: null,
-        chain: null,
-        client: null,
-        auth_error: null,
-      } as T
     case "close_chain":
       opened = false
       return undefined as T

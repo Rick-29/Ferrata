@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 
 use alloy_primitives::{Address, B256};
-use api_types::ValidatorStatus;
 use serde::Serialize;
 use sq_adapters::chain::{ChainVerification, Flag, ReportedAddress, TokenInfo, TxKind, ValidationStatus, WalletProfile};
 use wallet_core::RiskBand;
@@ -125,8 +124,6 @@ pub struct Report {
     pub flag_summary: Vec<FlagCount>,
     pub profiles: Vec<ProfileCard>,
     pub reported: Vec<ReportedAddressView>,
-    /// The service's validation worker, when connected.
-    pub worker: Option<ValidatorStatus>,
     pub generated_at: u64,
 }
 
@@ -182,7 +179,7 @@ pub fn validation_from(events: &[EventView]) -> ValidationStatus {
     ValidationStatus { validatable, validated, percent: if validatable == 0 { 100.0 } else { validated as f64 * 100.0 / validatable as f64 }, pending: validatable - validated, next }
 }
 
-pub fn build(opened: &Opened, events: &[EventView], worker: Option<ValidatorStatus>) -> Report {
+pub fn build(opened: &Opened, events: &[EventView]) -> Report {
     let validatable: Vec<&EventView> = events.iter().filter(|e| e.validatable).collect();
     let bands = slices(&validatable);
     let mut per_network: BTreeMap<String, Vec<&EventView>> = BTreeMap::new();
@@ -273,7 +270,6 @@ pub fn build(opened: &Opened, events: &[EventView], worker: Option<ValidatorStat
         flag_summary,
         profiles,
         reported,
-        worker,
         generated_at: crate::state::now(),
     }
 }

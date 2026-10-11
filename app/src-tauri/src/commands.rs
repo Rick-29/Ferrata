@@ -1,11 +1,9 @@
 //! The commands the UI calls (`invoke("name", { ... })`). Offline ones read the open file; online
-//! ones go to the public indexers through the embedded connectors; `service_*` talk to the
-//! Swissquote service.
+//! ones go to the public indexers through the embedded connectors.
 
 use std::path::{Path, PathBuf};
 
 use alloy_primitives::Address;
-use api_types::ValidationPass;
 use serde::{Deserialize, Serialize};
 use sq_adapters::chain::{AddressReport, ChainHeader, ChainVerification, DatasetRow, ModelInfo, Network, TxKind, ValidationStatus};
 use sq_connectors::preview::{AmountSpec, RiskPreview};
@@ -16,8 +14,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::error::{AppError, AppResult};
 use crate::graph::{self, Expansion, GraphNode, NodeInsight, parse_hash};
 use crate::report::{self, FileInfo, ProfileCard, Report};
-use crate::service::{self, ServiceState};
-use crate::state::{AppState, EventView, NodeRef, Opened, RecentFile, open_file_with, open_loaded};
+use crate::state::{AppState, EventView, NodeRef, Opened, RecentFile, open_file_with};
 
 pub const OPENED_EVENT: &str = "chain://opened";
 pub const PROGRESS_EVENT: &str = "chain://progress";
@@ -119,32 +116,12 @@ pub async fn open_demo(app: AppHandle, state: State<'_, AppState>, id: String) -
     install(&app, &state, opened)
 }
 
-/// Opens the chain the service holds, over HTTP, with no file involved.
-#[tauri::command]
-pub async fn open_from_service(app: AppHandle, state: State<'_, AppState>, url: String) -> AppResult<ChainSummary> {
-    let loaded = service::fetch_chain(&url).await?;
-    let name = format!("{} (service)", url.trim_end_matches('/'));
-    let opened = tauri::async_runtime::spawn_blocking(move || open_loaded(loaded, None, name)).await.map_err(|e| AppError::Internal(e.to_string()))??;
-    install(&app, &state, opened)
-}
-
-/// Re-reads the current source (file or service): after the validator wrote flags, for instance.
+/// Re-reads the file and verifies it again.
 #[tauri::command]
 pub async fn reload_chain(app: AppHandle, state: State<'_, AppState>) -> AppResult<ChainSummary> {
-    let path = state.with_chain(|o| Ok(o.path.clone()))?;
-    match path {
-        Some(p) => {
-            let opened = open_with_progress(&app, p).await?;
-            install(&app, &state, opened)
-        }
-        None => {
-            let url = state.lock(&state.service)?.state.url.clone().ok_or_else(|| AppError::BadRequest("the chain came from a service that is no longer connected".into()))?;
-            let loaded = service::fetch_chain(&url).await?;
-            let name = format!("{} (service)", url.trim_end_matches('/'));
-            let opened = tauri::async_runtime::spawn_blocking(move || open_loaded(loaded, None, name)).await.map_err(|e| AppError::Internal(e.to_string()))??;
-            install(&app, &state, opened)
-        }
-    }
+    let path = state.with_chain(|o| Ok(o.path.clone()))?.ok_or_else(|| AppError::BadRequest("this chain has no file to re-read".into()))?;
+    let opened = open_with_progress(&app, path).await?;
+    install(&app, &state, opened)
 }
 
 #[tauri::command]
@@ -345,9 +322,8 @@ fn graph_node_offline(o: &Opened, online: &crate::online::Online, node: &NodeRef
 
 #[tauri::command]
 pub fn get_report(state: State<'_, AppState>) -> AppResult<Report> {
-    let worker = state.lock(&state.service)?.state.validator.clone();
     let events = state.merged_events()?;
-    state.with_chain(|o| Ok(report::build(o, &events, worker)))
+    state.with_chain(|o| Ok(report::build(o, &events)))
 }
 
 #[tauri::command]
@@ -378,16 +354,15 @@ pub enum ExportWhat {
 /// Writes the report, the events or the dataset as JSON (or the dataset as CSV) to `path`.
 #[tauri::command]
 pub fn export_file(state: State<'_, AppState>, what: ExportWhat, format: String, path: String) -> AppResult<String> {
-    let worker = state.lock(&state.service)?.state.validator.clone();
     let events = state.merged_events()?;
     let text = state.with_chain(|o| {
         Ok(match (what, format.as_str()) {
-            (ExportWhat::Report, "json") => serde_json::to_string_pretty(&report::build(o, &events, worker))?,
+            (ExportWhat::Report, "json") => serde_json::to_string_pretty(&report::build(o, &events))?,
             (ExportWhat::Events, "json") => serde_json::to_string_pretty(&events)?,
             (ExportWhat::Dataset, "json") => serde_json::to_string_pretty(&o.chain.dataset(0, usize::MAX))?,
             (ExportWhat::Dataset, "csv") => dataset_csv(&o.chain.dataset(0, usize::MAX)),
             (ExportWhat::Events, "csv") => events_csv(&events),
-            (ExportWhat::Report, "csv") => attention_csv(&report::build(o, &events, worker)),
+            (ExportWhat::Report, "csv") => attention_csv(&report::build(o, &events)),
             (_, f) => return Err(AppError::BadRequest(format!("unsupported format {f}"))),
         })
     })?;
@@ -520,85 +495,4 @@ pub async fn risk_preview(state: State<'_, AppState>, network: String, counterpa
     })?;
     let src = state.online.registry.get(&network)?;
     Ok(sq_connectors::preview::risk_preview(src, &counterparty, wallet_raw.as_deref(), amount, sender.as_ref(), &lists, state.online.model(), ReportConfig { max_pages: 2, ..Default::default() }, crate::state::now()).await?)
-}
-
-// ----- the Swissquote service -----
-
-#[tauri::command]
-pub async fn service_connect(app: AppHandle, state: State<'_, AppState>, url: String, username: Option<String>, password: Option<String>) -> AppResult<ServiceState> {
-    let url = url.trim().trim_end_matches('/').to_string();
-    if url.is_empty() {
-        return Err(AppError::BadRequest("service URL is empty".into()));
-    }
-    let probe = service::probe(&url).await;
-    // The validator run is a write and needs a session; the demo clients live in fixtures/accounts.json.
-    let user = username.filter(|u| !u.trim().is_empty()).unwrap_or_else(|| "alice".into());
-    let pass = password.unwrap_or_else(|| "demo".into());
-    let login = service::login(&url, &user, &pass).await;
-    let snapshot = {
-        let mut link = state.lock(&state.service)?;
-        link.stop();
-        link.state.url = Some(url.clone());
-        match login {
-            Ok((token, client)) => {
-                link.token = Some(token);
-                link.state.client = Some(client);
-            }
-            Err(e) => link.state.auth_error = Some(e.to_string()),
-        }
-        link.state.last_checked = Some(crate::state::now());
-        match probe {
-            Ok((v, c)) => {
-                link.state.connected = true;
-                link.state.validator = Some(v);
-                link.state.chain = Some(c);
-            }
-            Err(e) => {
-                link.state.connected = false;
-                link.state.last_error = Some(e.to_string());
-            }
-        }
-        link.set_poller(service::spawn_poller(app.clone(), url));
-        link.state.clone()
-    };
-    let _ = app.emit(service::STATUS_EVENT, &snapshot);
-    Ok(snapshot)
-}
-
-#[tauri::command]
-pub fn service_disconnect(app: AppHandle, state: State<'_, AppState>) -> AppResult<ServiceState> {
-    let mut link = state.lock(&state.service)?;
-    link.stop();
-    let _ = app.emit(service::STATUS_EVENT, &link.state);
-    Ok(link.state.clone())
-}
-
-#[tauri::command]
-pub fn service_state(state: State<'_, AppState>) -> AppResult<ServiceState> {
-    Ok(state.lock(&state.service)?.state.clone())
-}
-
-/// Asks the service for one validation pass now. Reload the chain afterwards to see the flags.
-#[tauri::command]
-pub async fn service_validate_now(app: AppHandle, state: State<'_, AppState>, batch: Option<usize>) -> AppResult<ValidationPass> {
-    let (url, token) = {
-        let link = state.lock(&state.service)?;
-        (link.state.url.clone().ok_or_else(|| AppError::Service("not connected".into()))?, link.token.clone())
-    };
-    if token.is_none() {
-        return Err(AppError::Service("not logged in to the service: reconnect with a client username and password (demo: alice / demo)".into()));
-    }
-    let pass = service::run_validator(&url, batch.unwrap_or(8), token.as_deref()).await?;
-    if let Ok((v, c)) = service::probe(&url).await {
-        let snapshot = {
-            let mut link = state.lock(&state.service)?;
-            link.state.connected = true;
-            link.state.last_error = None;
-            link.state.validator = Some(v);
-            link.state.chain = Some(c);
-            link.state.clone()
-        };
-        let _ = app.emit(service::STATUS_EVENT, &snapshot);
-    }
-    Ok(pass)
 }

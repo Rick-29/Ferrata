@@ -42,9 +42,10 @@ resources in a release build, read from the repo in dev).
 - `online.rs` — the embedded connectors (TON, Sepolia/Base/Ethereum, Bitcoin, Solana), the
   `LinearModel` and the watchlists. Transfer reports, provenance checks and risk previews run in the
   app itself with nothing but internet access.
-- `service.rs` — optional link to `sq-services` (`http://localhost:8787`): validator status polled
-  every 4 s (`service://status` event), "validate now", and opening the chain over HTTP without a
-  file.
+- `validator.rs` — the in-app validator: one tokio task per pending event, a lane per origin
+  network, verdicts kept in memory (`validation://verdict` / `validation://status` events) and
+  manual verdicts from the canvas. The app has no link to `sq-services`: everything runs from
+  the file plus the public indexers.
 - `commands.rs` — the `#[tauri::command]` surface; errors arrive as `{ code, message }`.
 
 Node ids are `network:address` (`ferra:0x…`, `ton:0:…`, `bitcoin:bc1…`). `FileInfo.wallet_nodes`
