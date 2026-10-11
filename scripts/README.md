@@ -22,6 +22,13 @@ ou code de l'appareil, vérifiés par l'appareil lui-même. Le popup doit rester
 signature. Sur une machine sans authentificateur, ou pour les tests, `VITE_PASSKEY=dev` utilise une
 passkey **simulée** (porte-clés `/dev` du backend), signalée « Passkey simulée » à l'écran.
 
+**USDC sans gas (ERC-4337).** Avec `VITE_PIMLICO_API_KEY` (clé gratuite sur
+[dashboard.pimlico.io](https://dashboard.pimlico.io), plus une *sponsorship policy* pour Base Sepolia),
+l'onglet Testnet affiche un compte intelligent « Base Sepolia · USDC sans gas » : la clé EVM du wallet
+en est le propriétaire, Pimlico regroupe l'opération (bundler) et son paymaster paie le gas. On reçoit
+des USDC de test sur [faucet.circle.com](https://faucet.circle.com) et on les envoie sans détenir
+d'ETH. Modèle : `frontend/packages/extension/.env.example`.
+
 **`dev`** lance le backend sur `http://localhost:8787` et l'extension en mode dev, avec rechargement
 automatique à chaque sauvegarde.
 

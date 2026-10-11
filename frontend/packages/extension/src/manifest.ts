@@ -15,7 +15,7 @@ export default defineManifest({
   permissions: ['storage'],
   // Base Sepolia RPC: read calls dApps make through the injected provider (src/background/dapp).
   // Solana devnet and Ethereum Sepolia RPCs: test-network balances and faucet airdrops (src/background/testnet).
-  host_permissions: ['http://localhost:8787/*', 'https://sepolia.base.org/*', 'https://api.devnet.solana.com/*', 'https://ethereum-sepolia-rpc.publicnode.com/*'],
+  host_permissions: ['http://localhost:8787/*', 'https://sepolia.base.org/*', 'https://api.devnet.solana.com/*', 'https://ethereum-sepolia-rpc.publicnode.com/*', 'https://api.pimlico.io/*'],
   // dApp provider (P3): inpage runs in the page's world to expose EIP-1193 / EIP-6963, content relays
   // to the background. Limited to the demo dApps instead of <all_urls>, so other sites cannot see the wallet.
   content_scripts: [

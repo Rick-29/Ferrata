@@ -22,6 +22,7 @@ import { SolanaDevnet } from './testnet/SolanaDevnet';
 import { SolanaKeyring } from './testnet/SolanaKeyring';
 import { TestnetWallets } from './testnet/TestnetWallets';
 import { TestnetSender, type EvmSend } from './testnet/TestnetSender';
+import { BASE_SEPOLIA_USDC, GaslessUsdc } from './testnet/GaslessUsdc';
 import { createWalletClient, createPublicClient, http } from 'viem';
 import { baseSepolia, sepolia } from 'viem/chains';
 
@@ -38,10 +39,14 @@ const deviceKey = new DeviceKeyWrapper();
 const evmKeyring = new NetworkKeyring(new ChromeStore(chrome.storage.local), deviceKey);
 const baseRpc = new RpcProxy(DAPP_RPC_URL);
 const sepoliaRpc = new RpcProxy('https://ethereum-sepolia-rpc.publicnode.com');
+// Gasless USDC: the EVM key owns an ERC-4337 smart account, Pimlico's paymaster pays the gas.
+// Set VITE_PIMLICO_API_KEY (frontend/packages/extension/.env.local) to turn it on.
+const gasless = new GaslessUsdc({ pimlicoApiKey: import.meta.env.VITE_PIMLICO_API_KEY ?? null, rpcUrl: DAPP_RPC_URL });
 const testnet = new TestnetWallets({
   solana: new SolanaKeyring(new ChromeStore(chrome.storage.local), deviceKey),
   devnet: new SolanaDevnet(),
   evm: evmKeyring,
+  gasless,
   evmBalance: async (network, address) => {
     const rpc = network === 'base-sepolia' ? baseRpc : sepoliaRpc;
     const response = await rpc.forward('eth_getBalance', [address, 'latest']);
@@ -78,6 +83,7 @@ const testnetSender = new TestnetSender({
   devnet: new SolanaDevnet(),
   evm: evmKeyring,
   evmSend,
+  gasless,
   sync: (request) => api.sync(request),
 });
 
@@ -85,6 +91,22 @@ const bridge = new SwissquoteBridge({
   api,
   testnet,
   testnetSender,
+  gasless: {
+    enabled: gasless.enabled,
+    usdc: BASE_SEPOLIA_USDC,
+    explorerTx: (hash) => `https://sepolia.basescan.org/tx/${hash}`,
+    address: async () => {
+      const owner = await evmKeyring.account();
+      return owner === null ? null : gasless.address(owner);
+    },
+    balance: (address) => gasless.balance(address),
+    send: async (to, amount) => {
+      await evmKeyring.ensure();
+      const owner = await evmKeyring.account();
+      if (owner === null) return { ok: false, message: 'no EVM key on this device' };
+      return gasless.send(owner, to, amount);
+    },
+  },
   passkey: passkeySigner(),
   store: new ChromeStore(chrome.storage.session),
   auditLog: new LocalAuditLog(new ChromeStore(chrome.storage.local)),

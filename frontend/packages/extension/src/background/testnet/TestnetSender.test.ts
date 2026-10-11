@@ -12,7 +12,24 @@ import { verifyOwner } from '../verifyOwner';
 import { SolanaDevnet } from './SolanaDevnet';
 import { SolanaKeyring } from './SolanaKeyring';
 import { compactU16, signedTransaction, transferMessage } from './solanaTx';
+import type { GaslessUsdc } from './GaslessUsdc';
 import { TestnetSender, type EvmSend } from './TestnetSender';
+
+const SMART_ACCOUNT = `0x${'5a'.repeat(20)}`;
+/** Stand-in for the ERC-4337 path: records what it was asked to send, never touches a bundler. */
+function fakeGasless(enabled = true) {
+  const sends: { owner: string; to: string; amount: bigint }[] = [];
+  const gasless = {
+    enabled,
+    address: async () => SMART_ACCOUNT,
+    balance: async () => '0',
+    send: async (owner: { address: string }, to: string, amount: bigint) => {
+      sends.push({ owner: owner.address, to, amount });
+      return { ok: true as const, hash: '0xuserophash' as `0x${string}` };
+    },
+  } as unknown as GaslessUsdc;
+  return { gasless, sends };
+}
 
 class TestWrapper implements KeyWrapper {
   readonly #key = crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
@@ -31,7 +48,7 @@ class TestWrapper implements KeyWrapper {
 const RECIPIENT = base58.encode(ed25519.getPublicKey(ed25519.utils.randomPrivateKey()));
 const BLOCKHASH = base58.encode(new Uint8Array(32).fill(7));
 
-function setup(options: { evmSend?: EvmSend; rpc?: (method: string) => unknown } = {}) {
+function setup(options: { evmSend?: EvmSend; rpc?: (method: string) => unknown; gasless?: GaslessUsdc } = {}) {
   const store = new MemoryStore();
   const wrapper = new TestWrapper();
   const solana = new SolanaKeyring(store, wrapper);
@@ -55,7 +72,7 @@ function setup(options: { evmSend?: EvmSend; rpc?: (method: string) => unknown }
   );
   const evmSend = options.evmSend ?? vi.fn<EvmSend>(async () => ({ ok: true, hash: '0xethhash' }));
   const sync = vi.fn(async () => ok({ network: { family: 'solana', name: 'solana-devnet', chain_id: null }, fetched: 1, recorded: 1, skipped_existing: 0, next_cursor: null } as never));
-  const sender = new TestnetSender({ solana, devnet, evm, evmSend, sync });
+  const sender = new TestnetSender({ solana, devnet, evm, evmSend, sync, ...(options.gasless ? { gasless: options.gasless } : {}) });
   return { sender, solana, evm, sentTxs, evmSend, sync };
 }
 
@@ -104,6 +121,36 @@ describe('TestnetSender', () => {
     expect(sepolia.ok && sepolia.value.explorerUrl).toBe('https://sepolia.etherscan.io/tx/0xethhash');
     expect(evmSend).toHaveBeenCalledWith('base-sepolia', to, 1_000_000_000_000_000n);
     expect(evmSend).toHaveBeenCalledWith('eth-sepolia', to, 2_000_000_000_000_000n);
+  });
+
+  it('sends USDC gaslessly from the smart account owned by the EVM key, then syncs that account on Base Sepolia', async () => {
+    const { gasless, sends } = fakeGasless();
+    const { sender, evm, evmSend, sync } = setup({ gasless });
+    const to = `0x${'3'.repeat(40)}`;
+    const authorize = vi.fn(async (_hash: string) => ok(undefined));
+    const result = await sender.send({ network: 'base-sepolia-usdc', to, amount: '12.5' }, '0xFerra', authorize);
+
+    expect(result).toEqual({
+      ok: true,
+      value: { network: 'base-sepolia-usdc', txId: '0xuserophash', amount: '12500000', explorerUrl: 'https://sepolia.basescan.org/tx/0xuserophash', recordedOnFerra: 1 },
+    });
+    expect(authorize).toHaveBeenCalledOnce();
+    expect(sends).toEqual([{ owner: await evm.address(), to, amount: 12_500_000n }]);
+    // No native transfer, no ETH: the paymaster pays.
+    expect(evmSend).not.toHaveBeenCalled();
+    // The on-chain sender is the smart account, so that is what the Ferra chain must watch.
+    expect(sync).toHaveBeenCalledWith(expect.objectContaining({ network: 'base-sepolia', address_raw: SMART_ACCOUNT }));
+  });
+
+  it('refuses gasless sends when no Pimlico key is configured, before asking the passkey', async () => {
+    const off = setup({ gasless: fakeGasless(false).gasless });
+    const none = setup();
+    const authorize = vi.fn(async (_hash: string) => ok(undefined));
+    for (const { sender } of [off, none]) {
+      const result = await sender.send({ network: 'base-sepolia-usdc', to: `0x${'4'.repeat(40)}`, amount: '1' }, '0xF', authorize);
+      expect(!result.ok && result.error.code).toBe('TESTNET_GASLESS_OFF');
+    }
+    expect(authorize).not.toHaveBeenCalled();
   });
 
   it('rejects bad amounts and addresses before asking anything', async () => {

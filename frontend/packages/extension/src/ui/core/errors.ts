@@ -43,6 +43,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   TESTNET_UNAVAILABLE: 'Le réseau de test ne répond pas. Réessayez dans un instant.',
   TESTNET_RPC_ERROR: 'Le réseau de test a refusé la demande.',
   TESTNET_SEND_FAILED: 'Le réseau de test a refusé la transaction (solde insuffisant, ou montant trop faible pour un nouveau compte).',
+  TESTNET_GASLESS_OFF: 'Les envois sans gas ne sont pas configurés sur cet appareil (clé Pimlico absente).',
   TESTNET_NO_FAUCET_API: "Ce réseau n'a pas de faucet automatique : utilisez le bouton « Ouvrir le faucet ».",
 };
 

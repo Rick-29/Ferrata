@@ -20,7 +20,7 @@ function isLoginRequest(v: unknown): v is LoginRequest {
 }
 
 function isSendDraft(v: unknown): v is SendDraft {
-  return isRecord(v) && isString(v.to) && (v.asset === null || isString(v.asset)) && isString(v.amount);
+  return isRecord(v) && isString(v.to) && (v.asset === null || isString(v.asset)) && isString(v.amount) && (v.rail === undefined || v.rail === 'ferra' || v.rail === 'base-sepolia-usdc');
 }
 
 function isConfirmOptions(v: unknown): v is ConfirmOptions {
@@ -42,7 +42,7 @@ function isWalletSettings(v: unknown): v is WalletSettings {
   );
 }
 
-const TESTNET_NETWORKS: ReadonlySet<unknown> = new Set(['solana-devnet', 'base-sepolia', 'eth-sepolia']);
+const TESTNET_NETWORKS: ReadonlySet<unknown> = new Set(['solana-devnet', 'base-sepolia', 'eth-sepolia', 'base-sepolia-usdc']);
 
 function isTestnetSendDraft(v: unknown): v is TestnetSendDraft {
   return isRecord(v) && TESTNET_NETWORKS.has(v.network) && isString(v.to) && isString(v.amount);

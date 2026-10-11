@@ -5,6 +5,7 @@ import { uiError, type UiError } from '../../ui/core/errors';
 import { err, ok } from '../../ui/core/result';
 import type { AirdropOutcome, TestnetNetwork, TestnetWallet } from '../../ui/services/UiBridge';
 import type { NetworkKeyring } from '../dapp/NetworkKeyring';
+import { BASE_SEPOLIA_USDC, CIRCLE_FAUCET_URL, USDC_DECIMALS, type GaslessUsdc } from './GaslessUsdc';
 import { LAMPORTS_PER_SOL, type DevnetError, type SolanaDevnet } from './SolanaDevnet';
 import type { SolanaKeyring } from './SolanaKeyring';
 
@@ -20,6 +21,8 @@ export interface TestnetWalletsDeps {
   readonly evm: NetworkKeyring;
   /** Balance in wei (decimal string) on an EVM test network, or null when its node cannot be read. */
   readonly evmBalance: (network: EvmTestnet, address: string) => Promise<string | null>;
+  /** ERC-4337 smart account for gasless USDC on Base Sepolia; listed only when configured. */
+  readonly gasless?: GaslessUsdc;
   /** `POST /chain/sync` (SDK). */
   readonly sync: (request: SyncRequest) => Promise<Result<SyncResponse, SdkError>>;
 }
@@ -33,6 +36,7 @@ export type EvmTestnet = 'base-sepolia' | 'eth-sepolia';
 const SOLANA: TestnetNetwork = 'solana-devnet';
 const BASE: TestnetNetwork = 'base-sepolia';
 const SEPOLIA: TestnetNetwork = 'eth-sepolia';
+const BASE_USDC: TestnetNetwork = 'base-sepolia-usdc';
 const solanaAddressUrl = (address: string): string => `https://explorer.solana.com/address/${address}?cluster=devnet`;
 const solanaTxUrl = (signature: string): string => `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
 /** Base Sepolia has no public faucet API (all need a login, captcha or API key): the web faucet it is. */
@@ -49,17 +53,38 @@ export class TestnetWallets {
 
   /** Creates the addresses on first use; a balance is null when its network cannot be read. */
   async list(ferraWallet: string): Promise<Result<readonly TestnetWallet[], UiError>> {
-    const { solana, devnet, evm, evmBalance } = this.#deps;
+    const { solana, devnet, evm, evmBalance, gasless } = this.#deps;
     const [solAddress, evmAddress] = await Promise.all([solana.ensure(), evm.ensure()]);
+    const smartAddress = gasless?.enabled ? await this.#smartAccountAddress(gasless) : null;
     this.#syncInBackground(ferraWallet, SOLANA, solAddress);
     this.#syncInBackground(ferraWallet, BASE, evmAddress);
     this.#syncInBackground(ferraWallet, SEPOLIA, evmAddress);
+    if (smartAddress !== null) this.#syncInBackground(ferraWallet, BASE, smartAddress);
 
-    const [solBalance, baseBalance, sepoliaBalance] = await Promise.all([
+    const [solBalance, baseBalance, sepoliaBalance, usdcBalance] = await Promise.all([
       devnet.balance(solAddress),
       evmBalance('base-sepolia', evmAddress),
       evmBalance('eth-sepolia', evmAddress),
+      smartAddress === null || !gasless ? Promise.resolve(null) : gasless.balance(smartAddress),
     ]);
+    const gaslessWallet: TestnetWallet[] =
+      smartAddress === null
+        ? []
+        : [
+            {
+              network: BASE_USDC,
+              label: 'Base Sepolia · USDC sans gas',
+              address: smartAddress,
+              symbol: 'USDC',
+              decimals: USDC_DECIMALS,
+              balance: usdcBalance,
+              explorerUrl: `https://sepolia.basescan.org/address/${smartAddress}`,
+              inWalletAirdrop: false,
+              faucetUrl: CIRCLE_FAUCET_URL,
+              gasless: true,
+              assetAddress: BASE_SEPOLIA_USDC,
+            },
+          ];
     return ok([
       {
         network: SOLANA,
@@ -94,7 +119,19 @@ export class TestnetWallets {
         inWalletAirdrop: false,
         faucetUrl: SEPOLIA_FAUCET_URL,
       },
+      ...gaslessWallet,
     ]);
+  }
+
+  async #smartAccountAddress(gasless: GaslessUsdc): Promise<string | null> {
+    const owner = await this.#deps.evm.account();
+    if (owner === null) return null;
+    try {
+      return await gasless.address(owner);
+    } catch (error) {
+      console.warn('[sqw] smart account address unavailable', error);
+      return null;
+    }
   }
 
   /**

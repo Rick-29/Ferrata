@@ -9,6 +9,7 @@ import { err, ok, sdkError, type SwissquoteApi } from '@sqw/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { USDC, signedEntry } from '../ui/services/fake-world';
 import { LocalAuditLog } from './bridge-state';
+import { ed25519 } from '@noble/curves/ed25519';
 import { DevPasskeySigner } from './passkey';
 import { MemoryStore } from './storage';
 import { SwissquoteBridge } from './SwissquoteBridge';
@@ -110,6 +111,9 @@ async function readyBridge(api: SwissquoteApi): Promise<SwissquoteBridge> {
   await bridge.createWallet();
   return bridge;
 }
+
+const toHex = (bytes: Uint8Array): string => `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
+const hexToBytes = (hex: string): Uint8Array => Uint8Array.from((hex.slice(2).match(/../g) ?? []).map((h) => parseInt(h, 16)));
 
 const draft = { to: RECIPIENT, asset: USDC, amount: '0x1' } as const;
 const NO_STEP_UP = { stepUp: false, acceptedRisk: false } as const;
@@ -276,6 +280,103 @@ describe('SwissquoteBridge: authentication before every transaction', () => {
       expect((await bridge.confirmSend(preview.value.id, NO_STEP_UP)).ok).toBe(true);
       expect(sign.mock.calls.length).toBe(before + 1); // the send itself needs the passkey
     }
+  });
+});
+
+describe('SwissquoteBridge: gasless USDC rail (ERC-4337 + paymaster)', () => {
+  // A real ed25519 owner so the bridge's local check of the passkey approval can pass.
+  const priv = ed25519.utils.randomPrivateKey();
+  const realOwner = { kind: 'ed25519' as const, key: toHex(ed25519.getPublicKey(priv)) };
+  const realAccount: AccountView = { ...account, owner: realOwner };
+  const realSigner = {
+    create: async () => ok(realOwner),
+    has: async () => true,
+    sign: async (_name: string, hash: string) => ok({ kind: 'ed25519' as const, signature: toHex(ed25519.sign(hexToBytes(hash), priv)) }),
+  };
+  const SMART = `0x${'5a'.repeat(20)}`;
+  function rail(enabled = true) {
+    const sends: { to: string; amount: bigint }[] = [];
+    const gasless = {
+      enabled,
+      usdc: USDC,
+      explorerTx: (hash: string) => `https://sepolia.basescan.org/tx/${hash}`,
+      address: async () => SMART,
+      balance: async () => '25000000',
+      send: async (to: string, amount: bigint) => {
+        sends.push({ to, amount });
+        return { ok: true as const, hash: '0xbasehash' };
+      },
+    };
+    return { gasless, sends };
+  }
+  async function gaslessBridge(api: SwissquoteApi, gasless: ReturnType<typeof rail>['gasless'] | undefined) {
+    const bridge = new SwissquoteBridge({
+      api,
+      passkey: realSigner,
+      store: new MemoryStore(),
+      auditLog: new LocalAuditLog(new MemoryStore()),
+      onSession: () => undefined,
+      ...(gasless ? { gasless } : {}),
+    });
+    await bridge.login({ username: 'alice', password: 'demo' });
+    await bridge.createWallet();
+    return bridge;
+  }
+  const realApi = () =>
+    scriptedApi({
+      register: vi.fn(async () => ok({ address: ADDRESS, account: realAccount, accounts: [realAccount] })),
+      overview: vi.fn(async () => ok({ owner: realOwner, accounts: [realAccount] })),
+    });
+  const gaslessDraft = { to: RECIPIENT, asset: USDC, amount: '0xf4240', rail: 'base-sepolia-usdc' } as const;
+
+  it('is assessed and co-signed by Swissquote like a Ferra send, then broadcast by the smart account', async () => {
+    const api = realApi();
+    const { gasless, sends } = rail();
+    const bridge = await gaslessBridge(api, gasless);
+
+    const preview = await bridge.previewSend(gaslessDraft);
+    if (!preview.ok) throw new Error(preview.error.code);
+    // The same ERC-20 transfer calldata the policy decodes for Ferra sends: the risk engine sees it.
+    expect(api.assess).toHaveBeenCalledWith(
+      expect.objectContaining({ tx: expect.objectContaining({ from: ADDRESS, to: USDC, data: expect.stringMatching(/^0xa9059cbb/) }) }),
+    );
+
+    const outcome = await bridge.confirmSend(preview.value.id, NO_STEP_UP);
+    expect(outcome).toEqual({ ok: true, value: { kind: 'confirmed', txHash: '0xbasehash', receipt: expect.anything(), explorerUrl: 'https://sepolia.basescan.org/tx/0xbasehash' } });
+    expect(api.cosign).toHaveBeenCalledOnce();
+    // Broadcast on Base Sepolia, never on the pseudo-chain; then the smart account is synced to Ferra.
+    expect(sends).toEqual([{ to: RECIPIENT, amount: 1_000_000n }]);
+    expect(api.submit).not.toHaveBeenCalled();
+    expect(api.sync).toHaveBeenCalledWith(expect.objectContaining({ wallet: ADDRESS, network: 'base-sepolia', address_raw: SMART }));
+  });
+
+  it('stops at the step-up like any other send, and only broadcasts once Swissquote co-signs', async () => {
+    const api = realApi();
+    api.cosign = vi
+      .fn()
+      .mockResolvedValueOnce(ok<CosignOutcome>({ kind: 'step_up', entry: entry(0, 'step_up'), step_up_hash: `0x${'cd'.repeat(32)}`, level: 'standard' }))
+      .mockResolvedValueOnce(ok<CosignOutcome>({ kind: 'cosigned', entry: entry(1, 'cosigned'), cosignature: '0xcosig' }));
+    const { gasless, sends } = rail();
+    const bridge = await gaslessBridge(api, gasless);
+    const preview = await bridge.previewSend(gaslessDraft);
+    if (!preview.ok) throw new Error(preview.error.code);
+
+    const first = await bridge.confirmSend(preview.value.id, NO_STEP_UP);
+    expect(first.ok && first.value.kind).toBe('confirmation_required');
+    expect(sends).toHaveLength(0);
+    const second = await bridge.confirmSend(preview.value.id, { stepUp: true, acceptedRisk: false });
+    expect(second.ok && second.value.kind).toBe('confirmed');
+    expect(sends).toHaveLength(1);
+  });
+
+  it('refuses the rail when it is not configured, and more than the smart account holds', async () => {
+    const off = await gaslessBridge(realApi(), undefined);
+    const none = await off.previewSend(gaslessDraft);
+    expect(!none.ok && none.error.code).toBe('TESTNET_GASLESS_OFF');
+
+    const on = await gaslessBridge(realApi(), rail().gasless);
+    const tooMuch = await on.previewSend({ ...gaslessDraft, amount: '0x5f5e100' }); // 100 USDC > 25 held
+    expect(!tooMuch.ok && tooMuch.error.code).toBe('SQ_CHAIN_INSUFFICIENT_BALANCE');
   });
 });
 

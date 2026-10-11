@@ -270,6 +270,18 @@ export class FakeBridge implements UiBridge {
       { ...FAKE_SOLANA_WALLET, balance: this.#solLamports.toString() },
       FAKE_BASE_WALLET,
       { ...FAKE_BASE_WALLET, network: 'eth-sepolia', label: 'Ethereum Sepolia', balance: '0', faucetUrl: 'https://sepolia-faucet.pk910.de/' },
+      {
+        ...FAKE_BASE_WALLET,
+        network: 'base-sepolia-usdc',
+        label: 'Base Sepolia · USDC sans gas',
+        address: '0x00000000000000000000000000000000005a4a11',
+        symbol: 'USDC',
+        decimals: 6,
+        balance: '25000000',
+        faucetUrl: 'https://faucet.circle.com',
+        gasless: true,
+        assetAddress: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+      },
     ]);
   }
 

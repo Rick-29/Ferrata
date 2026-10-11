@@ -127,7 +127,9 @@ export class OutcomePanel extends Widget<FinalOutcome> {
           </p>
           <div class="details">
             ${outcome.receipt ? html`<span class="receipt">Reçu d'analyse n° ${outcome.receipt.seq} · Swissquote</span>` : nothing}
-            <span class="mono muted">Tx ${shortAddress(outcome.txHash)}</span>
+            ${outcome.explorerUrl
+              ? html`<a class="mono" href=${outcome.explorerUrl} target="_blank" rel="noopener noreferrer">Tx ${shortAddress(outcome.txHash)} · Base Sepolia, sans gas</a>`
+              : html`<span class="mono muted">Tx ${shortAddress(outcome.txHash)}</span>`}
           </div>
         `;
       case 'refused':

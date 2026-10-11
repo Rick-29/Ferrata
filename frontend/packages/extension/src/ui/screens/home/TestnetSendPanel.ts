@@ -129,7 +129,9 @@ export class TestnetSendPanel extends Screen {
       case 'review':
         return this.#review(wallet);
       case 'sending':
-        return html`<p class="note">Confirmez avec votre passkey, puis envoi et confirmation sur le réseau de test…</p>`;
+        return wallet?.gasless
+          ? html`<p class="note">Analyse Swissquote en cours…</p>`
+          : html`<p class="note">Confirmez avec votre passkey, puis envoi et confirmation sur le réseau de test…</p>`;
       case 'done': {
         const { outcome } = this.step;
         return html`<p class="note ok">
@@ -189,10 +191,16 @@ export class TestnetSendPanel extends Screen {
       <div class="row"><span>Réseau</span><span>${wallet?.label ?? this.network}</span></div>
       <div class="row"><span>Vers</span><span>${shortAddress(this.to)}</span></div>
       <div class="row"><span>Montant</span><strong>${this.amount} ${wallet?.symbol ?? ''}</strong></div>
-      <p class="note">Réseau de test, cryptos sans valeur. Votre passkey va confirmer cet envoi précis.</p>
+      <p class="note">
+        Réseau de test, cryptos sans valeur.
+        ${wallet?.gasless
+          ? html`Swissquote analyse cet envoi comme n'importe quel autre, puis votre passkey le confirme.
+              <br /><strong>Sans gas :</strong> aucun ETH requis, les frais sont pris en charge par le paymaster.`
+          : html`Votre passkey va confirmer cet envoi précis.`}
+      </p>
       <div class="actions">
         <button type="button" class="secondary" @click=${() => (this.step = { kind: 'form' })}>Modifier</button>
-        <button type="button" class="primary" @click=${this.#send}>Confirmer avec ma passkey</button>
+        <button type="button" class="primary" @click=${this.#send}>${wallet?.gasless ? 'Analyser et confirmer' : 'Confirmer avec ma passkey'}</button>
       </div>
     `;
   }
@@ -208,11 +216,33 @@ export class TestnetSendPanel extends Screen {
   }
 
   readonly #send = async (): Promise<void> => {
+    const wallet = this.#wallet();
+    if (wallet?.gasless) return this.#sendThroughSwissquote(wallet);
     this.step = { kind: 'sending' };
     const result = await this.bridge.sendTestnet({ network: this.network, to: this.to, amount: this.amount });
     this.step = result.ok ? { kind: 'done', outcome: result.value } : { kind: 'error', error: result.error };
     if (result.ok) this.dispatchEvent(new CustomEvent('testnet-changed', { bubbles: true, composed: true }));
   };
+
+  /**
+   * Gasless USDC is a real asset transfer, so it takes the same road as a Ferra send: Swissquote
+   * assesses it, the Confirm screen shows the risk and asks the passkey (and a step-up when needed),
+   * then the smart account broadcasts on Base Sepolia.
+   */
+  async #sendThroughSwissquote(wallet: TestnetWallet): Promise<void> {
+    this.step = { kind: 'sending' };
+    const units = toBaseUnits(this.amount, wallet.decimals);
+    if (units === null) return;
+    const asset = wallet.assetAddress ?? null;
+    const result = await this.bridge.previewSend({ to: this.to, asset, amount: `0x${units.toString(16)}`, rail: 'base-sepolia-usdc' });
+    if (!this.isConnected) return;
+    if (!result.ok) {
+      this.step = { kind: 'error', error: result.error };
+      return;
+    }
+    this.step = { kind: 'form' };
+    this.router.go('confirm', { preview: result.value, asset: { asset, symbol: wallet.symbol, decimals: wallet.decimals, amount: wallet.balance ?? '0' } });
+  }
 
   readonly #reset = (): void => {
     this.to = '';
