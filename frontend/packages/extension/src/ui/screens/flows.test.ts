@@ -256,7 +256,7 @@ describe('Activity', () => {
     await settle();
 
     const text = deepText(shell);
-    expect(text).toContain('Envoi co-signé');
+    expect(text).toContain('Envoi signé par Swissquote');
     expect(text).toContain('−50 USDC');
     expect(text).toContain('✓ Reçu');
     expect(text).toContain('Fonds de démo reçus');

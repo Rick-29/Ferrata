@@ -30,7 +30,7 @@ describe('toActivityRows', () => {
   it('lists newest first, formats token amounts and marks outgoing sends', () => {
     const rows = toActivityRows(feed([send(1, '0xa'), send(2, '0xb')]));
     expect(rows.map((r) => r.key)).toEqual([send(2, '0xb').hash, send(1, '0xa').hash]);
-    expect(rows[0]).toMatchObject({ label: 'Envoi co-signé', amount: '50 USDC', direction: 'out', riskLevel: 'Medium' });
+    expect(rows[0]).toMatchObject({ label: 'Envoi signé par Swissquote', amount: '50 USDC', direction: 'out', riskLevel: 'Medium' });
   });
 
   it('marks the events that carry a Swissquote receipt', () => {

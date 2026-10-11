@@ -2,7 +2,9 @@ import type { RecoveryState } from '@sqw/types/RecoveryState';
 import type { Result, SdkError } from '@sqw/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { errorMessage } from './messages';
-import type { KycScript, NewPasskey, RecoveryService } from './RecoveryService';
+import { confirmWithBiometrics } from '../device/biometrics';
+import { createDeviceKey, type DeviceKey } from '../device/deviceKey';
+import type { KycScript, RecoveryService } from './RecoveryService';
 
 const POLL_MS = 3000;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -14,7 +16,7 @@ const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 export type RecoveryStep =
   | { readonly kind: 'login' }
   | { readonly kind: 'address'; readonly displayName: string }
-  | { readonly kind: 'identify'; readonly address: string; readonly passkey: NewPasskey }
+  | { readonly kind: 'identify'; readonly address: string; readonly deviceKey: DeviceKey }
   | { readonly kind: 'waiting'; readonly recovery: RecoveryState }
   | { readonly kind: 'finished'; readonly recovery: RecoveryState };
 
@@ -63,7 +65,7 @@ export function useRecoveryFlow(service: RecoveryService): RecoveryFlow {
         setError('Adresse invalide : 0x suivi de 40 caractères hexadécimaux.');
         return;
       }
-      await run(() => service.createPasskey(), (passkey) => setStep({ kind: 'identify', address: trimmed, passkey }));
+      await run(() => createDeviceKey(), (deviceKey) => setStep({ kind: 'identify', address: trimmed, deviceKey }));
     },
     [run, service],
   );
@@ -71,9 +73,9 @@ export function useRecoveryFlow(service: RecoveryService): RecoveryFlow {
   const identify = useCallback(
     async (script: KycScript, fullName: string) => {
       if (step.kind !== 'identify') return;
-      const { address, passkey } = step;
+      const { address, deviceKey } = step;
       await run(
-        () => service.start(address, passkey.owner, { script, fullName: fullName.trim() }),
+        () => service.start(address, deviceKey.owner, { script, fullName: fullName.trim() }),
         (recovery) => setStep(isFinal(recovery) ? { kind: 'finished', recovery } : { kind: 'waiting', recovery }),
       );
     },
@@ -82,7 +84,15 @@ export function useRecoveryFlow(service: RecoveryService): RecoveryFlow {
 
   const execute = useCallback(async () => {
     if (step.kind !== 'waiting') return;
-    await run(() => service.execute(step.recovery.id), (recovery) => setStep({ kind: 'finished', recovery }));
+    const id = step.recovery.id;
+    // The key change is the most sensitive step: the owner confirms it with the phone's biometrics.
+    await run(
+      async () => {
+        const confirmed = await confirmWithBiometrics('Confirmer la récupération du wallet');
+        return confirmed.ok ? service.execute(id) : confirmed;
+      },
+      (recovery) => setStep({ kind: 'finished', recovery }),
+    );
   }, [run, service, step]);
 
   const restart = useCallback(() => {

@@ -12,6 +12,7 @@ import { DeviceKeyWrapper, NetworkKeyring } from './dapp/NetworkKeyring';
 import { RpcProxy } from './dapp/RpcProxy';
 import { DAPP_RPC_URL, ProviderErrors, isDappRequest } from '../dapp/protocol';
 import { dispatch } from './dispatch';
+import { isSimulatedPasskey } from '../ui/core/config';
 import { DevPasskeySigner, type PasskeySigner } from './passkey';
 import { WebAuthnPasskeySigner } from './WebAuthnPasskeySigner';
 import { ChromeStore } from './storage';
@@ -53,7 +54,7 @@ const testnet = new TestnetWallets({
  * mock keyring (/dev/passkeys, server-held keys: demo only, not self-custody).
  */
 function passkeySigner(): PasskeySigner {
-  if (import.meta.env.VITE_PASSKEY === 'dev') return new DevPasskeySigner(api);
+  if (isSimulatedPasskey) return new DevPasskeySigner(api);
   return new WebAuthnPasskeySigner(new ChromeStore(chrome.storage.local), (request) => chrome.runtime.sendMessage(request));
 }
 

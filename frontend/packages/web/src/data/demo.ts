@@ -102,9 +102,9 @@ export const scenarios: Scenario[] = [
     id: "regulatory",
     tier: "refused",
     label: "Regulatory refusal",
-    title: "Transfer that cannot be co-signed",
+    title: "Transfer Swissquote cannot sign",
     summary:
-      "Swissquote cannot co-sign this transfer for regulatory reasons. Your funds have not moved.",
+      "Swissquote cannot sign this transfer for regulatory reasons. Your funds have not moved.",
     amount: "2,500",
     asset: "USDC",
     destination: "0x71cB…0A19",
@@ -188,21 +188,21 @@ const reports: Record<ScenarioId, Record<PersonaId, RiskReport>> = {
     holder: {
       score: 100,
       tier: "refused",
-      headline: "This request cannot be co-signed for regulatory reasons.",
+      headline: "Swissquote cannot sign this request for regulatory reasons.",
       personalReason:
         "This applies to every profile. No amount was sent and your balance is unchanged.",
     },
     active: {
       score: 100,
       tier: "refused",
-      headline: "This request cannot be co-signed for regulatory reasons.",
+      headline: "Swissquote cannot sign this request for regulatory reasons.",
       personalReason:
         "This applies to every profile. No amount was sent and your balance is unchanged.",
     },
     frequency: {
       score: 100,
       tier: "refused",
-      headline: "This request cannot be co-signed for regulatory reasons.",
+      headline: "Swissquote cannot sign this request for regulatory reasons.",
       personalReason:
         "This applies to every profile. No amount was sent and your balance is unchanged.",
     },
@@ -245,7 +245,7 @@ export const activity: ActivityItem[] = [
   },
   {
     id: "4",
-    title: "Transfer not co-signed",
+    title: "Transfer not signed by Swissquote",
     meta: "May 17, 21:48 · regulatory",
     amount: "Not sent",
     tier: "refused",

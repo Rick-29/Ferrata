@@ -21,7 +21,7 @@ function outcomeOf(recovery: RecoveryState): Outcome {
         tone: 'low',
         eyebrow: 'Récupération terminée',
         title: 'Votre wallet est de nouveau accessible',
-        body: "La passkey de ce téléphone est désormais la clé de votre wallet. L'ancienne ne fonctionne plus.",
+        body: "La clé de ce téléphone, protégée par sa biométrie, est désormais la clé de votre wallet. L'ancienne ne fonctionne plus.",
       };
     case 'cancelled':
       return {

@@ -8,6 +8,7 @@ import { FinishedStep } from './src/screens/FinishedStep';
 import { IdentifyStep } from './src/screens/IdentifyStep';
 import { LoginStep } from './src/screens/LoginStep';
 import { WaitingStep } from './src/screens/WaitingStep';
+import { CryptoBackdrop } from './src/ui/CryptoBackdrop';
 import { Body, Brand, ErrorBanner, Eyebrow, Steps, Title } from './src/ui/components';
 import { SPACE, useTheme } from './src/ui/theme';
 
@@ -42,8 +43,7 @@ export default function App() {
   return (
     <View style={[styles.root, { backgroundColor: t.bg }]}>
       <StatusBar style="light" />
-      <View pointerEvents="none" style={[styles.glow, styles.glowOne]} />
-      <View pointerEvents="none" style={[styles.glow, styles.glowTwo]} />
+      <CryptoBackdrop />
       <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.brandRow}>
@@ -84,8 +84,4 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: SPACE.xl, paddingTop: 72, paddingBottom: SPACE.xxl, gap: SPACE.xl },
   header: { gap: SPACE.sm },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  // Soft colour glows behind the content (design: .ambient); no blur in RN, so very low opacity.
-  glow: { position: 'absolute', borderRadius: 999 },
-  glowOne: { width: 280, height: 250, left: -130, top: -120, backgroundColor: '#ff3d3d', opacity: 0.1 },
-  glowTwo: { width: 280, height: 280, right: -150, top: 310, backgroundColor: '#bd315f', opacity: 0.08 },
 });

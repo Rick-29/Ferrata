@@ -110,7 +110,7 @@ export class OnboardingScreen extends Screen {
         ? html`<header>
             <sq-brand></sq-brand>
             <p class="lead">
-              Vos fonds restent à vous. Swissquote co-signe chaque transaction mais ne peut jamais les déplacer.
+              Vos fonds restent à vous. Chaque transaction porte une double signature : la vôtre et celle de Swissquote, qui ne peut jamais déplacer vos fonds.
             </p>
           </header>`
         : html`<div class="hero">

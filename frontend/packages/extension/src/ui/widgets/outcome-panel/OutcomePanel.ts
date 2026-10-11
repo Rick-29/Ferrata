@@ -119,7 +119,7 @@ export class OutcomePanel extends Widget<FinalOutcome> {
     switch (outcome.kind) {
       case 'confirmed':
         return html`
-          <h1>Co-signée par Swissquote</h1>
+          <h1>Signée par Swissquote</h1>
           <p class="muted">La transaction est exécutée et inscrite au journal d'audit.</p>
           <div class="details">
             <span class="receipt">Reçu n° ${outcome.receipt.seq} · signé par Swissquote</span>
@@ -129,9 +129,9 @@ export class OutcomePanel extends Widget<FinalOutcome> {
       case 'refused':
         // No reasons on purpose: a regulatory refusal must not disclose what was flagged.
         return html`
-          <h1>Co-signature indisponible</h1>
+          <h1>Signature Swissquote indisponible</h1>
           <p class="muted">
-            Cette transaction ne peut pas être co-signée pour des raisons réglementaires. Vos fonds n'ont pas bougé.
+            Swissquote ne peut pas signer cette transaction pour des raisons réglementaires. Vos fonds n'ont pas bougé.
           </p>
         `;
     }
