@@ -23,7 +23,8 @@ import { SolanaDevnet } from './testnet/SolanaDevnet';
 import { SolanaKeyring } from './testnet/SolanaKeyring';
 import { TestnetWallets } from './testnet/TestnetWallets';
 import { TestnetSender, type EvmSend } from './testnet/TestnetSender';
-import { BASE_SEPOLIA_USDC, GaslessUsdc } from './testnet/GaslessUsdc';
+import { BASE_SEPOLIA_USDC, GaslessUsdc, type SmartAccountOwner } from './testnet/GaslessUsdc';
+import { passkeyOwner } from './testnet/PasskeyOwner';
 import { createWalletClient, createPublicClient, http } from 'viem';
 import { baseSepolia, sepolia } from 'viem/chains';
 
@@ -43,11 +44,25 @@ const sepoliaRpc = new RpcProxy('https://ethereum-sepolia-rpc.publicnode.com');
 // Gasless USDC: the EVM key owns an ERC-4337 smart account, Pimlico's paymaster pays the gas.
 // Set VITE_PIMLICO_API_KEY (frontend/packages/extension/.env.local) to turn it on.
 const gasless = new GaslessUsdc({ pimlicoApiKey: import.meta.env.VITE_PIMLICO_API_KEY ?? null, rpcUrl: DAPP_RPC_URL });
+/** The wallet's passkey signer (one instance: the bridge and the smart account share it). */
+const passkeys = passkeySigner();
+/**
+ * The smart account's owner: this wallet's passkey (recorded at creation, or replaced by a recovery).
+ * Null with the simulated dev keyring (not a WebAuthn key) or before a wallet exists on this device.
+ */
+async function smartOwner(): Promise<SmartAccountOwner | null> {
+  if (!(passkeys instanceof WebAuthnPasskeySigner)) return null;
+  const name = (await loadState(new ChromeStore(chrome.storage.session))).wallet?.passkeyName;
+  if (!name) return null;
+  const credential = await passkeys.credential(name);
+  return credential === null ? null : passkeyOwner(credential, (hash) => passkeys.sign(name, hash));
+}
 const testnet = new TestnetWallets({
   solana: new SolanaKeyring(new ChromeStore(chrome.storage.local), deviceKey),
   devnet: new SolanaDevnet(),
   evm: evmKeyring,
   gasless,
+  smartOwner,
   evmBalance: async (network, address) => {
     const rpc = network === 'base-sepolia' ? baseRpc : sepoliaRpc;
     const response = await rpc.forward('eth_getBalance', [address, 'latest']);
@@ -85,6 +100,7 @@ const testnetSender = new TestnetSender({
   evm: evmKeyring,
   evmSend,
   gasless,
+  smartOwner,
   sync: (request) => api.sync(request),
 });
 
@@ -97,18 +113,17 @@ const bridge = new SwissquoteBridge({
     usdc: BASE_SEPOLIA_USDC,
     explorerTx: (hash) => `https://sepolia.basescan.org/tx/${hash}`,
     address: async () => {
-      const owner = await evmKeyring.account();
+      const owner = await smartOwner();
       return owner === null ? null : gasless.address(owner);
     },
     balance: (address) => gasless.balance(address),
     send: async (to, amount) => {
-      await evmKeyring.ensure();
-      const owner = await evmKeyring.account();
-      if (owner === null) return { ok: false, message: 'no EVM key on this device' };
+      const owner = await smartOwner();
+      if (owner === null) return { ok: false, message: 'no passkey on this device' };
       return gasless.send(owner, to, amount);
     },
   },
-  passkey: passkeySigner(),
+  passkey: passkeys,
   store: new ChromeStore(chrome.storage.session),
   auditLog: new LocalAuditLog(new ChromeStore(chrome.storage.local)),
   onSession: (session: Session | null) => {

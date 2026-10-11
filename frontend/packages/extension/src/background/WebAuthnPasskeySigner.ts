@@ -47,6 +47,11 @@ export class WebAuthnPasskeySigner implements PasskeySigner {
     return ok({ kind: 'p256', key: created.value.publicKey });
   }
 
+  /** The credential id and public key recorded for `name` (never a secret), or null. */
+  async credential(name: string): Promise<{ readonly credentialId: string; readonly publicKey: string } | null> {
+    return (await this.#all())[name] ?? null;
+  }
+
   async has(name: string): Promise<boolean> {
     return (await this.#all())[name] !== undefined;
   }

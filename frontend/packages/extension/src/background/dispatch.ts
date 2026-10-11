@@ -42,7 +42,7 @@ function isWalletSettings(v: unknown): v is WalletSettings {
   );
 }
 
-const TESTNET_NETWORKS: ReadonlySet<unknown> = new Set(['solana-devnet', 'base-sepolia', 'eth-sepolia', 'base-sepolia-usdc']);
+const TESTNET_NETWORKS: ReadonlySet<unknown> = new Set(['solana-devnet', 'base-sepolia', 'eth-sepolia', 'base-sepolia-usdc', 'base-sepolia-passkey-eth']);
 
 function isTestnetSendDraft(v: unknown): v is TestnetSendDraft {
   return isRecord(v) && TESTNET_NETWORKS.has(v.network) && isString(v.to) && isString(v.amount);

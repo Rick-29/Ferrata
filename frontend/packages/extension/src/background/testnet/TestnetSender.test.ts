@@ -27,6 +27,10 @@ function fakeGasless(enabled = true) {
       sends.push({ owner: owner.address, to, amount });
       return { ok: true as const, hash: '0xuserophash' as `0x${string}` };
     },
+    sendNative: async (owner: { address: string }, to: string, amount: bigint) => {
+      sends.push({ owner: owner.address, to, amount, native: true } as never);
+      return { ok: true as const, hash: '0xethuserop' as `0x${string}` };
+    },
   } as unknown as GaslessUsdc;
   return { gasless, sends };
 }
@@ -48,7 +52,9 @@ class TestWrapper implements KeyWrapper {
 const RECIPIENT = base58.encode(ed25519.getPublicKey(ed25519.utils.randomPrivateKey()));
 const BLOCKHASH = base58.encode(new Uint8Array(32).fill(7));
 
-function setup(options: { evmSend?: EvmSend; rpc?: (method: string) => unknown; gasless?: GaslessUsdc } = {}) {
+const PASSKEY_OWNER = { address: `0x${'9a'.repeat(20)}`, type: 'webAuthn' } as const;
+
+function setup(options: { evmSend?: EvmSend; rpc?: (method: string) => unknown; gasless?: GaslessUsdc; noPasskey?: boolean } = {}) {
   const store = new MemoryStore();
   const wrapper = new TestWrapper();
   const solana = new SolanaKeyring(store, wrapper);
@@ -72,7 +78,8 @@ function setup(options: { evmSend?: EvmSend; rpc?: (method: string) => unknown; 
   );
   const evmSend = options.evmSend ?? vi.fn<EvmSend>(async () => ({ ok: true, hash: '0xethhash' }));
   const sync = vi.fn(async () => ok({ network: { family: 'solana', name: 'solana-devnet', chain_id: null }, fetched: 1, recorded: 1, skipped_existing: 0, next_cursor: null } as never));
-  const sender = new TestnetSender({ solana, devnet, evm, evmSend, sync, ...(options.gasless ? { gasless: options.gasless } : {}) });
+  const smartOwner = async () => (options.noPasskey ? null : (PASSKEY_OWNER as never));
+  const sender = new TestnetSender({ solana, devnet, evm, evmSend, sync, smartOwner, ...(options.gasless ? { gasless: options.gasless } : {}) });
   return { sender, solana, evm, sentTxs, evmSend, sync };
 }
 
@@ -123,9 +130,9 @@ describe('TestnetSender', () => {
     expect(evmSend).toHaveBeenCalledWith('eth-sepolia', to, 2_000_000_000_000_000n);
   });
 
-  it('sends USDC gaslessly from the smart account owned by the EVM key, then syncs that account on Base Sepolia', async () => {
+  it('sends USDC from the smart account owned by the passkey (its signature is the approval), then syncs that account', async () => {
     const { gasless, sends } = fakeGasless();
-    const { sender, evm, evmSend, sync } = setup({ gasless });
+    const { sender, evmSend, sync } = setup({ gasless });
     const to = `0x${'3'.repeat(40)}`;
     const authorize = vi.fn(async (_hash: string) => ok(undefined));
     const result = await sender.send({ network: 'base-sepolia-usdc', to, amount: '12.5' }, '0xFerra', authorize);
@@ -134,22 +141,37 @@ describe('TestnetSender', () => {
       ok: true,
       value: { network: 'base-sepolia-usdc', txId: '0xuserophash', amount: '12500000', explorerUrl: 'https://sepolia.basescan.org/tx/0xuserophash', recordedOnFerra: 1 },
     });
-    expect(authorize).toHaveBeenCalledOnce();
-    expect(sends).toEqual([{ owner: await evm.address(), to, amount: 12_500_000n }]);
+    // One passkey prompt, inside the user operation: no separate approval first.
+    expect(authorize).not.toHaveBeenCalled();
+    expect(sends).toEqual([{ owner: PASSKEY_OWNER.address, to, amount: 12_500_000n }]);
     // No native transfer, no ETH: the paymaster pays.
     expect(evmSend).not.toHaveBeenCalled();
     // The on-chain sender is the smart account, so that is what the Ferra chain must watch.
     expect(sync).toHaveBeenCalledWith(expect.objectContaining({ network: 'base-sepolia', address_raw: SMART_ACCOUNT }));
   });
 
-  it('refuses gasless sends when no Pimlico key is configured, before asking the passkey', async () => {
-    const off = setup({ gasless: fakeGasless(false).gasless });
-    const none = setup();
+  it('sends ETH from the same passkey-owned smart account, with the passkey signature as the only approval', async () => {
+    const { gasless, sends } = fakeGasless();
+    const { sender, evmSend, sync } = setup({ gasless });
+    const to = `0x${'6'.repeat(40)}`;
     const authorize = vi.fn(async (_hash: string) => ok(undefined));
-    for (const { sender } of [off, none]) {
+    const result = await sender.send({ network: 'base-sepolia-passkey-eth', to, amount: '0.002' }, '0xFerra', authorize);
+    expect(result.ok && result.value).toMatchObject({ txId: '0xethuserop', amount: '2000000000000000', explorerUrl: 'https://sepolia.basescan.org/tx/0xethuserop' });
+    expect(sends).toEqual([{ owner: PASSKEY_OWNER.address, to, amount: 2_000_000_000_000_000n, native: true }]);
+    expect(authorize).not.toHaveBeenCalled();
+    expect(evmSend).not.toHaveBeenCalled();
+    expect(sync).toHaveBeenCalledWith(expect.objectContaining({ network: 'base-sepolia', address_raw: SMART_ACCOUNT }));
+  });
+
+  it('refuses smart-account sends when the rail is off, and asks for the passkey when this device has none', async () => {
+    const authorize = vi.fn(async (_hash: string) => ok(undefined));
+    for (const { sender } of [setup({ gasless: fakeGasless(false).gasless }), setup()]) {
       const result = await sender.send({ network: 'base-sepolia-usdc', to: `0x${'4'.repeat(40)}`, amount: '1' }, '0xF', authorize);
       expect(!result.ok && result.error.code).toBe('TESTNET_GASLESS_OFF');
     }
+    const noPasskey = setup({ gasless: fakeGasless().gasless, noPasskey: true });
+    const result = await noPasskey.sender.send({ network: 'base-sepolia-usdc', to: `0x${'4'.repeat(40)}`, amount: '1' }, '0xF', authorize);
+    expect(!result.ok && result.error.code).toBe('PASSKEY_UNAVAILABLE');
     expect(authorize).not.toHaveBeenCalled();
   });
 

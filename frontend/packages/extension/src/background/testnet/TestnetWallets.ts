@@ -5,7 +5,7 @@ import { uiError, type UiError } from '../../ui/core/errors';
 import { err, ok } from '../../ui/core/result';
 import type { AirdropOutcome, TestnetNetwork, TestnetWallet } from '../../ui/services/UiBridge';
 import type { NetworkKeyring } from '../dapp/NetworkKeyring';
-import { BASE_SEPOLIA_USDC, CIRCLE_FAUCET_URL, USDC_DECIMALS, type GaslessUsdc } from './GaslessUsdc';
+import { BASE_SEPOLIA_USDC, CIRCLE_FAUCET_URL, USDC_DECIMALS, type GaslessUsdc, type SmartAccountOwner } from './GaslessUsdc';
 import { LAMPORTS_PER_SOL, type DevnetError, type SolanaDevnet } from './SolanaDevnet';
 import type { SolanaKeyring } from './SolanaKeyring';
 
@@ -21,8 +21,10 @@ export interface TestnetWalletsDeps {
   readonly evm: NetworkKeyring;
   /** Balance in wei (decimal string) on an EVM test network, or null when its node cannot be read. */
   readonly evmBalance: (network: EvmTestnet, address: string) => Promise<string | null>;
-  /** ERC-4337 smart account for gasless USDC on Base Sepolia; listed only when configured. */
+  /** ERC-4337 smart account on Base Sepolia (USDC, gas sponsored when a Pimlico key is set). */
   readonly gasless?: GaslessUsdc;
+  /** The smart account's owner: the client's passkey. Null when this device has no WebAuthn passkey. */
+  readonly smartOwner?: () => Promise<SmartAccountOwner | null>;
   /** `POST /chain/sync` (SDK). */
   readonly sync: (request: SyncRequest) => Promise<Result<SyncResponse, SdkError>>;
 }
@@ -37,6 +39,7 @@ const SOLANA: TestnetNetwork = 'solana-devnet';
 const BASE: TestnetNetwork = 'base-sepolia';
 const SEPOLIA: TestnetNetwork = 'eth-sepolia';
 const BASE_USDC: TestnetNetwork = 'base-sepolia-usdc';
+const BASE_SMART_ETH: TestnetNetwork = 'base-sepolia-passkey-eth';
 const solanaAddressUrl = (address: string): string => `https://explorer.solana.com/address/${address}?cluster=devnet`;
 const solanaTxUrl = (signature: string): string => `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
 /** Base Sepolia has no public faucet API (all need a login, captcha or API key): the web faucet it is. */
@@ -69,13 +72,14 @@ export class TestnetWallets {
       SHOW_ETH_SEPOLIA ? evmBalance('eth-sepolia', evmAddress) : Promise.resolve(null),
       smartAddress === null || !gasless ? Promise.resolve(null) : gasless.balance(smartAddress),
     ]);
+    const smartEth = smartAddress === null || !gasless ? null : await gasless.ethBalance(smartAddress);
     const gaslessWallet: TestnetWallet[] =
       smartAddress === null
         ? []
         : [
             {
               network: BASE_USDC,
-              label: 'Base Sepolia · USDC sans gas',
+              label: gasless?.sponsored ? 'Base Sepolia · wallet passkey · USDC (sans gas)' : 'Base Sepolia · wallet passkey · USDC',
               address: smartAddress,
               symbol: 'USDC',
               decimals: USDC_DECIMALS,
@@ -85,6 +89,17 @@ export class TestnetWallets {
               faucetUrl: CIRCLE_FAUCET_URL,
               gasless: true,
               assetAddress: BASE_SEPOLIA_USDC,
+            },
+            {
+              network: BASE_SMART_ETH,
+              label: 'Base Sepolia · wallet passkey · ETH',
+              address: smartAddress,
+              symbol: 'ETH',
+              decimals: 18,
+              balance: smartEth,
+              explorerUrl: `https://sepolia.basescan.org/address/${smartAddress}`,
+              inWalletAirdrop: false,
+              faucetUrl: BASE_FAUCET_URL,
             },
           ];
     return ok([
@@ -130,7 +145,7 @@ export class TestnetWallets {
   }
 
   async #smartAccountAddress(gasless: GaslessUsdc): Promise<string | null> {
-    const owner = await this.#deps.evm.account();
+    const owner = (await this.#deps.smartOwner?.()) ?? null;
     if (owner === null) return null;
     try {
       return await gasless.address(owner);

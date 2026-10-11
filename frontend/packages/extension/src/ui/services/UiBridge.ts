@@ -131,7 +131,7 @@ export interface RecoveryAlert {
  * Public test networks the wallet holds an address on (testnet_plan M3, M8). `base-sepolia-usdc` is
  * the wallet's ERC-4337 smart account on Base Sepolia: USDC transfers with gas paid by a paymaster.
  */
-export type TestnetNetwork = 'solana-devnet' | 'base-sepolia' | 'eth-sepolia' | 'base-sepolia-usdc';
+export type TestnetNetwork = 'solana-devnet' | 'base-sepolia' | 'eth-sepolia' | 'base-sepolia-usdc' | 'base-sepolia-passkey-eth';
 
 /** The wallet's address on a test network. Created by the background on first use, key never exposed. */
 export interface TestnetWallet {

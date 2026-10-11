@@ -1,17 +1,14 @@
-import { createClient, createPublicClient, encodeFunctionData, erc20Abi, http, type Hex } from 'viem';
-import type { PrivateKeyAccount } from 'viem/accounts';
-import { createBundlerClient, toCoinbaseSmartAccount, type SmartAccount } from 'viem/account-abstraction';
+import { createClient, createPublicClient, encodeFunctionData, erc20Abi, http, type Hex, type LocalAccount } from 'viem';
+import { createBundlerClient, toCoinbaseSmartAccount, type SmartAccount, type WebAuthnAccount } from 'viem/account-abstraction';
 import { baseSepolia } from 'viem/chains';
 
-// Gasless USDC on Base Sepolia (Swissquote bonus: "transfer USDC without first acquiring the gas
-// token"). The wallet's EVM key owns an ERC-4337 smart account (Coinbase Smart Wallet contracts,
-// counterfactual: deployed by its first user operation). Pimlico bundles the operation and its
-// verifying paymaster pays the gas under a sponsorship policy (ERC-7677 `pm_getPaymasterData`,
-// handled inside viem when `paymaster: true`). The user never holds ETH.
-//
-// Keys: the owner key never leaves NetworkKeyring; this module only receives the viem account for
-// the duration of one send. Co-signing: the passkey approves the exact transfer first (TestnetSender),
-// Swissquote's on-chain 2-of-2 stays a Ferra-chain property (README, "Honest framing").
+// USDC on Base Sepolia from an ERC-4337 smart account (Coinbase Smart Wallet contracts,
+// counterfactual: deployed by its first user operation) owned by the client's PASSKEY: the chain
+// itself verifies the WebAuthn signature (PasskeyOwner.ts), so the account works without the
+// extension's keys and without Swissquote. Pimlico bundles the operation:
+// - with VITE_PIMLICO_API_KEY, its verifying paymaster pays the gas under a sponsorship policy
+//   (ERC-7677 `pm_getPaymasterData`, handled inside viem when `paymaster: true`): gasless;
+// - without it, Pimlico's public bundler, and the account pays its own gas in Base Sepolia ETH.
 
 /** Circle's USDC on Base Sepolia (https://developers.circle.com/stablecoins/usdc-contract-addresses). */
 export const BASE_SEPOLIA_USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as const;
@@ -20,7 +17,11 @@ export const USDC_DECIMALS = 6;
 export const CIRCLE_FAUCET_URL = 'https://faucet.circle.com';
 export const PIMLICO_HOST = 'https://api.pimlico.io';
 
-const pimlicoUrl = (apiKey: string): string => `${PIMLICO_HOST}/v2/${baseSepolia.id}/rpc?apikey=${apiKey}`;
+const pimlicoUrl = (apiKey: string | null): string =>
+  apiKey ? `${PIMLICO_HOST}/v2/${baseSepolia.id}/rpc?apikey=${apiKey}` : `https://public.pimlico.io/v2/${baseSepolia.id}/rpc`;
+
+/** Who owns the smart account: the client's passkey (WebAuthn), or any viem local account (tests). */
+export type SmartAccountOwner = WebAuthnAccount | LocalAccount;
 // Inferred rather than `PublicClient`: Base's OP-stack formatters (deposit transactions) make the
 // chain-specific client not assignable to the generic type.
 const baseClient = (rpcUrl?: string) => createPublicClient({ chain: baseSepolia, transport: http(rpcUrl) });
@@ -29,7 +30,7 @@ type BaseClient = ReturnType<typeof baseClient>;
 export type GaslessResult = { ok: true; hash: Hex } | { ok: false; message: string };
 
 export interface GaslessUsdcOptions {
-  /** Pimlico API key (VITE_PIMLICO_API_KEY). Without it the gasless path reports itself as off. */
+  /** Pimlico API key (VITE_PIMLICO_API_KEY). Without it: public bundler, the account pays its gas. */
   readonly pimlicoApiKey: string | null;
   readonly rpcUrl?: string;
 }
@@ -43,12 +44,27 @@ export class GaslessUsdc {
     this.#client = baseClient(options.rpcUrl);
   }
 
+  /** The smart account rail is always available: the public bundler needs no key. */
   get enabled(): boolean {
+    return true;
+  }
+
+  /** True when Pimlico's paymaster pays the gas (an API key with a sponsorship policy). */
+  get sponsored(): boolean {
     return this.#apiKey !== null && this.#apiKey.length > 0;
   }
 
+  /** ETH (wei, decimal string) the account holds to pay its own gas when not sponsored. */
+  async ethBalance(address: string): Promise<string | null> {
+    try {
+      return (await this.#client.getBalance({ address: address as Hex })).toString();
+    } catch {
+      return null;
+    }
+  }
+
   /** Counterfactual smart-account address for this owner: stable, no deployment needed to receive. */
-  async address(owner: PrivateKeyAccount): Promise<string> {
+  async address(owner: SmartAccountOwner): Promise<string> {
     return (await this.#account(owner)).address;
   }
 
@@ -68,8 +84,18 @@ export class GaslessUsdc {
   }
 
   /** Sends `amount` USDC base units from the owner's smart account; gas sponsored by the paymaster. */
-  async send(owner: PrivateKeyAccount, to: string, amount: bigint): Promise<GaslessResult> {
-    if (this.#apiKey === null) return { ok: false, message: 'gasless transfers are off: no Pimlico API key' };
+  send(owner: SmartAccountOwner, to: string, amount: bigint): Promise<GaslessResult> {
+    return this.#sendCalls(owner, [
+      { to: BASE_SEPOLIA_USDC, data: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [to as Hex, amount] }) },
+    ]);
+  }
+
+  /** Sends `wei` of Base Sepolia ETH from the owner's smart account (same user-operation path). */
+  sendNative(owner: SmartAccountOwner, to: string, wei: bigint): Promise<GaslessResult> {
+    return this.#sendCalls(owner, [{ to: to as Hex, value: wei }]);
+  }
+
+  async #sendCalls(owner: SmartAccountOwner, calls: readonly { to: Hex; data?: Hex; value?: bigint }[]): Promise<GaslessResult> {
     try {
       const account = await this.#account(owner);
       const transport = http(pimlicoUrl(this.#apiKey));
@@ -80,7 +106,8 @@ export class GaslessUsdc {
         chain: baseSepolia,
         transport,
         // ERC-7677: the bundler endpoint doubles as the paymaster; Pimlico sponsors under the key's policy.
-        paymaster: true,
+        // Without a key: no paymaster, the account pays from its own ETH.
+        ...(this.sponsored ? { paymaster: true } : {}),
         userOperation: {
           // Pimlico rejects operations priced below its own quote; fall back to the chain's estimate.
           estimateFeesPerGas: async () => {
@@ -96,14 +123,7 @@ export class GaslessUsdc {
           },
         },
       });
-      const userOpHash = await bundler.sendUserOperation({
-        calls: [
-          {
-            to: BASE_SEPOLIA_USDC,
-            data: encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [to as Hex, amount] }),
-          },
-        ],
-      });
+      const userOpHash = await bundler.sendUserOperation({ calls: [...calls] });
       const receipt = await bundler.waitForUserOperationReceipt({ hash: userOpHash, timeout: 120_000 });
       return receipt.success ? { ok: true, hash: receipt.receipt.transactionHash } : { ok: false, message: 'user operation reverted' };
     } catch (error) {
@@ -111,7 +131,7 @@ export class GaslessUsdc {
     }
   }
 
-  #account(owner: PrivateKeyAccount): Promise<SmartAccount> {
+  #account(owner: SmartAccountOwner): Promise<SmartAccount> {
     return toCoinbaseSmartAccount({ client: this.#client, owners: [owner], version: '1.1' });
   }
 }

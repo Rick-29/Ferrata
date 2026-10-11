@@ -17,6 +17,7 @@ type AirdropState =
 const COINS: Readonly<Record<TestnetNetwork, { readonly glyph: string; readonly tone: string }>> = {
   'solana-devnet': { glyph: '◎', tone: 'sol' },
   'base-sepolia-usdc': { glyph: '$', tone: 'usdc' },
+  'base-sepolia-passkey-eth': { glyph: '◆', tone: 'eth' },
   'base-sepolia': { glyph: '◆', tone: 'eth' },
   'eth-sepolia': { glyph: '◆', tone: 'eth' },
 };
@@ -195,8 +196,15 @@ export class TestnetReceivePanel extends Screen {
     }
     if (network === 'base-sepolia-usdc') {
       return html`<p class="note">
-        Compte intelligent (ERC-4337) : les envois d'USDC ne demandent aucun ETH, Swissquote prend le gas en charge via
-        un paymaster. Collez l'adresse sur le faucet Circle (réseau Base Sepolia) pour recevoir des USDC de test.
+        Wallet passkey (compte intelligent ERC-4337) : votre passkey en est la clé, vérifiée par la blockchain. Avec le
+        paymaster, les envois d'USDC ne demandent aucun ETH. Collez l'adresse sur le faucet Circle (réseau Base Sepolia)
+        pour recevoir des USDC de test.
+      </p>`;
+    }
+    if (network === 'base-sepolia-passkey-eth') {
+      return html`<p class="note">
+        Même wallet passkey, côté ETH. Le plus simple : envoyez-y de l'ETH depuis votre compte « Base Sepolia » (celui
+        des faucets). Sans paymaster, cet ETH paie aussi le gas du wallet passkey.
       </p>`;
     }
     if (network !== 'base-sepolia') {
