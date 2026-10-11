@@ -1,0 +1,14 @@
+{
+  "name": "@sqw/attester",
+  "private": true,
+  "type": "module",
+  "description": "SIMULATED Swissquote recovery attester: a separate process with its own key and storage.",
+  "scripts": {
+    "keygen": "node src/keygen.mjs",
+    "deploy": "node src/deploy.mjs",
+    "start": "node src/server.mjs"
+  },
+  "dependencies": {
+    "viem": "2.57.4"
+  }
+}

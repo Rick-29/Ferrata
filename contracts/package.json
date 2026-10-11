@@ -1,0 +1,11 @@
+{
+  "name": "@sqw/contracts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node compile.mjs"
+  },
+  "devDependencies": {
+    "solc": "0.8.24"
+  }
+}

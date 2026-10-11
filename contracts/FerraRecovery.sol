@@ -109,6 +109,8 @@ contract FerraRecovery {
         if (block.timestamp < p.unlockAt) revert Timelocked(p.unlockAt);
         delete pendingOf[account];
         phoneOf[account] = address(0);
+        // A fresh start: the next recovery is not contested because of an old cancel.
+        cancelsOf[account] = 0;
         ICoinbaseSmartWallet wallet = ICoinbaseSmartWallet(account);
         bytes memory old = wallet.ownerAtIndex(p.oldIndex);
         wallet.addOwnerPublicKey(p.x, p.y);
