@@ -52,6 +52,10 @@ export class SendScreen extends Screen {
         display: grid;
         gap: var(--sq-space-4);
       }
+      /* Grid items default to their content's min width: never wider than the popup. */
+      form > * {
+        min-width: 0;
+      }
       .demo {
         display: flex;
         flex-wrap: wrap;

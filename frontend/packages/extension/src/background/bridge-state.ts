@@ -39,6 +39,10 @@ export interface BridgeState {
   readonly session: Session | null;
   readonly wallet: WalletRef | null;
   readonly pending: Readonly<Record<string, PendingSend>>;
+  /** Epoch ms until which the wallet stays unlocked; absent = locked (passkey needed). */
+  readonly unlockedUntil?: number;
+  /** Epoch ms of the last passkey proof the backend verified (sign-in to the website checks it). */
+  readonly provenAt?: number;
 }
 
 export const EMPTY_STATE: BridgeState = { session: null, wallet: null, pending: {} };

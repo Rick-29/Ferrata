@@ -7,39 +7,46 @@ import {
   ShieldCheck,
 } from "lucide-react"
 import { useState } from "react"
+import { FerrataSignInError, signInWithFerrata, type FerrataIdentity } from "../lib/ferrata"
 import type { JourneyStep } from "../types"
 import Brand from "./Brand"
-import { Badge, Button, Card, Field } from "./ui"
+import { Badge, Button, Card } from "./ui"
 import { APP_NAME } from "@sqw/brand"
+
+/** Messages for each way sign-in through the extension can end without a client. */
+const SIGN_IN_ERRORS: Record<FerrataSignInError["reason"], string> = {
+  not_installed:
+    "Ferrata extension not found. Install it (chrome://extensions → Load unpacked → frontend/packages/extension/dist), then reload this page.",
+  refused: "Sign-in cancelled in the Ferrata window.",
+  not_allowed: "The Ferrata extension does not allow this site to sign in.",
+  failed: "Sign-in failed. Please try again.",
+}
 
 export default function AuthFlow({
   step,
   onBack,
   onContinue,
+  onSignedIn,
 }: {
   step: Extract<JourneyStep, "signin" | "passkey">
   onBack: () => void
   onContinue: () => void
+  /** Real sign-in: the Ferrata extension ran the Swissquote login and the passkey. */
+  onSignedIn: (identity: FerrataIdentity) => void
 }) {
-  const [userId, setUserId] = useState("ferrata.demo")
-  const [password, setPassword] = useState("swissquote")
-  const [errors, setErrors] = useState<{ userId?: string; password?: string }>(
-    {},
-  )
+  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const submit = () => {
-    const nextErrors = {
-      userId: userId.trim() ? undefined : "Enter your demo Swissquote ID",
-      password: password.trim() ? undefined : "Enter your demo password",
-    }
-    setErrors(nextErrors)
-    if (nextErrors.userId || nextErrors.password) return
+  const submit = async () => {
+    setError(null)
     setLoading(true)
-    window.setTimeout(() => {
+    try {
+      onSignedIn(await signInWithFerrata())
+    } catch (cause) {
+      setError(cause instanceof FerrataSignInError ? SIGN_IN_ERRORS[cause.reason] : SIGN_IN_ERRORS.failed)
+    } finally {
       setLoading(false)
-      onContinue()
-    }, 650)
+    }
   }
 
   return (
@@ -97,38 +104,28 @@ export default function AuthFlow({
                 <span className="eyebrow">WELCOME BACK</span>
                 <h2>Sign in to {APP_NAME}</h2>
                 <p>
-                  Use the demo details below. Never enter real credentials in
-                  this prototype.
+                  Sign in with your {APP_NAME} wallet. A window opens: your
+                  Swissquote login, then your passkey (fingerprint, face or
+                  PIN). This site never sees a password or a key.
                 </p>
               </div>
               <div className="demo-credentials">
                 <span>Demo access</span>
-                <code>ferrata.demo / swissquote</code>
+                <code>alice / demo</code>
               </div>
-              <div className="auth-fields">
-                <Field
-                  label="Swissquote ID"
-                  value={userId}
-                  onChange={(event) => setUserId(event.target.value)}
-                  error={errors.userId}
-                  autoComplete="username"
-                />
-                <Field
-                  label="Password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  error={errors.password}
-                  type="password"
-                  autoComplete="current-password"
-                />
-              </div>
+              {error && (
+                <p className="field-error" role="alert">
+                  {error}
+                </p>
+              )}
               <Button
                 className="full-width"
                 size="lg"
                 loading={loading}
-                onClick={submit}
+                onClick={() => void submit()}
+                icon={<Fingerprint size={18} />}
               >
-                {loading ? "Checking identity" : "Continue"}
+                {loading ? "Confirm in the Ferrata window…" : `Sign in with ${APP_NAME}`}
               </Button>
             </>
           ) : (

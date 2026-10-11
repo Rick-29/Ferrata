@@ -7,6 +7,8 @@ export interface PasskeySigner {
   /** Creates (or finds again) the key named `name` and returns its public key. */
   create(name: string): Promise<Result<OwnerKey, SdkError>>;
   sign(name: string, hash: string): Promise<Result<OwnerSignature, SdkError>>;
+  /** True when this device already holds the key named `name` (then sign-in unlocks instead of creating). */
+  has(name: string): Promise<boolean>;
 }
 
 /**
@@ -27,5 +29,10 @@ export class DevPasskeySigner implements PasskeySigner {
 
   sign(name: string, hash: string): Promise<Result<OwnerSignature, SdkError>> {
     return this.#api.devSign(name, hash);
+  }
+
+  /** The dev keyring lives on the server: from the device's point of view there is never a local key. */
+  async has(): Promise<boolean> {
+    return false;
   }
 }

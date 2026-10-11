@@ -1,5 +1,5 @@
 // Test dApp for the Swissquote Wallet provider. Discovers wallets the modern way (EIP-6963), then
-// drives the selected one through EIP-1193. Serve with:  npx vite frontend/packages/dex-demo --port 5174
+// drives the selected one through EIP-1193. Serve with:  npx vite frontend/packages/dex-demo --port 5175 (5174 is the Ferrata website)
 
 interface Eip1193Provider {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;

@@ -5,17 +5,23 @@ import { err } from '../ui/core/result';
 import { isBridgeRequest } from '../ui/services/bridge-protocol';
 import { LocalAuditLog, loadState } from './bridge-state';
 import { DappRouter } from './dapp/DappRouter';
-import { AllowlistApprover, DEFAULT_ALLOWED_ORIGINS } from './dapp/AllowlistApprover';
+import { AllowlistApprover, DEFAULT_ALLOWED_ORIGINS, FIRST_PARTY_ORIGINS } from './dapp/AllowlistApprover';
+import { SignInBroker } from './signin/SignInBroker';
+import { isSignInMessage } from '../signin/protocol';
 import { DeviceKeyWrapper, NetworkKeyring } from './dapp/NetworkKeyring';
 import { RpcProxy } from './dapp/RpcProxy';
 import { DAPP_RPC_URL, ProviderErrors, isDappRequest } from '../dapp/protocol';
 import { dispatch } from './dispatch';
-import { DevPasskeySigner } from './passkey';
+import { DevPasskeySigner, type PasskeySigner } from './passkey';
+import { WebAuthnPasskeySigner } from './WebAuthnPasskeySigner';
 import { ChromeStore } from './storage';
 import { SwissquoteBridge } from './SwissquoteBridge';
 import { SolanaDevnet } from './testnet/SolanaDevnet';
 import { SolanaKeyring } from './testnet/SolanaKeyring';
 import { TestnetWallets } from './testnet/TestnetWallets';
+import { TestnetSender, type EvmSend } from './testnet/TestnetSender';
+import { createWalletClient, createPublicClient, http } from 'viem';
+import { baseSepolia, sepolia } from 'viem/chains';
 
 // Background service worker (frontend_tasks §2): holds the session token and the SDK, and serves
 // the real UiBridge to extension pages over chrome.runtime messaging.
@@ -26,15 +32,58 @@ let token: string | null = null;
 const api = new HttpSwissquoteApi({ baseUrl: API_URL, token: () => token });
 // One device key seals every network key (Base Sepolia, Solana devnet); see dapp/NetworkKeyring.ts.
 const deviceKey = new DeviceKeyWrapper();
+// One Base Sepolia key and node for both the dApp provider and the testnet panel.
+const evmKeyring = new NetworkKeyring(new ChromeStore(chrome.storage.local), deviceKey);
+const baseRpc = new RpcProxy(DAPP_RPC_URL);
+const sepoliaRpc = new RpcProxy('https://ethereum-sepolia-rpc.publicnode.com');
 const testnet = new TestnetWallets({
   solana: new SolanaKeyring(new ChromeStore(chrome.storage.local), deviceKey),
   devnet: new SolanaDevnet(),
+  evm: evmKeyring,
+  evmBalance: async (network, address) => {
+    const rpc = network === 'base-sepolia' ? baseRpc : sepoliaRpc;
+    const response = await rpc.forward('eth_getBalance', [address, 'latest']);
+    return response.ok && typeof response.result === 'string' ? BigInt(response.result).toString() : null;
+  },
   sync: (request) => api.sync(request),
 });
+/**
+ * Real passkey (WebAuthn, P-256) by default: the key lives in the device's authenticator and every
+ * signature needs the user (Windows Hello, Touch ID…). VITE_PASSKEY=dev falls back to the backend's
+ * mock keyring (/dev/passkeys, server-held keys: demo only, not self-custody).
+ */
+function passkeySigner(): PasskeySigner {
+  if (import.meta.env.VITE_PASSKEY === 'dev') return new DevPasskeySigner(api);
+  return new WebAuthnPasskeySigner(new ChromeStore(chrome.storage.local), (request) => chrome.runtime.sendMessage(request));
+}
+
+/** Sends ETH on an EVM test network with the wallet's network key, then waits for the receipt. */
+const evmSend: EvmSend = async (network, to, valueWei) => {
+  const account = await evmKeyring.account();
+  if (account === null) return { ok: false, message: 'no EVM key on this device' };
+  const chain = network === 'base-sepolia' ? baseSepolia : sepolia;
+  const transport = http(network === 'base-sepolia' ? DAPP_RPC_URL : 'https://ethereum-sepolia-rpc.publicnode.com');
+  try {
+    const hash = await createWalletClient({ account, chain, transport }).sendTransaction({ to: to as `0x${string}`, value: valueWei });
+    const receipt = await createPublicClient({ chain, transport }).waitForTransactionReceipt({ hash, timeout: 90_000 });
+    return receipt.status === 'success' ? { ok: true, hash } : { ok: false, message: 'reverted' };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : 'send failed' };
+  }
+};
+const testnetSender = new TestnetSender({
+  solana: new SolanaKeyring(new ChromeStore(chrome.storage.local), deviceKey),
+  devnet: new SolanaDevnet(),
+  evm: evmKeyring,
+  evmSend,
+  sync: (request) => api.sync(request),
+});
+
 const bridge = new SwissquoteBridge({
   api,
   testnet,
-  passkey: new DevPasskeySigner(api),
+  testnetSender,
+  passkey: passkeySigner(),
   store: new ChromeStore(chrome.storage.session),
   auditLog: new LocalAuditLog(new ChromeStore(chrome.storage.local)),
   onSession: (session: Session | null) => {
@@ -71,11 +120,42 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 // dApp pages (content script relay, src/content). Separate channel and router: a page never reaches
 // the UiBridge methods above, and its origin is taken from the sender, not from the message.
 const sessionStore = new ChromeStore(chrome.storage.session);
+
+// Website sign-in (sqw_signIn): a small approval window runs login + passkey, then reports here.
+const signIns = new SignInBroker({
+  openWindow: async (query) => {
+    const created = await chrome.windows.create({
+      url: chrome.runtime.getURL(`src/approval/index.html?${query}`),
+      type: 'popup',
+      width: 400,
+      height: 640,
+      focused: true,
+    });
+    return created?.id;
+  },
+  closeWindow: (windowId) => void chrome.windows.remove(windowId).catch(() => undefined),
+  identitySince: (since) => bridge.identitySince(since),
+});
+chrome.windows.onRemoved.addListener((windowId) => signIns.onWindowClosed(windowId));
+
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (!isSignInMessage(message)) return false;
+  // Only our own extension pages (the approval window), never a content script or another extension.
+  if (!isTrustedSender(sender)) {
+    sendResponse({ ok: false, code: 'UI_FORBIDDEN' });
+    return false;
+  }
+  signIns.handle(message).then(sendResponse, () => sendResponse({ ok: false, code: 'UI_INTERNAL' }));
+  return true;
+});
+
 const dapps = new DappRouter({
-  keyring: new NetworkKeyring(new ChromeStore(chrome.storage.local), deviceKey),
-  rpc: new RpcProxy(DAPP_RPC_URL),
+  keyring: evmKeyring,
+  rpc: baseRpc,
   permissions: new ChromeStore(chrome.storage.local),
   approver: new AllowlistApprover(DEFAULT_ALLOWED_ORIGINS),
+  signIn: (origin) => signIns.request(origin),
+  firstPartyOrigins: FIRST_PARTY_ORIGINS,
   walletReady: async () => {
     const state = await loadState(sessionStore);
     return state.session !== null && state.wallet !== null;

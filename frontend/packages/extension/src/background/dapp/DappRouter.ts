@@ -26,6 +26,12 @@ export interface DappRouterDeps {
   readonly approver: ConnectApprover;
   /** True once the client is logged in and has a wallet (popup onboarding done). */
   readonly walletReady: () => Promise<boolean>;
+  /**
+   * Website sign-in through the extension (`sqw_signIn`): login + passkey in the approval window.
+   * Offered only to `firstPartyOrigins` (Ferrata's own website), refused to every other site.
+   */
+  readonly signIn?: (origin: string) => Promise<DappResponse>;
+  readonly firstPartyOrigins?: readonly string[];
 }
 
 const PERMISSIONS_KEY = 'sqw-dapp-connected-origins';
@@ -49,6 +55,8 @@ export class DappRouter {
         return this.#requestAccounts(origin);
       case 'wallet_switchEthereumChain':
         return this.#switchChain(params);
+      case 'sqw_signIn':
+        return this.#signIn(origin);
       default:
         if (SIGNING_METHODS.has(method)) return this.#signing(origin);
         return this.#deps.rpc.forward(method, params);
@@ -87,6 +95,12 @@ export class DappRouter {
     const chainId = typeof first === 'object' && first !== null && 'chainId' in first ? first.chainId : undefined;
     if (typeof chainId !== 'string') return fail(ProviderErrors.invalidParams);
     return chainId.toLowerCase() === DAPP_CHAIN_ID_HEX ? ok(null) : fail(ProviderErrors.unknownChain);
+  }
+
+  #signIn(origin: string): Promise<DappResponse> | DappResponse {
+    const { signIn, firstPartyOrigins = [] } = this.#deps;
+    if (!signIn || !firstPartyOrigins.includes(origin)) return fail(ProviderErrors.unsupportedMethod);
+    return signIn(origin);
   }
 
   async #signing(origin: string): Promise<DappResponse> {

@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react"
 import { useState } from "react"
+import { shortAddress, type FerrataIdentity } from "../lib/ferrata"
 import {
   getPersona,
   getRiskReport,
@@ -40,6 +41,7 @@ export default function CustomerDashboard({
   onPersonaChange,
   onScenarioChange,
   onRestart,
+  identity = null,
 }: {
   theme: Theme
   personaId: PersonaId
@@ -48,6 +50,8 @@ export default function CustomerDashboard({
   onPersonaChange: (persona: PersonaId) => void
   onScenarioChange: (scenario: ScenarioId) => void
   onRestart: () => void
+  /** Signed in through the Ferrata extension; null in the scripted demo. */
+  identity?: FerrataIdentity | null
 }) {
   const [section, setSection] = useState<DashboardSection>("overview")
   const [mobileMenu, setMobileMenu] = useState(false)
@@ -112,10 +116,12 @@ export default function CustomerDashboard({
           <RotateCcw size={17} /> Restart demo
         </button>
         <div className="sidebar-profile">
-          <span className="user-avatar">JD</span>
+          <span className="user-avatar">{identity ? initials(identity.displayName) : "JD"}</span>
           <span>
-            <strong>Jordan Davis</strong>
-            <small>Client · CH-8042</small>
+            <strong>{identity ? identity.displayName : "Jordan Davis"}</strong>
+            <small>
+              {identity ? `${identity.clientId} · ${shortAddress(identity.address)}` : "Client · CH-8042"}
+            </small>
           </span>
           <ChevronDown size={16} />
         </div>
@@ -334,4 +340,13 @@ export default function CustomerDashboard({
       )}
     </div>
   )
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase()
 }

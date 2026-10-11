@@ -1,6 +1,6 @@
 import type { AssetBalance } from '@sqw/types/AssetBalance';
 import { css, html, type TemplateResult } from 'lit';
-import { customElement } from 'lit/decorators.js';
+import { customElement, property } from 'lit/decorators.js';
 import { formatUnits } from '../../core/format';
 import { textStyles } from '../../core/styles';
 import { Widget } from '../../core/Widget';
@@ -9,11 +9,15 @@ import { Widget } from '../../core/Widget';
 const COINS: Readonly<Record<string, { readonly glyph: string; readonly name: string; readonly tone: string }>> = {
   USDC: { glyph: '$', name: 'USD Coin', tone: 'usdc' },
   ETH: { glyph: '◆', name: 'Ethereum', tone: 'eth' },
+  SOL: { glyph: '◎', name: 'Solana', tone: 'sol' },
 };
 
 /** Every asset the account holds, one row each. */
 @customElement('sq-asset-list')
 export class AssetList extends Widget<readonly AssetBalance[]> {
+  /** Optional line under each symbol, same order as the balances (e.g. the test network). */
+  @property({ attribute: false }) notes: readonly string[] = [];
+
   static override styles = [
     textStyles,
     css`
@@ -62,6 +66,10 @@ export class AssetList extends Widget<readonly AssetBalance[]> {
         --glow: rgba(129, 115, 223, 0.45);
         font-size: 13px;
       }
+      .sol {
+        background: linear-gradient(145deg, #19fb9b, #9945ff);
+        --glow: rgba(153, 69, 255, 0.4);
+      }
       .other {
         background: linear-gradient(145deg, #5e567b, #2d3047);
         --glow: rgba(0, 0, 0, 0.3);
@@ -98,11 +106,12 @@ export class AssetList extends Widget<readonly AssetBalance[]> {
     if (balances.length === 0) return html`<p class="muted empty">Aucun actif pour le moment.</p>`;
     return html`
       <ul aria-label="Actifs">
-        ${balances.map((b) => {
+        ${balances.map((b, i) => {
+          const note = this.notes[i];
           const coin = COINS[b.symbol];
           return html`<li>
             <span class="coin ${coin?.tone ?? 'other'}" aria-hidden="true">${coin?.glyph ?? b.symbol.slice(0, 1)}</span>
-            <span class="name"><strong>${coin?.name ?? b.symbol}</strong><small>${b.symbol}</small></span>
+            <span class="name"><strong>${coin?.name ?? b.symbol}</strong><small>${b.symbol}${note ? ` · ${note}` : ''}</small></span>
             <span class="value"><strong class="amount">${formatUnits(b.amount, b.decimals)} ${b.symbol}</strong></span>
           </li>`;
         })}

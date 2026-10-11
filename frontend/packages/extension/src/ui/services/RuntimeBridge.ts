@@ -13,6 +13,8 @@ import type {
   SendPreview,
   SessionView,
   TestnetNetwork,
+  TestnetSendDraft,
+  TestnetSendOutcome,
   TestnetWallet,
   UiBridge,
 } from './UiBridge';
@@ -40,6 +42,14 @@ export class RuntimeBridge implements UiBridge {
 
   getWallet(): UiResult<AccountView> {
     return call('getWallet');
+  }
+
+  hasPasskey(): UiResult<boolean> {
+    return call('hasPasskey');
+  }
+
+  lock(): UiResult<void> {
+    return call('lock');
   }
 
   previewSend(draft: SendDraft): UiResult<SendPreview> {
@@ -72,6 +82,10 @@ export class RuntimeBridge implements UiBridge {
 
   requestAirdrop(network: TestnetNetwork): UiResult<AirdropOutcome> {
     return call('requestAirdrop', network);
+  }
+
+  sendTestnet(draft: TestnetSendDraft): UiResult<TestnetSendOutcome> {
+    return call('sendTestnet', draft);
   }
 }
 

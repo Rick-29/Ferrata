@@ -3,7 +3,7 @@ import { ed25519 } from '@noble/curves/ed25519';
 import { base58 } from '@scure/base';
 import { describe, expect, it, vi } from 'vitest';
 import { err, ok, sdkError } from '@sqw/sdk';
-import type { Bytes, KeyWrapper } from '../dapp/NetworkKeyring';
+import { NetworkKeyring, type Bytes, type KeyWrapper } from '../dapp/NetworkKeyring';
 import { MemoryStore } from '../storage';
 import { SolanaDevnet } from './SolanaDevnet';
 import { SolanaKeyring } from './SolanaKeyring';
@@ -61,11 +61,17 @@ const happyPath: RpcHandler = (method) => {
 
 const SYNCED = ok({ network: { family: 'solana', name: 'solana-devnet', chain_id: null }, fetched: 1, recorded: 1, skipped_existing: 0, next_cursor: null } as never);
 
-function setup(handler: RpcHandler = happyPath, sync = vi.fn<TestnetWalletsDeps['sync']>(async () => SYNCED)) {
+function setup(
+  handler: RpcHandler = happyPath,
+  sync = vi.fn<TestnetWalletsDeps['sync']>(async () => SYNCED),
+  evmBalance: TestnetWalletsDeps['evmBalance'] = async (network) => (network === 'base-sepolia' ? '20000000000000000' : '30000000000000000'),
+) {
   const keyStore = new MemoryStore();
-  const solana = new SolanaKeyring(keyStore, new TestWrapper());
+  const wrapper = new TestWrapper();
+  const solana = new SolanaKeyring(keyStore, wrapper);
+  const evm = new NetworkKeyring(keyStore, wrapper);
   const { devnet, calls } = fakeDevnet(handler);
-  return { service: new TestnetWallets({ solana, devnet, sync }), solana, keyStore, calls, sync };
+  return { service: new TestnetWallets({ solana, devnet, evm, evmBalance, sync }), solana, evm, keyStore, calls, sync };
 }
 
 describe('SolanaKeyring', () => {
@@ -104,6 +110,52 @@ describe('TestnetWallets', () => {
     const { service } = setup(() => ({ status: 503, body: 'down' }));
     const result = await service.list('0xW');
     expect(result.ok && result.value[0]?.balance).toBeNull();
+  });
+
+  it('lists the Base Sepolia address (the dApp key) with a web faucet, and syncs it too', async () => {
+    const { service, evm, sync } = setup();
+    const result = await service.list('0xFerraWallet');
+    const address = await evm.address();
+    expect(address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(result.ok && result.value[1]).toMatchObject({
+      network: 'base-sepolia',
+      address,
+      symbol: 'ETH',
+      decimals: 18,
+      balance: '20000000000000000',
+      inWalletAirdrop: false,
+    });
+    expect(result.ok && result.value[1]?.faucetUrl).toMatch(/^https:\/\//);
+    expect(sync).toHaveBeenCalledWith(expect.objectContaining({ wallet: '0xFerraWallet', network: 'base-sepolia', address_raw: address }));
+  });
+
+  it('lists Ethereum Sepolia on the same EVM address, with the PoW faucet, and syncs it', async () => {
+    const { service, evm, sync } = setup();
+    const result = await service.list('0xFerraWallet');
+    const address = await evm.address();
+    expect(result.ok && result.value.map((w) => w.network)).toEqual(['solana-devnet', 'base-sepolia', 'eth-sepolia']);
+    expect(result.ok && result.value[2]).toMatchObject({
+      network: 'eth-sepolia',
+      address,
+      symbol: 'ETH',
+      balance: '30000000000000000',
+      inWalletAirdrop: false,
+      faucetUrl: 'https://sepolia-faucet.pk910.de/',
+    });
+    expect(sync).toHaveBeenCalledWith(expect.objectContaining({ wallet: '0xFerraWallet', network: 'eth-sepolia', address_raw: address }));
+  });
+
+  it('shows a null ETH balance when the Base Sepolia node cannot be read', async () => {
+    const { service } = setup(happyPath, undefined, async () => null);
+    const result = await service.list('0xW');
+    expect(result.ok && result.value[1]?.balance).toBeNull();
+  });
+
+  it('has no in-wallet airdrop for Base Sepolia', async () => {
+    const { service, calls } = setup();
+    const result = await service.airdrop('base-sepolia', '0xW');
+    expect(!result.ok && result.error.code).toBe('TESTNET_NO_FAUCET_API');
+    expect(calls).toHaveLength(0);
   });
 
   it('airdrops 1 SOL, waits for confirmation, then records it on the Ferra chain', async () => {

@@ -34,11 +34,13 @@ import type {
   SendPreview,
   SessionView,
   TestnetNetwork,
+  TestnetSendDraft,
+  TestnetSendOutcome,
   TestnetWallet,
   UiBridge,
 } from './UiBridge';
 
-/** Mock devnet wallet for offline demos and UI tests (labelled fake, never a real address). */
+/** Mock test-network wallets for offline demos and UI tests (labelled fake, never real addresses). */
 const FAKE_SOLANA_WALLET: Omit<TestnetWallet, 'balance'> = {
   network: 'solana-devnet',
   label: 'Solana devnet',
@@ -46,6 +48,19 @@ const FAKE_SOLANA_WALLET: Omit<TestnetWallet, 'balance'> = {
   symbol: 'SOL',
   decimals: 9,
   explorerUrl: 'https://explorer.solana.com/?cluster=devnet',
+  inWalletAirdrop: true,
+  faucetUrl: 'https://faucet.solana.com',
+};
+const FAKE_BASE_WALLET: TestnetWallet = {
+  network: 'base-sepolia',
+  label: 'Base Sepolia',
+  address: '0x000000000000000000000000000000000000fa4e',
+  symbol: 'ETH',
+  decimals: 18,
+  balance: '50000000000000000',
+  explorerUrl: 'https://sepolia.basescan.org',
+  inWalletAirdrop: false,
+  faucetUrl: 'https://portal.cdp.coinbase.com/products/faucet',
 };
 
 export interface FakeBridgeOptions {
@@ -112,6 +127,17 @@ export class FakeBridge implements UiBridge {
     await this.#latency();
     if (!this.#session) return err(UNAUTHORIZED);
     return this.#account ? ok(this.#account) : err(uiError('SQ_NOT_FOUND'));
+  }
+
+  async lock(): Promise<Result<void, UiError>> {
+    await this.#latency();
+    return ok(undefined);
+  }
+
+  async hasPasskey(): Promise<Result<boolean, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    return ok(this.#account !== null);
   }
 
   async previewSend(draft: SendDraft): Promise<Result<SendPreview, UiError>> {
@@ -225,12 +251,24 @@ export class FakeBridge implements UiBridge {
   async getTestnetWallets(): Promise<Result<readonly TestnetWallet[], UiError>> {
     await this.#latency();
     if (!this.#session) return err(UNAUTHORIZED);
-    return ok([{ ...FAKE_SOLANA_WALLET, balance: this.#solLamports.toString() }]);
+    return ok([
+      { ...FAKE_SOLANA_WALLET, balance: this.#solLamports.toString() },
+      FAKE_BASE_WALLET,
+      { ...FAKE_BASE_WALLET, network: 'eth-sepolia', label: 'Ethereum Sepolia', balance: '0', faucetUrl: 'https://sepolia-faucet.pk910.de/' },
+    ]);
+  }
+
+  async sendTestnet(draft: TestnetSendDraft): Promise<Result<TestnetSendOutcome, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    const txId = `fakeSend${this.#nextId()}`;
+    return ok({ network: draft.network, txId, amount: draft.amount, explorerUrl: 'https://explorer.solana.com/?cluster=devnet', recordedOnFerra: 1 });
   }
 
   async requestAirdrop(network: TestnetNetwork): Promise<Result<AirdropOutcome, UiError>> {
     await this.#latency();
     if (!this.#session) return err(UNAUTHORIZED);
+    if (network !== 'solana-devnet') return err(uiError('TESTNET_NO_FAUCET_API'));
     const amount = 1_000_000_000n;
     this.#solLamports += amount;
     const signature = `fakeAirdrop${this.#nextId()}`;

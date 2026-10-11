@@ -5,16 +5,38 @@ import { customElement, state } from 'lit/decorators.js';
 import { icon } from '../../core/icons';
 import { Screen, toWidgetState } from '../../core/Screen';
 import { screenStyles, textStyles } from '../../core/styles';
-import { loading, type WidgetState } from '../../core/Widget';
+import { idle, loading, type WidgetState } from '../../core/Widget';
+import type { TestnetWallet } from '../../services/UiBridge';
 import '../../widgets/asset-list/AssetList';
 import '../../widgets/balance-card/BalanceCard';
 import '../../widgets/brand/Brand';
-import './TestnetWalletsPanel';
+import '../../widgets/testnet-balance/TestnetBalanceCard';
+import './TestnetReceivePanel';
+import './TestnetSendPanel';
 
-/** Balance, assets and the way into Send. Reloads the wallet every time it opens. */
+type NetworkTab = 'mainnet' | 'testnet';
+
+/** Remembers the last tab in this popup (per-viewer convenience; storage may be unavailable). */
+const TAB_KEY = 'sqw-home-network';
+function savedTab(): NetworkTab {
+  try {
+    return localStorage.getItem(TAB_KEY) === 'testnet' ? 'testnet' : 'mainnet';
+  } catch {
+    return 'mainnet';
+  }
+}
+
+/**
+ * Two worlds, one switch: Mainnet shows the client's account (balance, send, activity), Testnet
+ * shows only the test coins (Solana devnet, Base Sepolia). Reloads the wallet every time it opens.
+ */
 @customElement('sq-home-screen')
 export class HomeScreen extends Screen {
   @state() private wallet: WidgetState<AccountView> = loading;
+  @state() private tab: NetworkTab = savedTab();
+  @state() private testnet: WidgetState<readonly TestnetWallet[]> = idle;
+  @state() private receiving = false;
+  @state() private sending = false;
 
   static override styles = [
     screenStyles,
@@ -24,6 +46,49 @@ export class HomeScreen extends Screen {
         display: flex;
         justify-content: space-between;
         align-items: center;
+      }
+      .lock {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1px solid var(--sq-border);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--sq-text-muted);
+        font: 600 10px var(--sq-font);
+        cursor: pointer;
+      }
+      .lock:hover {
+        color: var(--sq-text);
+      }
+      .networks {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        padding: 3px;
+        border-radius: 999px;
+        background: var(--sq-surface-sunken);
+        border: 1px solid var(--sq-border);
+      }
+      .networks button {
+        border: 0;
+        padding: 7px 0;
+        border-radius: 999px;
+        background: none;
+        color: var(--sq-text-muted);
+        font: 600 11px var(--sq-font);
+        cursor: pointer;
+        transition: color var(--sq-duration) var(--sq-ease);
+      }
+      .networks button[aria-pressed='true'] {
+        color: var(--sq-accent-text);
+        background: var(--sq-brand-gradient);
+        box-shadow: 0 6px 16px rgba(255, 75, 31, 0.25);
+      }
+      .networks button:focus-visible {
+        outline: 2px solid var(--sq-focus);
+        outline-offset: 2px;
       }
       .quick {
         display: flex;
@@ -86,12 +151,31 @@ export class HomeScreen extends Screen {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+    if (this.tab === 'testnet') void this.#loadTestnet();
   }
 
   override render(): TemplateResult {
+    return html`
+      <div class="header">
+        <sq-brand compact></sq-brand>
+        <button type="button" class="lock" title="Verrouiller le wallet" @click=${this.#lock}>${icon('key', 16)} Verrouiller</button>
+      </div>
+      <div class="networks" role="group" aria-label="Réseau">
+        ${this.#tabButton('mainnet', 'Mainnet')} ${this.#tabButton('testnet', 'Testnet')}
+      </div>
+      ${this.tab === 'testnet' ? this.#renderTestnet() : this.#renderMainnet()}
+    `;
+  }
+
+  #tabButton(tab: NetworkTab, label: string): TemplateResult {
+    return html`<button type="button" aria-pressed=${this.tab === tab ? 'true' : 'false'} @click=${() => this.#select(tab)}>
+      ${label}
+    </button>`;
+  }
+
+  #renderMainnet(): TemplateResult {
     const isReady = this.wallet.kind === 'ready';
     return html`
-      <div class="header"><sq-brand compact></sq-brand></div>
       <sq-balance-card .state=${this.wallet} @retry=${this.#load}></sq-balance-card>
       <nav class="quick" aria-label="Actions">
         <button type="button" ?disabled=${!isReady} @click=${() => this.router.go('send', undefined)}>
@@ -108,14 +192,100 @@ export class HomeScreen extends Screen {
         <span class="section-title">Actifs</span>
         <sq-asset-list .state=${assetsState(this.wallet)}></sq-asset-list>
       </section>
-      ${isReady ? html`<sq-testnet-wallets></sq-testnet-wallets>` : ''}
     `;
   }
+
+  /** Same layout as Mainnet, plus "Recevoir": Envoyer and Recevoir open their panel under the buttons. */
+  #renderTestnet(): TemplateResult {
+    const wallets = this.testnet.kind === 'ready' ? this.testnet.data : null;
+    return html`
+      <sq-testnet-balance .state=${this.testnet}></sq-testnet-balance>
+      <nav class="quick" aria-label="Actions">
+        <button
+          type="button"
+          ?disabled=${wallets === null}
+          aria-expanded=${this.sending ? 'true' : 'false'}
+          @click=${() => {
+            this.sending = !this.sending;
+            this.receiving = false;
+          }}
+        >
+          <i>${icon('send')}</i>Envoyer
+        </button>
+        <button
+          type="button"
+          ?disabled=${wallets === null}
+          aria-expanded=${this.receiving ? 'true' : 'false'}
+          @click=${() => {
+            this.receiving = !this.receiving;
+            this.sending = false;
+          }}
+        >
+          <i>${icon('receive')}</i>Recevoir
+        </button>
+        <button type="button" @click=${() => this.router.go('activity', undefined)}>
+          <i>${icon('activity')}</i>Activité
+        </button>
+        <button type="button" @click=${() => this.router.go('settings', undefined)}>
+          <i>${icon('gear')}</i>Réglages
+        </button>
+      </nav>
+      ${this.sending && wallets
+        ? html`<sq-testnet-send .wallets=${wallets} @testnet-changed=${this.#loadTestnet}></sq-testnet-send>`
+        : ''}
+      ${this.receiving && wallets
+        ? html`<sq-testnet-receive .wallets=${wallets} @testnet-changed=${this.#loadTestnet}></sq-testnet-receive>`
+        : ''}
+      <section>
+        <span class="section-title">Actifs</span>
+        <sq-asset-list
+          .state=${testnetAssets(this.testnet)}
+          .notes=${this.testnet.kind === 'ready' ? this.testnet.data.map((w) => w.label) : []}
+        ></sq-asset-list>
+      </section>
+    `;
+  }
+
+  #select(tab: NetworkTab): void {
+    this.tab = tab;
+    if (tab === 'testnet') void this.#loadTestnet();
+    try {
+      localStorage.setItem(TAB_KEY, tab);
+    } catch {
+      // Storage unavailable: the choice just lasts for this popup.
+    }
+  }
+
+  readonly #lock = async (): Promise<void> => {
+    await this.bridge.lock();
+    this.router.go('onboarding', undefined);
+  };
 
   readonly #load = async (): Promise<void> => {
     this.wallet = loading;
     this.wallet = toWidgetState(await this.bridge.getWallet());
   };
+
+  /** Also makes the backend sync each test address, so new deposits land on the Ferra chain. */
+  readonly #loadTestnet = async (): Promise<void> => {
+    if (this.testnet.kind !== 'ready') this.testnet = loading;
+    this.testnet = toWidgetState(await this.bridge.getTestnetWallets());
+  };
+}
+
+/** Test coins as asset rows, so the Testnet tab reuses the Mainnet asset list as is. */
+function testnetAssets(testnet: WidgetState<readonly TestnetWallet[]>): WidgetState<readonly AssetBalance[]> {
+  switch (testnet.kind) {
+    case 'ready':
+      return {
+        kind: 'ready',
+        data: testnet.data.map((w) => ({ asset: null, symbol: w.symbol, decimals: w.decimals, amount: w.balance ?? '0' })),
+      };
+    case 'error':
+      return { kind: 'idle' };
+    default:
+      return testnet;
+  }
 }
 
 /** The asset list follows the wallet's state; its error is already shown on the balance card. */

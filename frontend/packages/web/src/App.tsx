@@ -3,6 +3,7 @@ import AuthFlow from "./components/AuthFlow"
 import CustomerDashboard from "./components/CustomerDashboard"
 import MarketingSite from "./components/MarketingSite"
 import ProfileSetup from "./components/ProfileSetup"
+import type { FerrataIdentity } from "./lib/ferrata"
 import type { JourneyStep, PersonaId, ScenarioId, Theme } from "./types"
 
 function getInitialTheme(): Theme {
@@ -18,6 +19,8 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [persona, setPersona] = useState<PersonaId>("active")
   const [scenario, setScenario] = useState<ScenarioId>("exposure")
+  /** Who signed in through the Ferrata extension (passkey verified by Swissquote). */
+  const [identity, setIdentity] = useState<FerrataIdentity | null>(null)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -44,6 +47,11 @@ export default function App() {
         step={step}
         onBack={() => setStep(step === "signin" ? "landing" : "signin")}
         onContinue={() => setStep(step === "signin" ? "passkey" : "profile")}
+        onSignedIn={(signedIn) => {
+          // The passkey step already happened in the Ferrata window.
+          setIdentity(signedIn)
+          setStep("profile")
+        }}
       />
     )
   }
@@ -69,7 +77,9 @@ export default function App() {
       onThemeChange={toggleTheme}
       onPersonaChange={setPersona}
       onScenarioChange={setScenario}
+      identity={identity}
       onRestart={() => {
+        setIdentity(null)
         setStep("landing")
         setScenario("exposure")
       }}

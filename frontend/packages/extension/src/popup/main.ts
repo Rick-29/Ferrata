@@ -5,6 +5,7 @@ import '@fontsource/inter/latin-700.css';
 import '@fontsource/space-grotesk/latin-500.css';
 import '@fontsource/space-grotesk/latin-600.css';
 import { APP_NAME } from '@sqw/brand';
+import '../passkey/host';
 import { html } from 'lit';
 import { AppShell } from '../ui/core/AppShell';
 import { Router } from '../ui/core/Router';

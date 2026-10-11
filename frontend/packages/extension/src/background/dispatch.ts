@@ -5,7 +5,7 @@ import { uiError, type UiError } from '../ui/core/errors';
 import { err } from '../ui/core/result';
 import { isValidSettings } from '../ui/core/settings';
 import type { BridgeRequest } from '../ui/services/bridge-protocol';
-import type { ConfirmOptions, SendDraft, UiBridge } from '../ui/services/UiBridge';
+import type { ConfirmOptions, SendDraft, TestnetSendDraft, UiBridge } from '../ui/services/UiBridge';
 
 // Messages cross a process boundary: every argument is checked before it reaches the bridge.
 
@@ -42,6 +42,12 @@ function isWalletSettings(v: unknown): v is WalletSettings {
   );
 }
 
+const TESTNET_NETWORKS: ReadonlySet<unknown> = new Set(['solana-devnet', 'base-sepolia', 'eth-sepolia']);
+
+function isTestnetSendDraft(v: unknown): v is TestnetSendDraft {
+  return isRecord(v) && TESTNET_NETWORKS.has(v.network) && isString(v.to) && isString(v.amount);
+}
+
 /** Shape first (untrusted message), then the same bounds the bridge enforces before signing. */
 const isAcceptableSettings = (v: unknown): v is WalletSettings => isWalletSettings(v) && isValidSettings(v);
 
@@ -55,6 +61,10 @@ export function dispatch(bridge: UiBridge, request: BridgeRequest): Promise<Resu
       return bridge.createWallet();
     case 'getWallet':
       return bridge.getWallet();
+    case 'hasPasskey':
+      return bridge.hasPasskey();
+    case 'lock':
+      return bridge.lock();
     case 'previewSend':
       return isSendDraft(a) ? bridge.previewSend(a) : rejected();
     case 'confirmSend':
@@ -71,6 +81,8 @@ export function dispatch(bridge: UiBridge, request: BridgeRequest): Promise<Resu
       return bridge.getTestnetWallets();
     case 'requestAirdrop':
       return a === 'solana-devnet' ? bridge.requestAirdrop(a) : rejected();
+    case 'sendTestnet':
+      return isTestnetSendDraft(a) ? bridge.sendTestnet(a) : rejected();
   }
 }
 

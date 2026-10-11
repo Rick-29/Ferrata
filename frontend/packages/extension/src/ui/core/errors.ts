@@ -18,6 +18,9 @@ const MESSAGES: Readonly<Record<string, string>> = {
   CORE_BAD_RECEIPT: 'Reçu Swissquote invalide.',
   PASSKEY_CANCELLED: 'Signature annulée.',
   PASSKEY_UNSUPPORTED: 'Ce navigateur ne prend pas en charge les passkeys.',
+  PASSKEY_UNAVAILABLE: 'Passkey introuvable sur cet appareil, ou fenêtre du wallet fermée. Rouvrez le wallet et réessayez.',
+  UI_LOCKED: 'Wallet verrouillé : confirmez avec votre passkey pour continuer.',
+  PASSKEY_FAILED: 'La passkey n’a pas pu signer. Réessayez.',
   CHAIN_UNAVAILABLE: 'Réseau indisponible.',
   UI_INVALID_ADDRESS: 'Adresse invalide.',
   UI_INVALID_AMOUNT: 'Montant invalide.',
@@ -34,6 +37,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
     'Le faucet public de Solana devnet refuse pour le moment (limite atteinte). Réessayez plus tard ou utilisez faucet.solana.com.',
   TESTNET_UNAVAILABLE: 'Le réseau de test ne répond pas. Réessayez dans un instant.',
   TESTNET_RPC_ERROR: 'Le réseau de test a refusé la demande.',
+  TESTNET_SEND_FAILED: 'Le réseau de test a refusé la transaction (solde insuffisant, ou montant trop faible pour un nouveau compte).',
+  TESTNET_NO_FAUCET_API: "Ce réseau n'a pas de faucet automatique : utilisez le bouton « Ouvrir le faucet ».",
 };
 
 const FALLBACK = 'Une erreur inattendue est survenue.';

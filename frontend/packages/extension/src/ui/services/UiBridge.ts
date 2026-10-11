@@ -58,7 +58,7 @@ export type SendOutcome =
   | { readonly kind: 'refused'; readonly reason: 'regulatory' };
 
 /** Public test networks the wallet holds an address on (testnet_plan M3, M8). */
-export type TestnetNetwork = 'solana-devnet';
+export type TestnetNetwork = 'solana-devnet' | 'base-sepolia' | 'eth-sepolia';
 
 /** The wallet's address on a test network. Created by the background on first use, key never exposed. */
 export interface TestnetWallet {
@@ -70,6 +70,10 @@ export interface TestnetWallet {
   /** Base units as a decimal string; null when the network could not be read. */
   readonly balance: string | null;
   readonly explorerUrl: string;
+  /** True when `requestAirdrop` can fund this address from inside the wallet (public faucet API). */
+  readonly inWalletAirdrop: boolean;
+  /** Web faucet to open when there is no in-wallet airdrop, or when the faucet API refuses. */
+  readonly faucetUrl: string;
 }
 
 export interface AirdropOutcome {
@@ -82,6 +86,24 @@ export interface AirdropOutcome {
   readonly recordedOnFerra: number;
 }
 
+/** A transfer of test coins typed on the Testnet tab. `amount` is decimal (e.g. "0.05"). */
+export interface TestnetSendDraft {
+  readonly network: TestnetNetwork;
+  readonly to: string;
+  readonly amount: string;
+}
+
+export interface TestnetSendOutcome {
+  readonly network: TestnetNetwork;
+  /** Transaction hash (EVM) or signature (Solana). */
+  readonly txId: string;
+  /** Base units as a decimal string. */
+  readonly amount: string;
+  readonly explorerUrl: string;
+  /** Events the Ferra chain recorded from that network right after the send (0 if the sync failed). */
+  readonly recordedOnFerra: number;
+}
+
 /**
  * The only door from the UI to the rest of the system (Frontend Spec: P2 never calls the chain,
  * Rust or Swissquote directly). FakeBridge implements it for now; the real one wraps
@@ -91,6 +113,10 @@ export interface UiBridge {
   login(credentials: LoginRequest): Promise<Result<SessionView, UiError>>;
   createWallet(): Promise<Result<AccountView, UiError>>;
   getWallet(): Promise<Result<AccountView, UiError>>;
+  /** After login: true when this device already holds the client's passkey (unlock), false to create one. */
+  hasPasskey(): Promise<Result<boolean, UiError>>;
+  /** Locks the wallet now. It also locks itself after 15 minutes of inactivity (UI_LOCKED). */
+  lock(): Promise<Result<void, UiError>>;
   previewSend(draft: SendDraft): Promise<Result<SendPreview, UiError>>;
   /**
    * `stepUp: true` once the user re-confirmed with their passkey after `confirmation_required`;
@@ -111,4 +137,6 @@ export interface UiBridge {
   getTestnetWallets(): Promise<Result<readonly TestnetWallet[], UiError>>;
   /** Asks that network's public faucet for test coins, then records the transfer on the Ferra chain. */
   requestAirdrop(network: TestnetNetwork): Promise<Result<AirdropOutcome, UiError>>;
+  /** Sends test coins: the passkey approves this exact transfer, then the network key signs and broadcasts. */
+  sendTestnet(draft: TestnetSendDraft): Promise<Result<TestnetSendOutcome, UiError>>;
 }

@@ -31,6 +31,9 @@ export class AmountInput extends LitElement {
       }
       input {
         flex: 1;
+        /* An input's intrinsic width is 20 characters of its font (~450px at 35px): let it shrink. */
+        min-width: 0;
+        width: 100%;
         height: auto;
         padding: 0;
         border: 0;

@@ -17,6 +17,8 @@ const METHODS: ReadonlySet<string> = new Set<BridgeMethod>([
   'login',
   'createWallet',
   'getWallet',
+  'hasPasskey',
+  'lock',
   'previewSend',
   'confirmSend',
   'cancelSend',
@@ -25,6 +27,7 @@ const METHODS: ReadonlySet<string> = new Set<BridgeMethod>([
   'saveSettings',
   'getTestnetWallets',
   'requestAirdrop',
+  'sendTestnet',
 ]);
 
 export function isBridgeRequest(message: unknown): message is BridgeRequest {

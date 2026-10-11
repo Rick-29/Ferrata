@@ -1,0 +1,14 @@
+{
+  "name": "@sqw/faucet-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local relay to the Coinbase CDP testnet faucet. Holds the CDP API key server-side; the extension never sees it.",
+  "scripts": {
+    "start": "node --env-file=.env src/server.ts",
+    "test": "node --test src/"
+  },
+  "dependencies": {
+    "@coinbase/cdp-sdk": "^1.58.0"
+  }
+}

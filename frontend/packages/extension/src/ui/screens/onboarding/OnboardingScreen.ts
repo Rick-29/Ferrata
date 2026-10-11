@@ -16,7 +16,8 @@ import '../../widgets/step-progress/StepProgress';
 
 const STEPS = ['Connexion', 'Passkey', 'Prêt'] as const;
 
-type Step = 'login' | 'passkey';
+/** `passkey`: first time on this device, create one. `unlock`: the device has it, confirm it. */
+type Step = 'login' | 'passkey' | 'unlock';
 
 /** Create wallet: Swissquote login, then a passkey that becomes the account owner. */
 @customElement('sq-onboarding-screen')
@@ -92,6 +93,17 @@ export class OnboardingScreen extends Screen {
     `,
   ];
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    void this.#resume();
+  }
+
+  /** Session still valid (wallet locked, popup reopened): skip the login form, ask for the passkey. */
+  readonly #resume = async (): Promise<void> => {
+    const known = await this.bridge.hasPasskey();
+    if (known.ok && this.step === 'login') this.step = known.value ? 'unlock' : 'passkey';
+  };
+
   override render(): TemplateResult {
     return html`
       ${this.step === 'login'
@@ -103,17 +115,34 @@ export class OnboardingScreen extends Screen {
           </header>`
         : html`<div class="hero">
             <div class="orb" aria-hidden="true">${icon('fingerprint', 54)}<span class="mini-key">${icon('key', 16)}</span></div>
-            <h1>Créer votre passkey</h1>
-            <p class="muted">
-              Votre passkey est la clé de votre wallet. Elle reste sur cet appareil et Swissquote n'y a jamais accès.
-            </p>
+            ${this.step === 'unlock'
+              ? html`<h1>Déverrouiller votre wallet</h1>
+                  <p class="muted">Confirmez avec la passkey de cet appareil : empreinte, visage ou code.</p>`
+              : html`<h1>Créer votre passkey</h1>
+                  <p class="muted">
+                    Votre passkey est la clé de votre wallet. Elle reste sur cet appareil et Swissquote n'y a jamais
+                    accès.
+                  </p>`}
           </div>`}
       ${this.step === 'login'
         ? html`<sq-login-form
             .state=${ready({ busy: this.busy, error: this.error })}
             @login-submitted=${this.#login}
           ></sq-login-form>`
-        : html`<sq-consent-checkbox
+        : this.step === 'unlock'
+          ? html`<sq-passkey-prompt
+              .state=${ready({
+                title: 'Passkey de cet appareil',
+                description: 'Elle prouve que c’est bien vous, sans mot de passe.',
+                actionLabel: 'Utiliser ma passkey',
+                busy: this.busy,
+                disabled: false,
+                error: this.error,
+              })}
+              @passkey-requested=${this.#createWallet}
+              @retry=${this.#createWallet}
+            ></sq-passkey-prompt>`
+          : html`<sq-consent-checkbox
               label="J'accepte les conditions d'utilisation et je comprends que l'analyse de risque de Swissquote est indicative."
               .checked=${this.consented}
               ?disabled=${this.busy}
@@ -141,13 +170,15 @@ export class OnboardingScreen extends Screen {
     await this.#run(async () => {
       const result = await this.bridge.login(credentials);
       if (!result.ok) return result.error;
-      this.step = 'passkey';
+      const known = await this.bridge.hasPasskey();
+      this.step = known.ok && known.value ? 'unlock' : 'passkey';
       return null;
     });
   };
 
+  /** Creates the passkey and wallet, or, when the device already has the passkey, unlocks with it. */
   readonly #createWallet = async (): Promise<void> => {
-    if (!this.consented) return;
+    if (this.step === 'passkey' && !this.consented) return;
     await this.#run(async () => {
       const result = await this.bridge.createWallet();
       if (!result.ok) return result.error;

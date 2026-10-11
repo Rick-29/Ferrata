@@ -49,6 +49,21 @@ export class SolanaDevnet {
     return typeof result.value === 'string' ? ok(result.value) : rpcError('unexpected requestAirdrop result');
   }
 
+  /** A recent blockhash: every Solana transaction must reference one (expires after ~1 minute). */
+  async latestBlockhash(): Promise<DevnetResult<string>> {
+    const result = await this.#call('getLatestBlockhash', [{ commitment: 'confirmed' }]);
+    if (!result.ok) return result;
+    const value = isRecord(result.value) && isRecord(result.value.value) ? result.value.value.blockhash : undefined;
+    return typeof value === 'string' ? ok(value) : rpcError('unexpected getLatestBlockhash result');
+  }
+
+  /** Broadcasts a signed transaction (base64); returns its signature. */
+  async sendTransaction(base64: string): Promise<DevnetResult<string>> {
+    const result = await this.#call('sendTransaction', [base64, { encoding: 'base64', preflightCommitment: 'confirmed' }]);
+    if (!result.ok) return result;
+    return typeof result.value === 'string' ? ok(result.value) : rpcError('unexpected sendTransaction result');
+  }
+
   /** Polls until the signature is confirmed (or fails), up to `attempts` × `intervalMs`. */
   async waitForConfirmation(signature: string, attempts = 30, intervalMs = 1_000): Promise<DevnetResult<'confirmed'>> {
     for (let i = 0; i < attempts; i++) {

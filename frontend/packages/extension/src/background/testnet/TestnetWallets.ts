@@ -4,16 +4,22 @@ import type { Result, SdkError } from '@sqw/sdk';
 import { uiError, type UiError } from '../../ui/core/errors';
 import { err, ok } from '../../ui/core/result';
 import type { AirdropOutcome, TestnetNetwork, TestnetWallet } from '../../ui/services/UiBridge';
+import type { NetworkKeyring } from '../dapp/NetworkKeyring';
 import { LAMPORTS_PER_SOL, type DevnetError, type SolanaDevnet } from './SolanaDevnet';
 import type { SolanaKeyring } from './SolanaKeyring';
 
 // The wallet's addresses on public test networks and their faucets (testnet_plan M3, M8).
-// After an airdrop lands, the backend is asked to pull that network's history so the Ferra chain
-// records the inbound transfer as a Swissquote-attested `external` event.
+// Opening the list asks the backend to pull each address's history, so coins from any source
+// (in-wallet airdrop, a web faucet, another wallet) land on the Ferra chain as Swissquote-attested
+// `external` events.
 
 export interface TestnetWalletsDeps {
   readonly solana: SolanaKeyring;
   readonly devnet: SolanaDevnet;
+  /** The Base Sepolia key shared with the dApp provider: one EVM address for dApps and faucets. */
+  readonly evm: NetworkKeyring;
+  /** Balance in wei (decimal string) on an EVM test network, or null when its node cannot be read. */
+  readonly evmBalance: (network: EvmTestnet, address: string) => Promise<string | null>;
   /** `POST /chain/sync` (SDK). */
   readonly sync: (request: SyncRequest) => Promise<Result<SyncResponse, SdkError>>;
 }
@@ -21,9 +27,18 @@ export interface TestnetWalletsDeps {
 /** What one faucet request asks for. The public devnet faucet grants at most a few SOL a day. */
 export const SOLANA_AIRDROP_LAMPORTS = LAMPORTS_PER_SOL;
 
-const NETWORK: TestnetNetwork = 'solana-devnet';
-const explorerAddress = (address: string): string => `https://explorer.solana.com/address/${address}?cluster=devnet`;
-const explorerTx = (signature: string): string => `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
+/** EVM test networks: one key, one address on all of them. */
+export type EvmTestnet = 'base-sepolia' | 'eth-sepolia';
+
+const SOLANA: TestnetNetwork = 'solana-devnet';
+const BASE: TestnetNetwork = 'base-sepolia';
+const SEPOLIA: TestnetNetwork = 'eth-sepolia';
+const solanaAddressUrl = (address: string): string => `https://explorer.solana.com/address/${address}?cluster=devnet`;
+const solanaTxUrl = (signature: string): string => `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
+/** Base Sepolia has no public faucet API (all need a login, captcha or API key): the web faucet it is. */
+const BASE_FAUCET_URL = 'https://portal.cdp.coinbase.com/products/faucet';
+/** Proof-of-work faucet: no account and no mainnet balance needed (checked 2026-10-10). */
+const SEPOLIA_FAUCET_URL = 'https://sepolia-faucet.pk910.de/';
 
 export class TestnetWallets {
   readonly #deps: TestnetWalletsDeps;
@@ -32,36 +47,63 @@ export class TestnetWallets {
     this.#deps = deps;
   }
 
-  /**
-   * Creates the devnet address on first use; the balance is null when devnet cannot be read.
-   * Also asks the backend to pull that address's history, so coins sent from elsewhere (the web
-   * faucet at faucet.solana.com, another wallet) land on the Ferra chain too. Not awaited.
-   */
+  /** Creates the addresses on first use; a balance is null when its network cannot be read. */
   async list(ferraWallet: string): Promise<Result<readonly TestnetWallet[], UiError>> {
-    const address = await this.#deps.solana.ensure();
-    void this.#deps
-      .sync({ wallet: ferraWallet, network: NETWORK, address_raw: address, limit: null, cursor: null })
-      .catch(() => undefined);
-    const balance = await this.#deps.devnet.balance(address);
+    const { solana, devnet, evm, evmBalance } = this.#deps;
+    const [solAddress, evmAddress] = await Promise.all([solana.ensure(), evm.ensure()]);
+    this.#syncInBackground(ferraWallet, SOLANA, solAddress);
+    this.#syncInBackground(ferraWallet, BASE, evmAddress);
+    this.#syncInBackground(ferraWallet, SEPOLIA, evmAddress);
+
+    const [solBalance, baseBalance, sepoliaBalance] = await Promise.all([
+      devnet.balance(solAddress),
+      evmBalance('base-sepolia', evmAddress),
+      evmBalance('eth-sepolia', evmAddress),
+    ]);
     return ok([
       {
-        network: NETWORK,
+        network: SOLANA,
         label: 'Solana devnet',
-        address,
+        address: solAddress,
         symbol: 'SOL',
         decimals: 9,
-        balance: balance.ok ? balance.value : null,
-        explorerUrl: explorerAddress(address),
+        balance: solBalance.ok ? solBalance.value : null,
+        explorerUrl: solanaAddressUrl(solAddress),
+        inWalletAirdrop: true,
+        faucetUrl: 'https://faucet.solana.com',
+      },
+      {
+        network: BASE,
+        label: 'Base Sepolia',
+        address: evmAddress,
+        symbol: 'ETH',
+        decimals: 18,
+        balance: baseBalance,
+        explorerUrl: `https://sepolia.basescan.org/address/${evmAddress}`,
+        inWalletAirdrop: false,
+        faucetUrl: BASE_FAUCET_URL,
+      },
+      {
+        network: SEPOLIA,
+        label: 'Ethereum Sepolia',
+        address: evmAddress,
+        symbol: 'ETH',
+        decimals: 18,
+        balance: sepoliaBalance,
+        explorerUrl: `https://sepolia.etherscan.io/address/${evmAddress}`,
+        inWalletAirdrop: false,
+        faucetUrl: SEPOLIA_FAUCET_URL,
       },
     ]);
   }
 
   /**
-   * Faucet → wait for confirmation → record on the Ferra chain. A failed sync does not fail the
-   * airdrop (the SOL arrived); the backend sync loop or a later sync records it.
+   * Faucet → wait for confirmation → record on the Ferra chain. Solana devnet only: Base Sepolia
+   * is funded from the web faucet (`faucetUrl`). A failed sync does not fail the airdrop (the SOL
+   * arrived); the next `list` records it.
    */
   async airdrop(network: TestnetNetwork, ferraWallet: string): Promise<Result<AirdropOutcome, UiError>> {
-    if (network !== NETWORK) return err(uiError('UI_BAD_REQUEST'));
+    if (network !== SOLANA) return err(uiError('TESTNET_NO_FAUCET_API'));
     const { solana, devnet, sync } = this.#deps;
     const address = await solana.ensure();
 
@@ -77,9 +119,13 @@ export class TestnetWallets {
       network,
       signature: requested.value,
       amount: SOLANA_AIRDROP_LAMPORTS.toString(),
-      explorerUrl: explorerTx(requested.value),
+      explorerUrl: solanaTxUrl(requested.value),
       recordedOnFerra: synced.ok ? synced.value.recorded : 0,
     });
+  }
+
+  #syncInBackground(wallet: string, network: TestnetNetwork, addressRaw: string): void {
+    void this.#deps.sync({ wallet, network, address_raw: addressRaw, limit: null, cursor: null }).catch(() => undefined);
   }
 }
 

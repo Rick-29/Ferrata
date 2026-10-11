@@ -19,10 +19,14 @@ import type {
   SendPreview,
   SessionView,
   TestnetNetwork,
+  TestnetSendDraft,
+  TestnetSendOutcome,
   TestnetWallet,
   UiBridge,
 } from '../ui/services/UiBridge';
+import type { TestnetSender } from './testnet/TestnetSender';
 import type { TestnetWallets } from './testnet/TestnetWallets';
+import { verifyOwner } from './verifyOwner';
 import { toUiError } from './bridge-errors';
 import {
   EMPTY_STATE,
@@ -59,7 +63,26 @@ export interface SwissquoteBridgeDeps {
   readonly passkeyNameFor?: (clientId: string) => string;
   /** Test-network addresses and faucets (P3). Absent: those calls answer "unavailable". */
   readonly testnet?: TestnetWallets;
+  /** Sends from the test-network keys, each one approved by the passkey (P3). */
+  readonly testnetSender?: TestnetSender;
+  /** Clock and auto-lock delay, injectable for tests. Default: Date.now, 15 minutes of inactivity. */
+  readonly now?: () => number;
+  readonly lockAfterMs?: number;
 }
+
+/** What the website learns at sign-in: never the session token. */
+export interface SignedInIdentity {
+  readonly address: string;
+  readonly clientId: string;
+  readonly displayName: string;
+}
+
+/**
+ * Authentication model (banking apps' norm): the passkey to enter, then auto-lock after 15 minutes
+ * of inactivity; and the passkey again for every transaction, since it is what signs it.
+ */
+export const LOCK_AFTER_MS = 15 * 60_000;
+const LOCKED = uiError('UI_LOCKED');
 
 const defaultPasskeyName = (clientId: string): string => `passkey-${clientId}`;
 
@@ -98,42 +121,91 @@ export class SwissquoteBridge implements UiBridge {
   }
 
   getWallet(): UiResult<AccountView> {
-    return this.#serial(() => this.#getWallet());
+    return this.#whenUnlocked(() => this.#getWallet());
+  }
+
+  /**
+   * Who signed in, provided the passkey proved it at or after `since` (epoch ms). Lets the website
+   * sign-in (sqw_signIn) accept only a proof made for that request, never an older unlock.
+   */
+  async identitySince(since: number): Promise<SignedInIdentity | null> {
+    const state = await this.#serial(() => this.#load());
+    if (!state.session || !state.wallet || (state.provenAt ?? -1) < since) return null;
+    return { address: state.wallet.address, clientId: state.session.client_id, displayName: state.session.display_name };
+  }
+
+  /** Locks now: every wallet call is refused until the passkey unlocks it again (createWallet). */
+  lock(): UiResult<void> {
+    return this.#serial(async () => {
+      await this.#patch((s) => withoutUnlock(s));
+      return ok(undefined);
+    });
+  }
+
+  /** Whether this device already holds the client's passkey: sign-in then unlocks instead of creating. */
+  async hasPasskey(): UiResult<boolean> {
+    const { session } = await this.#serial(() => this.#load());
+    if (!session) return err(UNAUTHORIZED);
+    return ok(await this.#deps.passkey.has((this.#deps.passkeyNameFor ?? defaultPasskeyName)(session.client_id)));
   }
 
   previewSend(draft: SendDraft): UiResult<SendPreview> {
-    return this.#serial(() => this.#previewSend(draft));
+    return this.#whenUnlocked(() => this.#previewSend(draft));
   }
 
   confirmSend(previewId: string, options: ConfirmOptions): UiResult<SendOutcome> {
-    return this.#serial(() => this.#confirmSend(previewId, options));
+    return this.#whenUnlocked(() => this.#confirmSend(previewId, options));
   }
 
   cancelSend(previewId: string): UiResult<void> {
-    return this.#serial(() => this.#cancelSend(previewId));
+    return this.#whenUnlocked(() => this.#cancelSend(previewId));
   }
 
   getActivity(): UiResult<ActivityFeed> {
-    return this.#serial(() => this.#getActivity());
+    return this.#whenUnlocked(() => this.#getActivity());
   }
 
   getSettings(): UiResult<WalletSettings> {
-    return this.#serial(() => this.#getSettings());
+    return this.#whenUnlocked(() => this.#getSettings());
   }
 
   saveSettings(settings: WalletSettings): UiResult<WalletSettings> {
-    return this.#serial(() => this.#saveSettings(settings));
+    return this.#whenUnlocked(() => this.#saveSettings(settings));
   }
 
   async getTestnetWallets(): UiResult<readonly TestnetWallet[]> {
+    const gate = await this.#whenUnlocked(async () => ok(undefined));
+    if (!gate.ok) return gate;
     const { session, wallet } = await this.#serial(() => this.#load());
     if (!session) return err(UNAUTHORIZED);
     if (!wallet) return err(NO_WALLET);
     return this.#deps.testnet ? this.#deps.testnet.list(wallet.address) : err(TESTNET_OFF);
   }
 
+  /**
+   * Not serialised (signing and confirmation take seconds). The passkey signs a hash bound to this
+   * transfer and the signature is verified here against the wallet's owner key before anything is
+   * signed with the network key: an extension page cannot approve on the user's behalf.
+   */
+  async sendTestnet(draft: TestnetSendDraft): UiResult<TestnetSendOutcome> {
+    const gate = await this.#whenUnlocked(async () => ok(undefined));
+    if (!gate.ok) return gate;
+    const { session, wallet } = await this.#serial(() => this.#load());
+    if (!session) return err(UNAUTHORIZED);
+    if (!wallet) return err(NO_WALLET);
+    const sender = this.#deps.testnetSender;
+    if (!sender) return err(TESTNET_OFF);
+    return sender.send(draft, wallet.address, async (hash) => {
+      const signed = await this.#deps.passkey.sign(wallet.passkeyName, hash);
+      if (!signed.ok) return this.#fail(signed.error);
+      return verifyOwner(wallet.owner, hash, signed.value) ? ok(undefined) : err(uiError('PASSKEY_FAILED'));
+    });
+  }
+
   /** Not serialised: the faucet can take tens of seconds and touches no bridge state. */
   async requestAirdrop(network: TestnetNetwork): UiResult<AirdropOutcome> {
+    const gate = await this.#whenUnlocked(async () => ok(undefined));
+    if (!gate.ok) return gate;
     const { session, wallet } = await this.#serial(() => this.#load());
     if (!session) return err(UNAUTHORIZED);
     if (!wallet) return err(NO_WALLET);
@@ -160,15 +232,11 @@ export class SwissquoteBridge implements UiBridge {
     const info = await api.chainInfo();
     if (!info.ok) return this.#fail(info.error);
 
-    // Same passkey, same account: if it is already registered, pick it up instead of registering again.
-    const existing = await api.overview(owner.value);
-    if (!existing.ok) return this.#fail(existing.error);
-    let account = existing.value.accounts[0];
-    if (!account) {
-      const registered = await this.#register(passkeyName, owner.value);
-      if (!registered.ok) return registered;
-      account = registered.value;
-    }
+    // Every sign-in proves possession: the passkey signs a fresh challenge and the backend verifies
+    // it (registering is idempotent for an existing account). A known passkey is never reused silently.
+    const registered = await this.#register(passkeyName, owner.value);
+    if (!registered.ok) return registered;
+    const account = registered.value;
 
     const wallet: WalletRef = {
       passkeyName,
@@ -177,7 +245,8 @@ export class SwissquoteBridge implements UiBridge {
       chainId: info.value.chain_id,
       tokens: info.value.tokens,
     };
-    await this.#patch((s) => ({ ...s, wallet }));
+    // The passkey just proved it is the owner: unlocked until the auto-lock.
+    await this.#patch((s) => ({ ...s, wallet, unlockedUntil: this.#now() + this.#lockAfter(), provenAt: this.#now() }));
     if (account.balances.every((b) => BigInt(b.amount) === 0n)) {
       const funded = await this.#fundForDemo(wallet);
       if (!funded.ok) return funded;
@@ -373,6 +442,33 @@ export class SwissquoteBridge implements UiBridge {
     return ok(undefined);
   }
 
+  /**
+   * Wallet calls run only while unlocked; each one pushes the auto-lock back. With a wallet but
+   * past `unlockedUntil`, the call is refused with UI_LOCKED and the UI asks for the passkey.
+   * No session or no wallet: the call runs and answers its usual UNAUTHORIZED / NOT_FOUND.
+   */
+  #whenUnlocked<T>(task: () => UiResult<T>): UiResult<T> {
+    return this.#serial(async () => {
+      const state = await this.#load();
+      if (state.session && state.wallet) {
+        if ((state.unlockedUntil ?? 0) <= this.#now()) {
+          if (state.unlockedUntil !== undefined) await this.#update(withoutUnlock(state));
+          return err(LOCKED);
+        }
+        await this.#update({ ...state, unlockedUntil: this.#now() + this.#lockAfter() });
+      }
+      return task();
+    });
+  }
+
+  #now(): number {
+    return (this.#deps.now ?? Date.now)();
+  }
+
+  #lockAfter(): number {
+    return this.#deps.lockAfterMs ?? LOCK_AFTER_MS;
+  }
+
   /** Runs `task` after every earlier call has finished, whatever their outcome. */
   #serial<T>(task: () => Promise<T>): Promise<T> {
     const run = this.#queue.then(task, task);
@@ -437,4 +533,10 @@ const sameAddress = (a: string, b: string): boolean => a.toLowerCase() === b.toL
 
 function without<T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> {
   return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
+}
+
+/** The same state, locked. */
+function withoutUnlock(state: BridgeState): BridgeState {
+  const { unlockedUntil: _locked, ...rest } = state;
+  return rest;
 }

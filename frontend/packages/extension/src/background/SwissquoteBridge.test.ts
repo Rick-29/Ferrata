@@ -161,9 +161,10 @@ describe('SwissquoteBridge', () => {
   });
 
   it('an expired token does log out', async () => {
+    // createWallet no longer reads the overview (every sign-in proves the passkey via register),
+    // so the first overview call is getWallet's.
     const overview = vi
       .fn<SwissquoteApi['overview']>()
-      .mockResolvedValueOnce(ok({ owner: OWNER, accounts: [account] }))
       .mockResolvedValueOnce(err(sdkError('UNAUTHORIZED', 'swissquote', 'expired', 401)));
     const bridge = await readyBridge(scriptedApi({ overview }));
 
@@ -202,5 +203,129 @@ describe('SwissquoteBridge', () => {
     });
     expect(!result.ok && result.error.code).toBe('UI_INVALID_SETTINGS');
     expect(api.settingsHash).not.toHaveBeenCalled();
+  });
+});
+
+describe('SwissquoteBridge: authentication before every transaction', () => {
+  it('asks the passkey to sign each send, never reusing an earlier signature', async () => {
+    const api = scriptedApi();
+    const signer = new DevPasskeySigner(api);
+    const sign = vi.spyOn(signer, 'sign');
+    const bridge = new SwissquoteBridge({
+      api,
+      passkey: signer,
+      store: new MemoryStore(),
+      auditLog: new LocalAuditLog(new MemoryStore()),
+      onSession: () => undefined,
+    });
+    await bridge.login({ username: 'alice', password: 'demo' });
+    await bridge.createWallet();
+
+    for (let i = 1; i <= 2; i++) {
+      const before = sign.mock.calls.length;
+      const preview = await bridge.previewSend(draft);
+      if (!preview.ok) throw new Error('preview');
+      expect(sign.mock.calls.length).toBe(before); // previewing signs nothing
+      expect((await bridge.confirmSend(preview.value.id, NO_STEP_UP)).ok).toBe(true);
+      expect(sign.mock.calls.length).toBe(before + 1); // the send itself needs the passkey
+    }
+  });
+});
+
+describe('SwissquoteBridge: authentication to enter (auto-lock)', () => {
+  const LOCK_AFTER = 60_000;
+
+  async function lockableBridge(api: SwissquoteApi = scriptedApi()) {
+    let now = 1_000_000;
+    const signer = new DevPasskeySigner(api);
+    const sign = vi.spyOn(signer, 'sign');
+    const bridge = new SwissquoteBridge({
+      api,
+      passkey: signer,
+      store: new MemoryStore(),
+      auditLog: new LocalAuditLog(new MemoryStore()),
+      onSession: () => undefined,
+      now: () => now,
+      lockAfterMs: LOCK_AFTER,
+    });
+    await bridge.login({ username: 'alice', password: 'demo' });
+    await bridge.createWallet();
+    return { bridge, sign, advance: (ms: number) => (now += ms) };
+  }
+
+  it('defaults to 15 minutes of inactivity', async () => {
+    const { LOCK_AFTER_MS } = await import('./SwissquoteBridge');
+    expect(LOCK_AFTER_MS).toBe(15 * 60_000);
+  });
+
+  it('stays unlocked while used, each call pushing the lock back', async () => {
+    const { bridge, advance } = await lockableBridge();
+    advance(LOCK_AFTER - 1);
+    expect((await bridge.getWallet()).ok).toBe(true);
+    advance(LOCK_AFTER - 1);
+    expect((await bridge.getWallet()).ok).toBe(true);
+  });
+
+  it('locks after inactivity and refuses every wallet call', async () => {
+    const { bridge, advance } = await lockableBridge();
+    advance(LOCK_AFTER);
+    const locked = { ok: false, error: { code: 'UI_LOCKED', retryable: false } };
+    expect(await bridge.getWallet()).toEqual(locked);
+    expect(await bridge.previewSend(draft)).toEqual(locked);
+    expect(await bridge.getActivity()).toEqual(locked);
+    expect(await bridge.getSettings()).toEqual(locked);
+    expect(await bridge.getTestnetWallets()).toEqual(locked);
+  });
+
+  it('unlocks again only through the passkey (a fresh, server-verified proof)', async () => {
+    const { bridge, sign, advance } = await lockableBridge();
+    advance(LOCK_AFTER);
+    expect((await bridge.getWallet()).ok).toBe(false);
+    const before = sign.mock.calls.length;
+    expect((await bridge.createWallet()).ok).toBe(true);
+    expect(sign.mock.calls.length).toBe(before + 1);
+    expect((await bridge.getWallet()).ok).toBe(true);
+  });
+
+  it('locks on demand, and a new login starts locked', async () => {
+    const { bridge } = await lockableBridge();
+    expect((await bridge.lock()).ok).toBe(true);
+    expect((await bridge.getWallet()).ok).toBe(false);
+
+    await bridge.createWallet();
+    await bridge.login({ username: 'alice', password: 'demo' });
+    const afterLogin = await bridge.getWallet();
+    expect(!afterLogin.ok && afterLogin.error.code).toBe('UI_LOCKED');
+  });
+
+  it('still answers whether the device holds a passkey while locked (to show the unlock screen)', async () => {
+    const { bridge } = await lockableBridge();
+    await bridge.lock();
+    expect((await bridge.hasPasskey()).ok).toBe(true);
+  });
+});
+
+describe('SwissquoteBridge.identitySince (website sign-in)', () => {
+  it('gives the identity only for a passkey proof made at or after the request', async () => {
+    let now = 5_000;
+    const api = scriptedApi();
+    const bridge = new SwissquoteBridge({
+      api,
+      passkey: new DevPasskeySigner(api),
+      store: new MemoryStore(),
+      auditLog: new LocalAuditLog(new MemoryStore()),
+      onSession: () => undefined,
+      now: () => now,
+    });
+    await bridge.login({ username: 'alice', password: 'demo' });
+    expect(await bridge.identitySince(0)).toBeNull(); // logged in, but no passkey proof yet
+
+    await bridge.createWallet(); // proof at t=5000
+    expect(await bridge.identitySince(5_000)).toEqual({ address: ADDRESS, clientId: 'SQ-100001', displayName: 'Alice' });
+    expect(await bridge.identitySince(5_001)).toBeNull(); // older than the request
+
+    now = 9_000;
+    await bridge.createWallet();
+    expect((await bridge.identitySince(8_000))?.clientId).toBe('SQ-100001');
   });
 });
