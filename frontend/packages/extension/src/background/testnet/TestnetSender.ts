@@ -7,6 +7,7 @@ import { toBaseUnits } from '../../ui/core/format';
 import { err, ok } from '../../ui/core/result';
 import type { TestnetSendDraft, TestnetSendOutcome } from '../../ui/services/UiBridge';
 import type { NetworkKeyring } from '../dapp/NetworkKeyring';
+import type { GaslessUsdc } from './GaslessUsdc';
 import type { SolanaDevnet } from './SolanaDevnet';
 import type { SolanaKeyring } from './SolanaKeyring';
 import { isSolanaAddress, signedTransaction, transferMessage } from './solanaTx';
@@ -27,22 +28,26 @@ export interface TestnetSenderDeps {
   readonly evm: NetworkKeyring;
   /** Signs with the EVM key, broadcasts, waits for the receipt (viem in the background). */
   readonly evmSend: EvmSend;
+  /** ERC-4337 smart account + paymaster for USDC on Base Sepolia (`base-sepolia-usdc`); absent = off. */
+  readonly gasless?: GaslessUsdc;
   readonly sync: (request: SyncRequest) => Promise<Result<SyncResponse, SdkError>>;
 }
 
 /** The passkey approval for one transfer: resolves ok only for a verified owner signature of `hash`. */
 export type Authorize = (hash: string) => Promise<Result<void, UiError>>;
 
-const DECIMALS = { 'solana-devnet': 9, 'base-sepolia': 18, 'eth-sepolia': 18 } as const;
+const DECIMALS = { 'solana-devnet': 9, 'base-sepolia': 18, 'eth-sepolia': 18, 'base-sepolia-usdc': 6 } as const;
+/** The backend's network name for each testnet: the smart account lives on Base Sepolia. */
+const SYNC_NETWORK = { 'solana-devnet': 'solana-devnet', 'base-sepolia': 'base-sepolia', 'eth-sepolia': 'eth-sepolia', 'base-sepolia-usdc': 'base-sepolia' } as const;
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const SEND_FAILED = uiError('TESTNET_SEND_FAILED');
 
 const explorerTx = (network: TestnetSendDraft['network'], id: string): string =>
   network === 'solana-devnet'
     ? `https://explorer.solana.com/tx/${id}?cluster=devnet`
-    : network === 'base-sepolia'
-      ? `https://sepolia.basescan.org/tx/${id}`
-      : `https://sepolia.etherscan.io/tx/${id}`;
+    : network === 'eth-sepolia'
+      ? `https://sepolia.etherscan.io/tx/${id}`
+      : `https://sepolia.basescan.org/tx/${id}`;
 
 export class TestnetSender {
   readonly #deps: TestnetSenderDeps;
@@ -57,16 +62,22 @@ export class TestnetSender {
     const solana = draft.network === 'solana-devnet';
     if (solana ? !isSolanaAddress(draft.to) : !EVM_ADDRESS.test(draft.to)) return err(uiError('UI_INVALID_ADDRESS'));
 
-    const from = solana ? await this.#deps.solana.ensure() : await this.#deps.evm.ensure();
+    const gasless = draft.network === 'base-sepolia-usdc';
+    if (gasless && !this.#deps.gasless?.enabled) return err(uiError('TESTNET_GASLESS_OFF'));
+    const from = solana ? await this.#deps.solana.ensure() : gasless ? await this.#smartAccountAddress() : await this.#deps.evm.ensure();
     // A Solana transfer to oneself lists the same account twice: the network rejects it.
     if (draft.to.toLowerCase() === from.toLowerCase()) return err(uiError('UI_INVALID_ADDRESS'));
     const approved = await authorize(approvalHash(draft.network, from, draft.to, amount));
     if (!approved.ok) return approved;
 
-    const sent = solana ? await this.#sendSolana(from, draft.to, amount) : await this.#sendEvm(draft.network as EvmTestnet, draft.to, amount);
+    const sent = solana
+      ? await this.#sendSolana(from, draft.to, amount)
+      : gasless
+        ? await this.#sendGasless(draft.to, amount)
+        : await this.#sendEvm(draft.network as EvmTestnet, draft.to, amount);
     if (!sent.ok) return sent;
 
-    const synced = await this.#deps.sync({ wallet: ferraWallet, network: draft.network, address_raw: from, limit: null, cursor: null });
+    const synced = await this.#deps.sync({ wallet: ferraWallet, network: SYNC_NETWORK[draft.network], address_raw: from, limit: null, cursor: null });
     return ok({
       network: draft.network,
       txId: sent.value,
@@ -87,6 +98,22 @@ export class TestnetSender {
     if (!sent.ok) return err(sent.error.kind === 'unavailable' ? uiError('TESTNET_UNAVAILABLE', true) : SEND_FAILED);
     const confirmed = await devnet.waitForConfirmation(sent.value);
     return confirmed.ok ? ok(sent.value) : err(SEND_FAILED);
+  }
+
+  async #smartAccountAddress(): Promise<string> {
+    await this.#deps.evm.ensure();
+    const owner = await this.#deps.evm.account();
+    if (owner === null || !this.#deps.gasless) throw new Error('no EVM key on this device');
+    return this.#deps.gasless.address(owner);
+  }
+
+  /** The EVM key owns the smart account; the paymaster pays, so a USDC-only balance is enough. */
+  async #sendGasless(to: string, usdc: bigint): Promise<Result<string, UiError>> {
+    const owner = await this.#deps.evm.account();
+    if (owner === null || !this.#deps.gasless) return err(SEND_FAILED);
+    const sent = await this.#deps.gasless.send(owner, to, usdc);
+    if (!sent.ok) console.warn('[sqw] gasless send failed:', sent.message);
+    return sent.ok ? ok(sent.hash) : err(SEND_FAILED);
   }
 
   async #sendEvm(network: EvmTestnet, to: string, wei: bigint): Promise<Result<string, UiError>> {

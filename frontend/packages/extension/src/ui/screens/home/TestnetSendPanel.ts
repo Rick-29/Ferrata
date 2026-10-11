@@ -189,7 +189,10 @@ export class TestnetSendPanel extends Screen {
       <div class="row"><span>Réseau</span><span>${wallet?.label ?? this.network}</span></div>
       <div class="row"><span>Vers</span><span>${shortAddress(this.to)}</span></div>
       <div class="row"><span>Montant</span><strong>${this.amount} ${wallet?.symbol ?? ''}</strong></div>
-      <p class="note">Réseau de test, cryptos sans valeur. Votre passkey va confirmer cet envoi précis.</p>
+      <p class="note">
+        Réseau de test, cryptos sans valeur. Votre passkey va confirmer cet envoi précis.
+        ${wallet?.gasless ? html`<br /><strong>Sans gas :</strong> aucun ETH requis, les frais sont pris en charge par le paymaster.` : nothing}
+      </p>
       <div class="actions">
         <button type="button" class="secondary" @click=${() => (this.step = { kind: 'form' })}>Modifier</button>
         <button type="button" class="primary" @click=${this.#send}>Confirmer avec ma passkey</button>

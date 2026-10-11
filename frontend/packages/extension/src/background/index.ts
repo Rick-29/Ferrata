@@ -21,6 +21,7 @@ import { SolanaDevnet } from './testnet/SolanaDevnet';
 import { SolanaKeyring } from './testnet/SolanaKeyring';
 import { TestnetWallets } from './testnet/TestnetWallets';
 import { TestnetSender, type EvmSend } from './testnet/TestnetSender';
+import { GaslessUsdc } from './testnet/GaslessUsdc';
 import { createWalletClient, createPublicClient, http } from 'viem';
 import { baseSepolia, sepolia } from 'viem/chains';
 
@@ -37,10 +38,14 @@ const deviceKey = new DeviceKeyWrapper();
 const evmKeyring = new NetworkKeyring(new ChromeStore(chrome.storage.local), deviceKey);
 const baseRpc = new RpcProxy(DAPP_RPC_URL);
 const sepoliaRpc = new RpcProxy('https://ethereum-sepolia-rpc.publicnode.com');
+// Gasless USDC: the EVM key owns an ERC-4337 smart account, Pimlico's paymaster pays the gas.
+// Set VITE_PIMLICO_API_KEY (frontend/packages/extension/.env.local) to turn it on.
+const gasless = new GaslessUsdc({ pimlicoApiKey: import.meta.env.VITE_PIMLICO_API_KEY ?? null, rpcUrl: DAPP_RPC_URL });
 const testnet = new TestnetWallets({
   solana: new SolanaKeyring(new ChromeStore(chrome.storage.local), deviceKey),
   devnet: new SolanaDevnet(),
   evm: evmKeyring,
+  gasless,
   evmBalance: async (network, address) => {
     const rpc = network === 'base-sepolia' ? baseRpc : sepoliaRpc;
     const response = await rpc.forward('eth_getBalance', [address, 'latest']);
@@ -77,6 +82,7 @@ const testnetSender = new TestnetSender({
   devnet: new SolanaDevnet(),
   evm: evmKeyring,
   evmSend,
+  gasless,
   sync: (request) => api.sync(request),
 });
 

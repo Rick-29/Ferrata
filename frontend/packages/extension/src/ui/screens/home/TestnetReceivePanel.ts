@@ -16,6 +16,7 @@ type AirdropState =
 /** Coin per test network, same glossy look as the asset list (design: .coin). */
 const COINS: Readonly<Record<TestnetNetwork, { readonly glyph: string; readonly tone: string }>> = {
   'solana-devnet': { glyph: '◎', tone: 'sol' },
+  'base-sepolia-usdc': { glyph: '$', tone: 'usdc' },
   'base-sepolia': { glyph: '◆', tone: 'eth' },
   'eth-sepolia': { glyph: '◆', tone: 'eth' },
 };
@@ -85,6 +86,11 @@ export class TestnetReceivePanel extends Screen {
       .eth {
         background: linear-gradient(145deg, #b4a8ff, #6150c9);
         --glow: rgba(129, 115, 223, 0.45);
+        font-size: 13px;
+      }
+      .usdc {
+        background: linear-gradient(145deg, #5fd1ff, #2775ca);
+        --glow: rgba(39, 117, 202, 0.45);
         font-size: 13px;
       }
       .name {
@@ -185,6 +191,12 @@ export class TestnetReceivePanel extends Screen {
       return html`<p class="note">
         Faucet « à minage », sans compte : collez l'adresse, cliquez sur « Start Mining », laissez tourner quelques
         minutes puis réclamez. Le dépôt apparaît dans vos actifs et dans Ferra chain.
+      </p>`;
+    }
+    if (network === 'base-sepolia-usdc') {
+      return html`<p class="note">
+        Compte intelligent (ERC-4337) : les envois d'USDC ne demandent aucun ETH, Swissquote prend le gas en charge via
+        un paymaster. Collez l'adresse sur le faucet Circle (réseau Base Sepolia) pour recevoir des USDC de test.
       </p>`;
     }
     if (network !== 'base-sepolia') {
