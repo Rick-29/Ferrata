@@ -21,6 +21,59 @@ Three people, three layers:
 
 Ideas for the chain visualiser and the real-chain connector live in `future_implementation.md`.
 
+## Running the app
+
+Three things can run: the backend (Rust), the Chrome extension (the wallet UI) and the desktop
+chain visualiser (Tauri). The extension needs the backend unless it is built on simulated data.
+
+### 1. Backend
+
+```sh
+cd backend
+./dev.sh      # .\dev.ps1 on Windows: http://localhost:8787, stable key, mock passkeys
+```
+
+Details, environment variables and the API are under [Using the backend](#using-the-backend).
+
+### 2. Chrome extension (`frontend/packages/extension`)
+
+The extension is a Manifest V3 extension (Lit + Vite) backed by the Rust engine compiled to
+WASM. `scripts/setup` installs the frontend dependencies, builds the extension into
+`frontend/packages/extension/dist` and compiles the backend. Run it once, and again after every
+`git pull`.
+
+```sh
+scripts\setup.cmd        # Windows (double-click works); needs Node.js 22+, Rust optional
+./scripts/setup.sh       # macOS / Linux
+```
+
+Flags: `-SkipBackend` / `--skip-backend` skips the Rust build; `-Fake` / `--fake` builds the
+extension on simulated data (no backend needed). Without Rust installed, simulated data is used
+automatically.
+
+Then load the build into Chrome (once):
+
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode** (top right).
+3. Click **Load unpacked** and choose `frontend/packages/extension/dist`.
+4. After every new `setup`, press the extension's reload button on that page.
+
+Demo login: `alice` / `demo`. For live reloading while developing, `scripts\dev.cmd` (or
+`./scripts/dev.sh`) starts the backend and the extension's Vite dev server together.
+See `scripts/README.md` for the full options.
+
+### 3. Chain visualiser (`app/`)
+
+The visualiser is a Tauri desktop app (React + Vite frontend, Rust backend in `app/src-tauri`).
+It needs Node.js, pnpm and a Rust toolchain.
+
+```sh
+cd app
+pnpm install
+pnpm tauri dev      # run in development mode with hot reload
+pnpm tauri build    # production bundle under app/src-tauri/target/release (installer in bundle/)
+```
+
 ## Using the backend
 
 ### Run
