@@ -31,8 +31,8 @@ cd backend
 cargo run -p sq-services                       # same, in-memory chain and a random key
 SQ_CHAIN_FILE=../chain.jsonl cargo run -p sq-services   # persisted, replayed + verified on start
 cargo test --workspace                         # 147 tests; also regenerates frontend/packages/types/src
-cargo run -p sq-connectors --bin ferra-verify -- ../chain.jsonl --events --behaviour   # verify a chain file with nothing else
-cargo run -p sq-connectors --bin ferra-verify -- ../chain.jsonl --provenance           # … and check external counterparties on their networks
+cargo run --release -p ferra-verify -- ../chain.jsonl --events --behaviour   # verify a chain file with nothing else (--timing for stage times)
+cargo run --release -p ferra-verify -- ../chain.jsonl --provenance --top 5   # … and check each external counterparty once on its network: all lookups in parallel, --top N keeps the N busiest per network, --depth is history per lookup
 cargo run -p ferra-verify --bin ferra-report -- ton:EQ…:EQ… eth-sepolia:0x…:0x… --out r.json   # transfer reports from live indexers
 cargo run -p ferra-verify --bin ferra-seed -- --file fixtures/samples/pairs_mainnet.json --out fixtures/chains/ferra-mainnet.jsonl --reset   # a chain built from real history
 cargo clippy --workspace --all-targets -- -D warnings
@@ -196,7 +196,12 @@ exposure tracer, provenance judge, transfer report, risk scorer) with one crate 
 and `sq-conn-sol` (JSON-RPC, `solana`, `solana-devnet`). Every source can also answer
 `GET /networks/{name}/account/{address}` with balance, tokens, labels and scam flags. Adding Solana
 or Sui is one crate implementing the trait. `SQ_TONAPI_KEY` / `SQ_TONCENTER_API_KEY` raise TON rate
-limits. Provenance combines the counterparty's own history, the indexer's labels and an exposure
+limits; `SQ_SOLANA_RPC` swaps the public Solana RPC for a keyed one (the free endpoint allows 10
+`getTransaction` per window, so without a key a Solana lookup reads at most 10 transfers); `SQ_ESPLORA_BITCOIN` /
+`SQ_ESPLORA_BITCOIN_TESTNET` put your own Esplora host before mempool.space and blockstream.info
+(the Bitcoin source moves to the next host when one stalls). Requests in flight per network are
+capped (2 for Ethereum and Solana, 3 for Bitcoin, 4 elsewhere; `SQ_CONCURRENCY_<NETWORK>` overrides)
+and a 429 waits for `Retry-After` or 1, 2, 4 s. Provenance combines the counterparty's own history, the indexer's labels and an exposure
 trace against `fixtures/exposure-graph.json: raw_flagged`.
 
 Every event carries `network` (family, name, chain id) and `features`: ~45 numbers describing

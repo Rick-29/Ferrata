@@ -1,13 +1,12 @@
 //! Ferra Visualizer: the Tauri backend. Opens a Ferra chain file, verifies it, serves the
-//! automatic report and the manual graph, and reaches the public indexers and the Swissquote
-//! service when the UI asks for online data.
+//! automatic report and the manual graph, and reaches the public indexers when the UI asks for
+//! online data.
 
 pub mod commands;
 pub mod error;
 pub mod graph;
 pub mod online;
 pub mod report;
-pub mod service;
 pub mod state;
 pub mod validator;
 
@@ -28,7 +27,6 @@ pub fn run() {
                 verdicts: Mutex::new(Default::default()),
                 auto: Mutex::new(Default::default()),
                 online: Arc::new(online::Online::new(fixtures)),
-                service: Mutex::new(service::ServiceLink::default()),
                 recent: Mutex::new(Vec::new()),
                 data_dir,
             };
@@ -54,7 +52,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::open_chain,
             commands::open_demo,
-            commands::open_from_service,
             commands::reload_chain,
             commands::close_chain,
             commands::current_chain,
@@ -76,10 +73,6 @@ pub fn run() {
             commands::event_report,
             commands::provenance_check,
             commands::risk_preview,
-            commands::service_connect,
-            commands::service_disconnect,
-            commands::service_state,
-            commands::service_validate_now,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| {

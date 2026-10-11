@@ -1173,6 +1173,8 @@ dependencies = [
  "sq-conn-ton",
  "sq-connectors",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

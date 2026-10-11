@@ -9,7 +9,6 @@ import {
   inTauri,
   type AppInfo,
   type RecentFile,
-  type ServiceState,
 } from "@/lib/ferra"
 
 import { relTime } from "@/lib/format"
@@ -27,11 +26,6 @@ interface Props {
 
   onOpenDemo: (id: "testnet" | "testnet-validated" | "mainnet") => void
 
-  onOpenService: (url: string) => void
-
-  service: ServiceState | null
-
-  onConnect: (url: string, username?: string, password?: string) => void
 }
 
 export default function OpenScreen({
@@ -41,17 +35,11 @@ export default function OpenScreen({
   error,
   onOpenPath,
   onOpenDemo,
-  onOpenService,
-  service,
-  onConnect,
 }: Props) {
   const [info, setInfo] = useState<AppInfo | null>(null)
 
   const [recent, setRecent] = useState<RecentFile[]>([])
 
-  const [url, setUrl] = useState(service?.url ?? "http://localhost:8787")
-  const [username, setUsername] = useState("alice")
-  const [password, setPassword] = useState("demo")
   const [pathText, setPathText] = useState("")
 
   const tauri = inTauri()
@@ -121,14 +109,6 @@ export default function OpenScreen({
         <button className="secondary-button" onClick={onToggleTheme} style={{ marginLeft: "auto", marginRight: 14 }}>
           <Icon name={theme === "dark" ? "sun" : "moon"} size={16} /> {theme === "dark" ? "Light theme" : "Dark theme"}
         </button>
-        <div className="connection">
-          <span
-            style={{ background: service?.connected ? "#2eb67d" : "#6b7280" }}
-          />
-          {service?.connected
-            ? `Service connected · ${service.url}`
-            : "Service not connected"}
-        </div>
       </div>
       <main className="open-content">
         <div className="eyebrow">FERRA VISUALIZER</div>
@@ -182,30 +162,6 @@ export default function OpenScreen({
           ))}
         </div>
         <div className="service-row">
-          <span>Swissquote service</span>
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="http://localhost:8787"
-          />
-          <button className="secondary-button" onClick={() => onConnect(url, username, password)}>
-            Connect
-          </button>
-          <button
-            className="secondary-button"
-            onClick={() => onOpenService(url)}
-            disabled={!!busy}
-          >
-            Open its chain
-          </button>
-        </div>
-        <div className="service-row">
-          <span>Service login</span>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username (fixtures/accounts.json)" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" type="password" />
-          <span className="muted">needed for "Validate now"</span>
-        </div>
-        <div className="service-row">
           <span>Or a file path</span>
           <input value={pathText} onChange={(e) => setPathText(e.target.value)} placeholder="D:\\path\\to\\ferra-chain.jsonl" />
           <button className="secondary-button" onClick={() => pathText.trim() && onOpenPath(pathText.trim())} disabled={!!busy}>
@@ -213,9 +169,6 @@ export default function OpenScreen({
           </button>
           <span />
         </div>
-        {service?.last_error && (
-          <p className="muted">Service: {service.last_error}</p>
-        )}
         {recent.length > 0 && (
           <div className="recent-block">
             <div className="section-heading">

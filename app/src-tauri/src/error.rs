@@ -17,8 +17,6 @@ pub enum AppError {
     Chain(String),
     #[error("offline: {0}")]
     Offline(String),
-    #[error("service: {0}")]
-    Service(String),
     #[error("{0}")]
     Internal(String),
 }
@@ -32,7 +30,6 @@ impl AppError {
             AppError::Io(_) => "IO",
             AppError::Chain(_) => "CHAIN",
             AppError::Offline(_) => "OFFLINE",
-            AppError::Service(_) => "SERVICE",
             AppError::Internal(_) => "INTERNAL",
         }
     }

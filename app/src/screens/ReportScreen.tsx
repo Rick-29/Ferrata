@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { save } from "@tauri-apps/plugin-dialog"
 import {
   ferra,
@@ -7,7 +7,6 @@ import {
   type BandSlice,
   type Report,
   type RiskBand,
-  type ServiceState,
   type ValidationSummary,
 } from "@/lib/ferra"
 import {
@@ -25,13 +24,10 @@ import { Icon, NetworkBadge, RiskChip } from "@/components/ui"
 
 interface Props {
   report: Report | null
-  service: ServiceState | null
   onShowNode: (id: string) => void
   onValidateNow: () => void
-  onServicePass: () => void
   summary: ValidationSummary | null
   onReload: () => void
-  reloadKey: number
 }
 
 const BANDS: RiskBand[] = ["Low", "Medium", "High", "Critical"]
@@ -56,27 +52,16 @@ function Bar({ slices, total }: { slices: BandSlice[]; total: number }) {
 }
 
 export default function ReportScreen({
-  report: initial,
-  service,
+  report,
   onShowNode,
   onValidateNow,
-  onServicePass,
   summary,
   onReload,
-  reloadKey,
 }: Props) {
-  const [report, setReport] = useState<Report | null>(initial)
   const [band, setBand] = useState<RiskBand | "all" | "pending">("all")
   const [network, setNetwork] = useState("all")
   const [showAll, setShowAll] = useState(false)
   const [byValue, setByValue] = useState(false)
-
-  useEffect(() => {
-    ferra
-      .getReport()
-      .then(setReport)
-      .catch(() => {})
-  }, [reloadKey])
 
   const rows = useMemo(() => {
     if (!report) return []
@@ -96,7 +81,6 @@ export default function ReportScreen({
   const i = report.integrity
   const f = report.file
   const total = f.validatable
-  const worker = report.worker ?? service?.validator ?? null
   const profile = report.profiles[0]
   const maxHour = profile ? Math.max(1, ...profile.profile.hour_histogram) : 1
 
@@ -105,7 +89,7 @@ export default function ReportScreen({
     format: "json" | "csv",
   ) => {
     const path = await save({
-      // Windows rejects ":" and friends in file names (a service URL as the chain name).
+      // Windows rejects ":" and friends in file names (a URL as the chain name).
       defaultPath: `${f.name.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9._-]+/g, "_")}-${what}.${format}`,
       filters: [{ name: format.toUpperCase(), extensions: [format] }],
     })
@@ -148,18 +132,13 @@ export default function ReportScreen({
           <button className="secondary-button" onClick={onReload}>
             <Icon name="refresh" size={14} /> Reload file
           </button>
-          {service?.connected && (
-            <button className="secondary-button" onClick={onServicePass} title="One pass of the service's worker: writes flags into the chain">
-              Service pass
-            </button>
-          )}
           <button
             className="primary-button"
             onClick={onValidateNow}
             disabled={summary?.running || (summary ? summary.pending === 0 : false)}
             title="Judge every pending transfer in the app, least suspicious first; stops after 3 High / Critical verdicts"
           >
-            {summary?.running ? `Validating… ${Math.round(summary.percent)}%` : "Validate automatically"}
+            {summary?.running ? `Validating… ${Math.round(summary.percent)}% · ${summary.queued} queued` : "Validate automatically"}
           </button>
         </div>
       </div>
@@ -270,11 +249,7 @@ export default function ReportScreen({
         <section className="card validation-card">
           <div className="card-label">
             <span>VALIDATION</span>
-            {service?.connected ? (
-              <span className="live-dot">LIVE</span>
-            ) : (
-              <span className="muted">OFFLINE</span>
-            )}
+            <span className="muted">{summary?.running ? "RUNNING" : "IN THIS APP"}</span>
           </div>
           <div className="validation-main">
             <div
@@ -308,46 +283,20 @@ export default function ReportScreen({
               </span>
             </div>
           </div>
-          {worker ? (
-            <div className="worker-line">
-              <span
-                className="pulse"
-                style={
-                  worker.enabled
-                    ? undefined
-                    : { background: "#6b7280", boxShadow: "none" }
-                }
-              />
-              <div>
-                <strong>
-                  Validation worker{" "}
-                  {worker.enabled
-                    ? `every ${worker.interval_secs}s`
-                    : "(disabled)"}
-                </strong>
-                <span>
-                  pass {worker.passes} · {worker.events_checked} checked ·{" "}
-                  {worker.flags_written} flags written · {worker.retrying}{" "}
-                  retrying
-                  {worker.last_error ? ` · ${worker.last_error}` : ""}
-                </span>
-              </div>
+          {summary?.running && (
+            <div className="lanes-line">
               <span>
-                {worker.last_pass_at ? relTime(worker.last_pass_at) : "–"}
+                <i className="pulse" />
+                {summary.phase === "file only" ? "Judging from the file alone" : "Asking the origin networks"} · {summary.queued} queued · {summary.checked_this_run} done this run
+                {summary.unchecked_online ? ` · ${summary.unchecked_online} without origin check` : ""}
               </span>
-            </div>
-          ) : (
-            <div className="worker-line">
-              <span
-                className="pulse"
-                style={{ background: "#6b7280", boxShadow: "none" }}
-              />
-              <div>
-                <strong>No service</strong>
-                <span>
-                  Connect to the Swissquote service from the Open screen to run
-                  the validation worker; the file alone gives this status.
-                </span>
+              <div className="lanes">
+                {Object.entries(summary.in_flight).sort().map(([n, c]) => (
+                  <span key={n} title={`${c} lookup${c === 1 ? "" : "s"} in flight on ${n}`}>
+                    <NetworkBadge name={n} /> {c}
+                  </span>
+                ))}
+                {Object.keys(summary.in_flight).length === 0 && summary.phase !== "file only" && <span className="muted">no lookup in flight</span>}
               </div>
             </div>
           )}

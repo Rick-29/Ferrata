@@ -17,7 +17,7 @@ use sq_connectors::report::{ReportConfig, transfer_report};
 #[derive(Parser, Debug)]
 #[command(name = "ferra-report", version, about = "Transfer reports from live indexers as JSON: parties, transfers, funding sources, receiver provenance")]
 struct Cli {
-    /// Pairs as `<network>:<from>:<to>`. Networks: ton, ton-testnet, bitcoin, bitcoin-testnet, solana, solana-devnet, eth-sepolia, base-sepolia, ethereum.
+    /// Pairs as `<network>:<from>:<to>`. Networks: ton, ton-testnet, bitcoin, bitcoin-testnet, solana, solana-devnet, eth-sepolia, base-sepolia, optimism-sepolia, ethereum, base, arbitrum, optimism, polygon, gnosis, scroll.
     #[arg(value_name = "NETWORK:FROM:TO")]
     pairs: Vec<String>,
     /// JSON file with `[{ "network": "...", "from": "...", "to": "..." }, …]`.

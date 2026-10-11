@@ -15,7 +15,10 @@ cd src-tauri && cargo test            # offline pipeline over the demo chains
 cd src-tauri && cargo test -- --ignored online --nocapture   # hits the public TON indexer
 ```
 
-Optional environment for the indexers: `SQ_TONAPI_KEY`, `SQ_TONCENTER_API_KEY`, `SQ_SOLANA_RPC`.
+Optional environment for the indexers: `SQ_TONAPI_KEY`, `SQ_TONCENTER_API_KEY`, `SQ_SOLANA_RPC`,
+`SQ_ESPLORA_BITCOIN` / `SQ_ESPLORA_BITCOIN_TESTNET` (your own Esplora host, tried before mempool.space
+and blockstream.info), `SQ_CONCURRENCY_<NETWORK>` (requests in flight per network; defaults 2 for
+Ethereum / Solana, 3 for Bitcoin, 4 elsewhere).
 The demo chains, the risk model and the sanctions lists come from `../../fixtures` (bundled as
 resources in a release build, read from the repo in dev).
 
@@ -39,9 +42,10 @@ resources in a release build, read from the repo in dev).
 - `online.rs` — the embedded connectors (TON, Sepolia/Base/Ethereum, Bitcoin, Solana), the
   `LinearModel` and the watchlists. Transfer reports, provenance checks and risk previews run in the
   app itself with nothing but internet access.
-- `service.rs` — optional link to `sq-services` (`http://localhost:8787`): validator status polled
-  every 4 s (`service://status` event), "validate now", and opening the chain over HTTP without a
-  file.
+- `validator.rs` — the in-app validator: one tokio task per pending event, a lane per origin
+  network, verdicts kept in memory (`validation://verdict` / `validation://status` events) and
+  manual verdicts from the canvas. The app has no link to `sq-services`: everything runs from
+  the file plus the public indexers.
 - `commands.rs` — the `#[tauri::command]` surface; errors arrive as `{ code, message }`.
 
 Node ids are `network:address` (`ferra:0x…`, `ton:0:…`, `bitcoin:bc1…`). `FileInfo.wallet_nodes`

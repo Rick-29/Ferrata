@@ -215,7 +215,11 @@ pub async fn assess(source: &dyn NetworkSource, tx: &ChainTx, lists: &Watchlists
     let wallet = source.canonical(&wallet);
     let network = source.network();
 
-    let history = match source.fetch(&counterparty, None, limit).await {
+    // The three lookups are independent: run them together, one round trip instead of three.
+    let (history, info, exposure) = tokio::join!(source.fetch(&counterparty, None, limit), source.account_info(&counterparty), async {
+        if lists.flagged.is_empty() { None } else { trace_exposure(source, &counterparty, &lists.flagged, TraceConfig::default()).await.ok() }
+    });
+    let history = match history {
         Ok(page) => page.events,
         Err(err) => {
             ::tracing::warn!(network = %network.name, counterparty, error = %err, "provenance fetch failed");
@@ -223,18 +227,13 @@ pub async fn assess(source: &dyn NetworkSource, tx: &ChainTx, lists: &Watchlists
             return Ok(judge(&e));
         }
     };
-    let info = match source.account_info(&counterparty).await {
+    let info = match info {
         Ok(i) => Some(i),
         Err(ConnectorError::Unsupported(_)) => None,
         Err(err) => {
             ::tracing::debug!(network = %network.name, counterparty, error = %err, "account info unavailable");
             None
         }
-    };
-    let exposure = if lists.flagged.is_empty() {
-        None
-    } else {
-        trace_exposure(source, &counterparty, &lists.flagged, TraceConfig::default()).await.ok()
     };
     let e = Evidence { network: &network, counterparty: &counterparty, wallet: &wallet, event: &ext, event_time: tx.timestamp, history: &history, info: info.as_ref(), exposure: exposure.as_ref(), lists, verified: true };
     Ok(judge(&e))

@@ -92,22 +92,60 @@ fn is_txid(value: &str) -> bool {
 // Esplora client
 // ============================================================================
 
+/// Esplora over one or more hosts. Public instances (mempool.space in particular) tarpit an
+/// address that sends a burst: connections then hang until the timeout. When a request fails at
+/// the transport level the client moves to the next host and stays there, so one stalled
+/// instance costs one timeout per process, not one per request.
 #[derive(Debug, Clone)]
 pub struct EsploraClient {
     http: reqwest::Client,
-    base: String,
+    bases: Vec<String>,
+    active: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     network_name: String,
 }
 
 impl EsploraClient {
     pub fn new(base: impl Into<String>, network_name: impl Into<String>) -> Self {
-        Self { http: sq_connectors::http(), base: base.into().trim_end_matches('/').to_owned(), network_name: network_name.into() }
+        Self { http: sq_connectors::http(), bases: vec![base.into().trim_end_matches('/').to_owned()], active: Default::default(), network_name: network_name.into() }
+    }
+
+    /// Another Esplora host to use when the current one stops answering.
+    pub fn with_fallback(mut self, base: impl Into<String>) -> Self {
+        self.bases.push(base.into().trim_end_matches('/').to_owned());
+        self
+    }
+
+    /// The host requests currently go to.
+    pub fn base(&self) -> &str {
+        let i = self.active.load(std::sync::atomic::Ordering::Relaxed).min(self.bases.len().saturating_sub(1));
+        self.bases.get(i).map(String::as_str).unwrap_or_default()
     }
 
     /// `path` must only contain validated components (address, txid).
     async fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, ConnectorError> {
-        let text = get_text(&self.http, &self.network_name, &format!("{}{path}", self.base), &[]).await?;
-        serde_json::from_str(&text).map_err(|e| ConnectorError::Parse(format!("{path}: {e}")))
+        let start = self.active.load(std::sync::atomic::Ordering::Relaxed).min(self.bases.len().saturating_sub(1));
+        let mut last = ConnectorError::Http("no esplora host configured".into());
+        for offset in 0..self.bases.len() {
+            let i = (start + offset) % self.bases.len();
+            let base = &self.bases[i];
+            match get_text(&self.http, &self.network_name, &format!("{base}{path}"), &[]).await {
+                Ok(text) => {
+                    if i != start {
+                        tracing::warn!(network = %self.network_name, from = %self.bases[start], to = %base, "esplora host switched");
+                        self.active.store(i, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    return serde_json::from_str(&text).map_err(|e| ConnectorError::Parse(format!("{path}: {e}")));
+                }
+                // Transport trouble: the next host may be fine. Anything the host answered
+                // (4xx, 5xx, rate limit) is about the request, not the host.
+                Err(e @ ConnectorError::Http(_)) => {
+                    tracing::warn!(network = %self.network_name, host = %base, error = %e, "esplora host unreachable");
+                    last = e;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last)
     }
 
     pub async fn mempool_txs(&self, address: &str) -> Result<Vec<EsploraTx>, ConnectorError> {
@@ -187,12 +225,26 @@ impl EsploraBitcoinSource {
         Self { client: EsploraClient::new(&base, network.name.clone()), network, validator: BitcoinAddressValidator::new(btc_network), explorer: explorer.into() }
     }
 
+    /// mempool.space first, blockstream.info when it stalls; `SQ_ESPLORA_BITCOIN_TESTNET` puts a
+    /// host of your own (a local Esplora, a keyed instance) in front of both.
     pub fn testnet() -> Self {
-        Self::new(Network { family: ChainFamily::Bitcoin, name: "bitcoin-testnet".into(), chain_id: None }, bitcoin::Network::Testnet, "https://mempool.space/testnet/api", "https://mempool.space/testnet")
+        let mut s = Self::new(Network { family: ChainFamily::Bitcoin, name: "bitcoin-testnet".into(), chain_id: None }, bitcoin::Network::Testnet, "https://mempool.space/testnet/api", "https://mempool.space/testnet");
+        s.client = s.client.with_fallback("https://blockstream.info/testnet/api");
+        if let Ok(own) = std::env::var("SQ_ESPLORA_BITCOIN_TESTNET") {
+            s.client = EsploraClient::new(own, "bitcoin-testnet").with_fallback("https://mempool.space/testnet/api").with_fallback("https://blockstream.info/testnet/api");
+        }
+        s
     }
 
+    /// mempool.space first, blockstream.info when it stalls; `SQ_ESPLORA_BITCOIN` puts a host of
+    /// your own in front of both.
     pub fn mainnet() -> Self {
-        Self::new(Network { family: ChainFamily::Bitcoin, name: "bitcoin".into(), chain_id: None }, bitcoin::Network::Bitcoin, "https://mempool.space/api", "https://mempool.space")
+        let mut s = Self::new(Network { family: ChainFamily::Bitcoin, name: "bitcoin".into(), chain_id: None }, bitcoin::Network::Bitcoin, "https://mempool.space/api", "https://mempool.space");
+        s.client = s.client.with_fallback("https://blockstream.info/api");
+        if let Ok(own) = std::env::var("SQ_ESPLORA_BITCOIN") {
+            s.client = EsploraClient::new(own, "bitcoin").with_fallback("https://mempool.space/api").with_fallback("https://blockstream.info/api");
+        }
+        s
     }
 
     pub fn validator(&self) -> &BitcoinAddressValidator {

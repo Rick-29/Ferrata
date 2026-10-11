@@ -87,19 +87,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "api-types"
-version = "0.1.0"
-dependencies = [
- "alloy-primitives",
- "serde",
- "serde_json",
- "sq-adapters",
- "sq-connectors",
- "ts-rs",
- "wallet-core",
-]
-
-[[package]]
 name = "ark-ff"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1706,7 +1693,6 @@ name = "ferra-visualizer"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
- "api-types",
  "ed25519-dalek",
  "hex",
  "reqwest 0.12.28",
@@ -4881,6 +4867,7 @@ dependencies = [
  "serde_json",
  "sq-adapters",
  "sq-connectors",
+ "tokio",
  "tracing",
 ]
 

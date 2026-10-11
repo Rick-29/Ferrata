@@ -18,10 +18,15 @@ use sq_connectors::{AccountInfo, ConnectorError, NetworkSource, ObservedEvent, P
 
 const DEVNET: &str = "https://api.devnet.solana.com";
 const MAINNET: &str = "https://api.mainnet-beta.solana.com";
-/// Batches of `getTransaction` per HTTP call (JSON-RPC batch); the public RPC counts one request per call.
+/// Batches of `getTransaction` per HTTP call (JSON-RPC batch). The public RPC's free tier counts
+/// every entry of the batch against a per-method limit of 10 per window and answers 429 with
+/// `Retry-After: 10` beyond it, so a batch is never larger than that.
 const BATCH: usize = 10;
 const CONCURRENCY: usize = 2;
 const MAX_LIMIT: u32 = 50;
+/// On the public endpoints one fetch stays within one window: 10 signatures, one batch, no
+/// 429 ladder. A keyed RPC (`SQ_SOLANA_RPC`) gets the full `limit`.
+const PUBLIC_TXS_PER_FETCH: u32 = 10;
 const TOKEN_PROGRAM: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 pub fn network(devnet: bool) -> Network {
@@ -42,11 +47,15 @@ pub struct SolanaSource {
     client: reqwest::Client,
     url: String,
     devnet: bool,
+    /// The rate-limited public endpoint, not a keyed RPC of our own.
+    public: bool,
 }
 
 impl SolanaSource {
     pub fn new(devnet: bool, rpc_url: Option<String>) -> Self {
-        Self { client: sq_connectors::http(), url: rpc_url.unwrap_or_else(|| if devnet { DEVNET } else { MAINNET }.into()), devnet }
+        let url = rpc_url.filter(|u| !u.trim().is_empty()).unwrap_or_else(|| if devnet { DEVNET } else { MAINNET }.into());
+        let public = url == DEVNET || url == MAINNET;
+        Self { client: sq_connectors::http(), url, devnet, public }
     }
 
     pub fn from_env() -> Self {
@@ -217,6 +226,7 @@ impl NetworkSource for SolanaSource {
 
     async fn fetch(&self, address_raw: &str, cursor: Option<&str>, limit: u32) -> Result<Page, ConnectorError> {
         let wallet = validate(address_raw)?;
+        let limit = if self.public { limit.min(PUBLIC_TXS_PER_FETCH) } else { limit };
         let sigs = self.signatures(&wallet, cursor, limit).await?;
         let next_cursor = (sigs.len() as u32 >= limit.clamp(1, MAX_LIMIT)).then(|| sigs.last().map(|s| s.signature.clone())).flatten();
         let net = self.network();
@@ -238,7 +248,7 @@ impl NetworkSource for SolanaSource {
                     }
                 }
             })
-            .buffered(CONCURRENCY)
+            .buffered(if self.public { 1 } else { CONCURRENCY })
             .collect()
             .await;
         let _ = Self::parse::<serde_json::Value>; // keep the helper available for callers

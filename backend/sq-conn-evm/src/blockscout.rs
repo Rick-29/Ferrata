@@ -208,25 +208,34 @@ impl NetworkSource for BlockscoutSource {
             Some(c) => serde_json::from_str(c).map_err(|e| ConnectorError::Parse(format!("cursor: {e}")))?,
             None => Cursor { tx: Some(BTreeMap::new()), tt: Some(BTreeMap::new()) },
         };
-        let mut txs = Vec::new();
-        let mut next_tx = None;
-        if let Some(p) = &cur.tx {
-            let l: V2List<V2Tx> = self.list(&format!("{addr}/transactions"), p).await?;
-            txs = l.items;
-            next_tx = l.next_page_params;
-        }
-        let mut transfers = Vec::new();
-        let mut next_tt = None;
-        if let Some(p) = &cur.tt {
-            match self.list::<V2TokenTransfer>(&format!("{addr}/token-transfers"), p).await {
-                Ok(l) => {
-                    transfers = l.items;
-                    next_tt = l.next_page_params;
+        // The native-transaction page and the token-transfer page are independent: one round
+        // trip instead of two.
+        let (tx_page, tt_page) = tokio::join!(
+            async {
+                match &cur.tx {
+                    Some(p) => self.list::<V2Tx>(&format!("{addr}/transactions"), p).await.map(Some),
+                    None => Ok(None),
                 }
-                Err(ConnectorError::Upstream { status: 404, .. }) => {}
-                Err(e) => return Err(e),
+            },
+            async {
+                match &cur.tt {
+                    Some(p) => match self.list::<V2TokenTransfer>(&format!("{addr}/token-transfers"), p).await {
+                        Ok(l) => Ok(Some(l)),
+                        Err(ConnectorError::Upstream { status: 404, .. }) => Ok(None),
+                        Err(e) => Err(e),
+                    },
+                    None => Ok(None),
+                }
             }
-        }
+        );
+        let (txs, next_tx) = match tx_page? {
+            Some(l) => (l.items, l.next_page_params),
+            None => (Vec::new(), None),
+        };
+        let (transfers, next_tt) = match tt_page? {
+            Some(l) => (l.items, l.next_page_params),
+            None => (Vec::new(), None),
+        };
         let next = Cursor { tx: next_tx, tt: next_tt };
         let next_cursor = (next.tx.is_some() || next.tt.is_some()).then(|| serde_json::to_string(&next).unwrap_or_default());
         Ok(Page { events: Self::extract(&self.network, &self.explorer, &addr, &txs, &transfers), next_cursor })

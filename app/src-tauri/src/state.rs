@@ -1,6 +1,6 @@
 //! What the app holds in memory: the open chain (verified prefix + whatever follows a tampered
 //! block, kept but marked untrusted), the per-event view the canvas and report are built from, the
-//! connector registry for online lookups, the optional link to the Swissquote service, and the
+//! connector registry for online lookups, and the
 //! recent-files list.
 
 use std::collections::{BTreeMap, HashMap};
@@ -17,7 +17,6 @@ use wallet_core::RiskBand;
 
 use crate::error::{AppError, AppResult};
 use crate::online::Online;
-use crate::service::ServiceLink;
 
 /// Flag sources that count as a verdict (same set as `MockChain::validation`).
 pub const VALIDATOR_SOURCES: [FlagSource; 5] = [FlagSource::Review, FlagSource::Provenance, FlagSource::Model, FlagSource::Behaviour, FlagSource::Manual];
@@ -182,7 +181,6 @@ pub struct AppState {
     pub verdicts: Mutex<HashMap<alloy_primitives::B256, Vec<Flag>>>,
     pub auto: Mutex<crate::validator::AutoState>,
     pub online: Arc<Online>,
-    pub service: Mutex<ServiceLink>,
     pub recent: Mutex<Vec<RecentFile>>,
     pub data_dir: PathBuf,
 }
