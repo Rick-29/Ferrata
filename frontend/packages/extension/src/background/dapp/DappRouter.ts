@@ -1,4 +1,5 @@
 import { DAPP_CHAIN_ID, DAPP_CHAIN_ID_HEX, ProviderErrors, type DappResponse } from '../../dapp/protocol';
+import { isSiteRead, type SiteRead } from '../site/SiteReader';
 import type { KeyValueStore } from '../storage';
 import type { NetworkKeyring } from './NetworkKeyring';
 import type { RpcProxy } from './RpcProxy';
@@ -32,6 +33,8 @@ export interface DappRouterDeps {
    */
   readonly signIn?: (origin: string) => Promise<DappResponse>;
   readonly firstPartyOrigins?: readonly string[];
+  /** Read-only wallet data for the website's dashboard (`sqw_wallet`, …). First-party origins only. */
+  readonly siteRead?: (method: SiteRead) => Promise<DappResponse>;
 }
 
 const PERMISSIONS_KEY = 'sqw-dapp-connected-origins';
@@ -58,6 +61,7 @@ export class DappRouter {
       case 'sqw_signIn':
         return this.#signIn(origin);
       default:
+        if (isSiteRead(method)) return this.#siteRead(origin, method);
         if (SIGNING_METHODS.has(method)) return this.#signing(origin);
         return this.#deps.rpc.forward(method, params);
     }
@@ -95,6 +99,12 @@ export class DappRouter {
     const chainId = typeof first === 'object' && first !== null && 'chainId' in first ? first.chainId : undefined;
     if (typeof chainId !== 'string') return fail(ProviderErrors.invalidParams);
     return chainId.toLowerCase() === DAPP_CHAIN_ID_HEX ? ok(null) : fail(ProviderErrors.unknownChain);
+  }
+
+  #siteRead(origin: string, method: SiteRead): Promise<DappResponse> | DappResponse {
+    const { siteRead, firstPartyOrigins = [] } = this.#deps;
+    if (!siteRead || !firstPartyOrigins.includes(origin)) return fail(ProviderErrors.unsupportedMethod);
+    return siteRead(method);
   }
 
   #signIn(origin: string): Promise<DappResponse> | DappResponse {

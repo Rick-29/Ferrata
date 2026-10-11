@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react"
 import { useState } from "react"
-import { shortAddress, type FerrataIdentity } from "../lib/ferrata"
+import type { FerrataIdentity } from "../lib/ferrata"
 import {
   getPersona,
   getRiskReport,
@@ -30,6 +30,7 @@ import {
 import type { DashboardSection, PersonaId, ScenarioId, Theme } from "../types"
 import Brand from "./Brand"
 import ExtensionShell from "./ExtensionShell"
+import LiveDashboard from "./LiveDashboard"
 import { Badge, Button, Card, Segmented } from "./ui"
 import { APP_NAME } from "@sqw/brand"
 
@@ -52,6 +53,41 @@ export default function CustomerDashboard({
   onRestart: () => void
   /** Signed in through the Ferrata extension; null in the scripted demo. */
   identity?: FerrataIdentity | null
+}) {
+  // Signed in through the Ferrata extension: the real wallet, read live from the extension.
+  if (identity) {
+    return <LiveDashboard identity={identity} theme={theme} onThemeChange={onThemeChange} onSignOut={onRestart} />
+  }
+  return (
+    <DemoDashboard
+      theme={theme}
+      personaId={personaId}
+      scenarioId={scenarioId}
+      onThemeChange={onThemeChange}
+      onPersonaChange={onPersonaChange}
+      onScenarioChange={onScenarioChange}
+      onRestart={onRestart}
+    />
+  )
+}
+
+/** The scripted demo (no extension needed): personas and risk scenarios on demo data. */
+function DemoDashboard({
+  theme,
+  personaId,
+  scenarioId,
+  onThemeChange,
+  onPersonaChange,
+  onScenarioChange,
+  onRestart,
+}: {
+  theme: Theme
+  personaId: PersonaId
+  scenarioId: ScenarioId
+  onThemeChange: () => void
+  onPersonaChange: (persona: PersonaId) => void
+  onScenarioChange: (scenario: ScenarioId) => void
+  onRestart: () => void
 }) {
   const [section, setSection] = useState<DashboardSection>("overview")
   const [mobileMenu, setMobileMenu] = useState(false)
@@ -116,11 +152,11 @@ export default function CustomerDashboard({
           <RotateCcw size={17} /> Restart demo
         </button>
         <div className="sidebar-profile">
-          <span className="user-avatar">{identity ? initials(identity.displayName) : "JD"}</span>
+          <span className="user-avatar">JD</span>
           <span>
-            <strong>{identity ? identity.displayName : "Jordan Davis"}</strong>
+            <strong>Jordan Davis</strong>
             <small>
-              {identity ? `${identity.clientId} · ${shortAddress(identity.address)}` : "Client · CH-8042"}
+              Client · CH-8042
             </small>
           </span>
           <ChevronDown size={16} />
@@ -340,13 +376,4 @@ export default function CustomerDashboard({
       )}
     </div>
   )
-}
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((part) => part[0] ?? "")
-    .join("")
-    .slice(0, 2)
-    .toUpperCase()
 }

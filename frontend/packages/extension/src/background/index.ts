@@ -6,6 +6,7 @@ import { isBridgeRequest } from '../ui/services/bridge-protocol';
 import { LocalAuditLog, loadState } from './bridge-state';
 import { DappRouter } from './dapp/DappRouter';
 import { AllowlistApprover, DEFAULT_ALLOWED_ORIGINS, FIRST_PARTY_ORIGINS } from './dapp/AllowlistApprover';
+import { readForSite } from './site/SiteReader';
 import { SignInBroker } from './signin/SignInBroker';
 import { isSignInMessage } from '../signin/protocol';
 import { DeviceKeyWrapper, NetworkKeyring } from './dapp/NetworkKeyring';
@@ -156,6 +157,7 @@ const dapps = new DappRouter({
   permissions: new ChromeStore(chrome.storage.local),
   approver: new AllowlistApprover(DEFAULT_ALLOWED_ORIGINS),
   signIn: (origin) => signIns.request(origin),
+  siteRead: (method) => readForSite(bridge, method),
   firstPartyOrigins: FIRST_PARTY_ORIGINS,
   walletReady: async () => {
     const state = await loadState(sessionStore);

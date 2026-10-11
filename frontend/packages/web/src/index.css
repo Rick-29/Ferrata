@@ -3556,3 +3556,208 @@ h3 {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* ---------- Live dashboard: the real wallet, read from the Ferrata extension ---------- */
+
+.live-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+}
+
+.live-alert {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  border-color: var(--critical);
+  background: var(--critical-soft);
+  color: var(--text);
+}
+
+.live-alert > svg {
+  flex: none;
+  color: var(--critical);
+}
+
+.live-alert strong {
+  display: block;
+  font-size: 12px;
+}
+
+.live-alert p,
+.live-alert li {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.live-alert ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+
+.live-assets {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.live-asset {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.live-asset strong {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-asset small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.live-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.live-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.live-row:last-child {
+  border-bottom: 0;
+}
+
+.live-icon {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 9px;
+  color: var(--text-muted);
+  background: var(--surface-soft);
+}
+
+.live-icon.in {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.live-icon.out {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.live-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.live-main strong {
+  font-size: 11px;
+}
+
+.live-main small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-tags {
+  display: flex;
+  gap: 6px;
+}
+
+.live-amount {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.live-amount.in {
+  color: var(--green);
+}
+
+.live-amount a {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.live-link {
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.live-note,
+.live-footnote {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.live-footnote {
+  text-align: right;
+}
+
+.live-fingerprint {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: var(--surface-soft);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 2px;
+}
+
+.status-list .live-off i {
+  background: var(--critical);
+}
+
+.live-status {
+  justify-items: start;
+}
+
+.live-status > svg {
+  color: var(--brand);
+}
+
+@media (max-width: 720px) {
+  .live-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .live-tags {
+    display: none;
+  }
+}

@@ -86,3 +86,95 @@ export async function signInWithFerrata(): Promise<FerrataIdentity> {
 export function shortAddress(address: string): string {
   return address.length > 12 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address
 }
+
+// ---------- Live dashboard: read-only wallet data answered by the extension ----------
+// Shapes of `extension/src/background/site/SiteReader.ts`. The extension keeps the keys and the
+// Swissquote session; the website only ever receives these already formatted values.
+
+export type RiskBand = "Low" | "Medium" | "High" | "Critical"
+
+export interface WalletBalance {
+  readonly symbol: string
+  readonly decimals: number
+  readonly amount: string
+  readonly formatted: string
+}
+
+export interface LiveWallet {
+  readonly address: string
+  readonly network: string
+  readonly balances: readonly WalletBalance[]
+}
+
+export interface ActivityRow {
+  readonly key: string
+  readonly kind: string
+  readonly label: string
+  readonly network: string
+  readonly timestamp: number
+  readonly amount: string | null
+  readonly direction: "in" | "out" | "none"
+  readonly counterparty: string | null
+  readonly riskLevel: RiskBand | null
+  readonly reviewedRisk: RiskBand | null
+  readonly flags: readonly unknown[]
+  readonly hasReceipt: boolean
+  readonly explorerUrl: string | null
+}
+
+export interface TestnetWallet {
+  readonly network: string
+  readonly label: string
+  readonly symbol: string
+  readonly address: string
+  readonly balance: string | null
+  readonly explorerUrl: string
+}
+
+export interface RecoveryAlert {
+  readonly id: string
+  readonly unlockAt: number
+  readonly reasons: readonly string[]
+  readonly newKeyFingerprint: string
+  readonly contested: boolean
+}
+
+export interface RecoveryStatus {
+  readonly phoneFingerprint: string | null
+  readonly alerts: readonly RecoveryAlert[]
+}
+
+export type ReadError =
+  /** The wallet auto-locked (15 min): unlock it in the Ferrata window. */
+  | "locked"
+  /** No Swissquote session in the extension any more. */
+  | "signed_out"
+  | "not_installed"
+  | "failed"
+
+export class FerrataReadError extends Error {
+  constructor(readonly reason: ReadError, message: string) {
+    super(message)
+  }
+}
+
+interface ReadMethods {
+  sqw_wallet: LiveWallet
+  sqw_activity: readonly ActivityRow[]
+  sqw_testnet: readonly TestnetWallet[]
+  sqw_recovery: RecoveryStatus
+}
+
+/** One read-only call to the extension (first-party website only). */
+export async function readFerrata<M extends keyof ReadMethods>(method: M): Promise<ReadMethods[M]> {
+  const provider = await findFerrata()
+  if (provider === null) throw new FerrataReadError("not_installed", "The Ferrata extension was not found in this browser.")
+  try {
+    return (await provider.request({ method })) as ReadMethods[M]
+  } catch (error) {
+    const { code, message } = error as { code?: number; message?: string }
+    if (code === 4100 && message === "locked") throw new FerrataReadError("locked", "The wallet is locked.")
+    if (code === 4100) throw new FerrataReadError("signed_out", "Sign in again with Ferrata.")
+    throw new FerrataReadError("failed", message ?? "The extension could not answer.")
+  }
+}

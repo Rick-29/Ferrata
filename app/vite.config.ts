@@ -37,6 +37,8 @@ react(),
       watch: {
         ignored: [
           '**/.figma/**',
+          // The Rust side: its build output is locked while cargo writes it (EBUSY on Windows).
+          '**/src-tauri/**',
 ],
       },
     },

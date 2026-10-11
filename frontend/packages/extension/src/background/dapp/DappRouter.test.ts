@@ -26,7 +26,7 @@ class TestWrapper implements KeyWrapper {
 const UNISWAP = 'https://app.uniswap.org';
 const EVIL = 'https://evil.example';
 
-function setup(options: { ready?: boolean; approve?: boolean; rpc?: (body: unknown) => unknown } = {}) {
+function setup(options: { ready?: boolean; approve?: boolean; rpc?: (body: unknown) => unknown; siteReads?: string[] } = {}) {
   const keyStore = new MemoryStore();
   const keyring = new NetworkKeyring(keyStore, new TestWrapper());
   const rpcCalls: unknown[] = [];
@@ -48,6 +48,11 @@ function setup(options: { ready?: boolean; approve?: boolean; rpc?: (body: unkno
     permissions: new MemoryStore(),
     approver,
     walletReady: async () => options.ready ?? true,
+    firstPartyOrigins: ['http://localhost:5174'],
+    siteRead: async (method) => {
+      options.siteReads?.push(method);
+      return { ok: true, result: { method } };
+    },
   });
   return { router, keyring, keyStore, rpcCalls, approvals };
 }
@@ -158,5 +163,17 @@ describe('NetworkKeyring', () => {
   it('keeps the same address across calls', async () => {
     const { keyring } = setup();
     expect(await keyring.ensure()).toBe(await keyring.ensure());
+  });
+});
+
+describe('DappRouter website reads', () => {
+  it("answers the dashboard reads to Ferrata's own website only", async () => {
+    const siteReads: string[] = [];
+    const { router, rpcCalls } = setup({ siteReads });
+    expect(await router.handle('http://localhost:5174', 'sqw_wallet', [])).toEqual({ ok: true, result: { method: 'sqw_wallet' } });
+    expect((await router.handle(UNISWAP, 'sqw_wallet', [])).ok).toBe(false);
+    expect((await router.handle(EVIL, 'sqw_activity', [])).ok).toBe(false);
+    expect(siteReads).toEqual(['sqw_wallet']);
+    expect(rpcCalls).toHaveLength(0);
   });
 });
