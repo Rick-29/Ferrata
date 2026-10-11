@@ -1,7 +1,7 @@
 import type { Reason } from '@sqw/types/Reason';
 import { css, html, type TemplateResult } from 'lit';
 import { customElement } from 'lit/decorators.js';
-import { REASON_LABELS } from '../../core/risk-copy';
+import { REASON_EXPLAINERS, REASON_LABELS } from '../../core/risk-copy';
 import { textStyles } from '../../core/styles';
 import { Widget } from '../../core/Widget';
 import '../consent-checkbox/ConsentCheckbox';
@@ -74,6 +74,7 @@ export class RiskWarning extends Widget<RiskWarningData> {
       }
       li::before {
         content: '';
+        flex: none;
         width: 4px;
         height: 4px;
         border-radius: 50%;
@@ -94,7 +95,11 @@ export class RiskWarning extends Widget<RiskWarningData> {
         </div>
         <p>Cette transaction présente des signaux inhabituels. Vérifiez-la avant de continuer :</p>
         <ul>
-          ${data.reasons.map((r) => html`<li>${REASON_LABELS[r.code] ?? r.message}</li>`)}
+          ${data.reasons.map(
+            (r) => html`<li>
+              <span><strong>${REASON_LABELS[r.code] ?? r.message}</strong>${REASON_EXPLAINERS[r.code] ? html` — ${REASON_EXPLAINERS[r.code].why}` : ''}</span>
+            </li>`,
+          )}
         </ul>
         <p class="muted">
           Swissquote ne bloque pas cette transaction. Si vous la confirmez, elle sera exécutée et ne pourra pas être

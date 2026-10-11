@@ -9,6 +9,7 @@ pub mod dev;
 pub mod error;
 pub mod log;
 pub mod ownership;
+pub mod pairing;
 pub mod reconcile;
 pub mod recovery;
 pub mod reports;
@@ -37,6 +38,7 @@ pub fn router(state: SharedState) -> Router {
         .merge(assess::routes())
         .merge(log::routes())
         .merge(recovery::routes())
+        .merge(pairing::routes())
         .merge(reconcile::routes())
         .merge(review::routes())
         .merge(reports::routes())

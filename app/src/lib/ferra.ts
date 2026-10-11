@@ -25,7 +25,7 @@ const listen = <T,>(
 
 export type RiskBand = "Low" | "Medium" | "High" | "Critical"
 
-export type TxKind = "account_created" | "faucet" | "cosigned" | "escape_start" | "escape_cancel" | "escape_exit" | "owner_rotation" | "anchor" | "flag" | "external" | "settings_changed" | "intent" | "intent_outcome" | "address_report"
+export type TxKind = "account_created" | "faucet" | "cosigned" | "escape_start" | "escape_cancel" | "escape_exit" | "owner_rotation" | "anchor" | "flag" | "external" | "settings_changed" | "intent" | "intent_outcome" | "address_report" | "recovery_key_set"
 
 export type FlagSource = "policy" | "reconciliation" | "review" | "integrity" | "model" | "behaviour" | "provenance" | "manual" | "report"
 

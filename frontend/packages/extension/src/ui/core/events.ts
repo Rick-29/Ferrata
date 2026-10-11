@@ -18,6 +18,7 @@ export interface WidgetEvents {
   confirm: undefined;
   reject: undefined;
   done: undefined;
+  'explainer-closed': undefined;
 }
 
 export type WidgetEventName = keyof WidgetEvents;

@@ -13,6 +13,8 @@ import '../ui/screens/activity/ActivityScreen';
 import '../ui/screens/confirm/ConfirmScreen';
 import '../ui/screens/home/HomeScreen';
 import '../ui/screens/onboarding/OnboardingScreen';
+import '../ui/screens/recovery/RecoveryPhoneScreen';
+import '../ui/screens/recovery/RecoveryStartScreen';
 import '../ui/screens/send/SendScreen';
 import '../ui/screens/settings/SettingsScreen';
 import { FakeBridge } from '../ui/services/FakeBridge';
@@ -33,6 +35,8 @@ const router = new Router(
     confirm: ({ preview, asset }) => html`<sq-confirm-screen .preview=${preview} .asset=${asset}></sq-confirm-screen>`,
     activity: () => html`<sq-activity-screen></sq-activity-screen>`,
     settings: () => html`<sq-settings-screen></sq-settings-screen>`,
+    'recovery-phone': () => html`<sq-recovery-phone-screen></sq-recovery-phone-screen>`,
+    'recovery-start': () => html`<sq-recovery-start-screen></sq-recovery-start-screen>`,
   },
   resumed.ok ? 'home' : 'onboarding',
 );

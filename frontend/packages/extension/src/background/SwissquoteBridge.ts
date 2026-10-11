@@ -23,7 +23,15 @@ import type {
   TestnetSendOutcome,
   TestnetWallet,
   UiBridge,
+  PairingProgress,
+  PhonePairing,
+  RecoveryPhoneStatus,
+  RecoveryAlert,
+  RecoveryView,
 } from '../ui/services/UiBridge';
+import { pairingQr, recoveryQr } from '../recovery/qr';
+import { keyFingerprint } from './recovery/fingerprint';
+import type { RecoveryState } from '@sqw/types/RecoveryState';
 import type { TestnetSender } from './testnet/TestnetSender';
 import type { TestnetWallets } from './testnet/TestnetWallets';
 import { verifyOwner } from './verifyOwner';
@@ -202,6 +210,164 @@ export class SwissquoteBridge implements UiBridge {
     });
   }
 
+  // ----- recovery phone (P3): pairing relay + owner-signed registration on the Ferra chain -----
+
+  getRecoveryPhone(): UiResult<RecoveryPhoneStatus> {
+    return this.#whenUnlocked(async () => {
+      const { wallet } = await this.#load();
+      if (!wallet) return err(NO_WALLET);
+      const current = await this.#deps.api.recoveryKey(wallet.address);
+      if (!current.ok) return this.#fail(current.error);
+      return ok({ fingerprint: current.value.key ? keyFingerprint(current.value.key) : null });
+    });
+  }
+
+  startPhonePairing(): UiResult<PhonePairing> {
+    return this.#whenUnlocked(async () => {
+      const { wallet } = await this.#load();
+      if (!wallet) return err(NO_WALLET);
+      const pairing = await this.#deps.api.startPairing(wallet.address);
+      if (!pairing.ok) return this.#fail(pairing.error);
+      return ok({ pairingId: pairing.value.id, qr: pairingQr(pairing.value.id, wallet.address), expiresAt: pairing.value.expires_at });
+    });
+  }
+
+  /** The fingerprint is computed here from the key itself, never taken from the server. */
+  pollPhonePairing(pairingId: string): UiResult<PairingProgress> {
+    return this.#whenUnlocked(async () => {
+      const pairing = await this.#deps.api.pairing(pairingId);
+      if (!pairing.ok) return this.#fail(pairing.error);
+      const { key, device_label } = pairing.value;
+      return ok(key ? { status: 'answered', fingerprint: keyFingerprint(key), deviceLabel: device_label } : { status: 'waiting' });
+    });
+  }
+
+  /** Not serialised (the passkey takes seconds). The owner's passkey signs the phone's key. */
+  async confirmPhonePairing(pairingId: string): UiResult<RecoveryPhoneStatus> {
+    const gate = await this.#whenUnlocked(async () => ok(undefined));
+    if (!gate.ok) return gate;
+    const { wallet } = await this.#serial(() => this.#load());
+    if (!wallet) return err(NO_WALLET);
+    const { api, passkey } = this.#deps;
+    const pairing = await api.pairing(pairingId);
+    if (!pairing.ok) return this.#fail(pairing.error);
+    const key = pairing.value.key;
+    if (!key || pairing.value.address.toLowerCase() !== wallet.address.toLowerCase()) return err(uiError('SQ_CONFLICT'));
+    const hash = await api.recoveryKeyHash(wallet.address, key);
+    if (!hash.ok) return this.#fail(hash.error);
+    const signature = await passkey.sign(wallet.passkeyName, hash.value.hash);
+    if (!signature.ok) return this.#fail(signature.error);
+    const saved = await api.setRecoveryKey(wallet.address, { key, signature: signature.value });
+    if (!saved.ok) return this.#fail(saved.error);
+    return ok({ fingerprint: keyFingerprint(key) });
+  }
+
+  // ----- recovery (P3): new device after a lost passkey; alert + cancel on the existing one -----
+
+  async listRecoverableWallets(): UiResult<readonly string[]> {
+    const { session } = await this.#serial(() => this.#load());
+    if (!session) return err(UNAUTHORIZED);
+    const wallets = await this.#deps.api.recoverableWallets();
+    return wallets.ok ? ok(wallets.value) : this.#fail(wallets.error);
+  }
+
+  /**
+   * Not serialised (the passkey takes seconds). Creates this device's new passkey, then prepares the
+   * recovery: the phone signs it and passes the KYC; nothing moves before the timelock is over.
+   */
+  async startRecovery(address: string): UiResult<RecoveryView> {
+    const { session } = await this.#serial(() => this.#load());
+    if (!session) return err(UNAUTHORIZED);
+    const { api, passkey } = this.#deps;
+    const passkeyName = (this.#deps.passkeyNameFor ?? defaultPasskeyName)(session.client_id);
+    // This device still holds the passkey: unlock instead, and never overwrite a working one.
+    if (await passkey.has(passkeyName)) return err(uiError('RECOVERY_PASSKEY_PRESENT'));
+    const owner = passkey.replace ? await passkey.replace(passkeyName) : await passkey.create(passkeyName);
+    if (!owner.ok) return this.#fail(owner.error);
+    const prepared = await api.prepareRecovery({ address, new_owner: owner.value });
+    if (!prepared.ok) return this.#fail(prepared.error);
+    await this.#serial(() => this.#patch((s) => ({ ...s, recovery: { id: prepared.value.id, address, passkeyName, owner: owner.value } })));
+    return ok(recoveryView(prepared.value, this.#nowSecs()));
+  }
+
+  async getRecovery(): UiResult<RecoveryView | null> {
+    const { session, recovery } = await this.#serial(() => this.#load());
+    if (!session) return err(UNAUTHORIZED);
+    if (!recovery) return ok(null);
+    const current = await this.#deps.api.recovery(recovery.id);
+    if (!current.ok) return this.#fail(current.error);
+    return ok(recoveryView(current.value, this.#nowSecs()));
+  }
+
+  /** After the timelock: the phone's signature and Swissquote's attestation rotate the owner on-chain. */
+  async finishRecovery(): UiResult<AccountView> {
+    const { session, recovery } = await this.#serial(() => this.#load());
+    if (!session) return err(UNAUTHORIZED);
+    if (!recovery) return err(uiError('SQ_NOT_FOUND'));
+    const { api } = this.#deps;
+    const done = await api.executeRecovery(recovery.id);
+    if (!done.ok) return done.error.status === 409 ? err(uiError('RECOVERY_NOT_READY')) : this.#fail(done.error);
+    if (done.value.status.state !== 'completed') return err(uiError('RECOVERY_NOT_READY'));
+    const info = await api.chainInfo();
+    if (!info.ok) return this.#fail(info.error);
+    const wallet: WalletRef = { passkeyName: recovery.passkeyName, owner: recovery.owner, address: recovery.address, chainId: info.value.chain_id, tokens: info.value.tokens };
+    const now = this.#now();
+    await this.#serial(() =>
+      this.#patch((s) => {
+        const { recovery: _done, ...rest } = s;
+        return { ...rest, wallet, pending: {}, unlockedUntil: now + this.#lockAfter(), provenAt: now };
+      }),
+    );
+    return this.getWallet();
+  }
+
+  async abandonRecovery(): UiResult<void> {
+    await this.#serial(() =>
+      this.#patch((s) => {
+        const { recovery: _gone, ...rest } = s;
+        return rest;
+      }),
+    );
+    return ok(undefined);
+  }
+
+  getRecoveryAlerts(): UiResult<readonly RecoveryAlert[]> {
+    return this.#whenUnlocked(async () => {
+      const { wallet } = await this.#load();
+      if (!wallet) return err(NO_WALLET);
+      const all = await this.#deps.api.recoveries(wallet.address);
+      if (!all.ok) return this.#fail(all.error);
+      return ok(
+        all.value.flatMap((r): RecoveryAlert[] =>
+          r.status.state === 'pending'
+            ? [{ id: r.id, unlockAt: r.status.unlock_at, reasons: r.risk?.reasons ?? [], newKeyFingerprint: keyFingerprint(r.new_owner), contested: r.contested }]
+            : [],
+        ),
+      );
+    });
+  }
+
+  /** Not serialised (the passkey takes seconds). "Ce n'est pas moi": the current passkey cancels. */
+  async cancelRecovery(id: string): UiResult<void> {
+    const gate = await this.#whenUnlocked(async () => ok(undefined));
+    if (!gate.ok) return gate;
+    const { wallet } = await this.#serial(() => this.#load());
+    if (!wallet) return err(NO_WALLET);
+    const { api, passkey } = this.#deps;
+    const current = await api.recovery(id);
+    if (!current.ok) return this.#fail(current.error);
+    if (current.value.address.toLowerCase() !== wallet.address.toLowerCase()) return err(uiError('SQ_NOT_FOUND'));
+    if (current.value.contested) return err(uiError('RECOVERY_CONTESTED'));
+    const signature = await passkey.sign(wallet.passkeyName, current.value.cancel_hash);
+    if (!signature.ok) return this.#fail(signature.error);
+    const cancelled = await api.cancelRecovery(id, signature.value);
+    return cancelled.ok ? ok(undefined) : this.#fail(cancelled.error);
+  }
+
+  #nowSecs(): number {
+    return Math.floor(this.#now() / 1000);
+  }
+
   /** Not serialised: the faucet can take tens of seconds and touches no bridge state. */
   async requestAirdrop(network: TestnetNetwork): UiResult<AirdropOutcome> {
     const gate = await this.#whenUnlocked(async () => ok(undefined));
@@ -310,6 +476,8 @@ export class SwissquoteBridge implements UiBridge {
 
     // Already co-signed earlier (the submit failed): resume at submit, never co-sign twice.
     if (pending.cosignature && pending.receipt) return this.#submit(wallet, pending);
+    // Self-custody: the user chose to go ahead without Swissquote's analysis; the passkey suffices.
+    if (options.withoutAnalysis) return this.#submit(wallet, pending, { withoutAnalysis: true });
 
     let stepUp: OwnerSignature | null = null;
     if (options.stepUp) {
@@ -321,6 +489,7 @@ export class SwissquoteBridge implements UiBridge {
 
     // Read the audit-log position now: anything logged since the preview has moved it.
     const position = await this.#deps.api.log(wallet.address);
+    if (!position.ok && isUnavailable(position.error)) return err(uiError('SQ_ANALYSIS_UNAVAILABLE', true));
     if (!position.ok) return this.#fail(position.error);
 
     const cosigned = await this.#deps.api.cosign({
@@ -332,6 +501,7 @@ export class SwissquoteBridge implements UiBridge {
       accepted_risk: options.acceptedRisk,
       account: null,
     });
+    if (!cosigned.ok && isUnavailable(cosigned.error)) return err(uiError('SQ_ANALYSIS_UNAVAILABLE', true));
     if (!cosigned.ok) return this.#fail(cosigned.error, { stepUpSent: stepUp !== null });
     // Every outcome is a signed log entry: keep our copy.
     await this.#deps.auditLog.append(wallet.address, cosigned.value.entry);
@@ -355,19 +525,19 @@ export class SwissquoteBridge implements UiBridge {
     }
   }
 
-  async #submit(wallet: WalletRef, pending: PendingSend): UiResult<SendOutcome> {
-    if (!pending.cosignature || !pending.receipt) return err(uiError('SQ_BAD_REQUEST'));
+  async #submit(wallet: WalletRef, pending: PendingSend, mode: { withoutAnalysis?: boolean } = {}): UiResult<SendOutcome> {
+    if (!mode.withoutAnalysis && (!pending.cosignature || !pending.receipt)) return err(uiError('SQ_BAD_REQUEST'));
     const ownerSig = await this.#deps.passkey.sign(wallet.passkeyName, pending.userOpHash);
     if (!ownerSig.ok) return this.#fail(ownerSig.error);
     const submitted = await this.#deps.api.submit({
       tx: pending.tx,
       nonce: pending.nonce,
       owner_signature: ownerSig.value,
-      cosignature: pending.cosignature,
+      cosignature: pending.cosignature ?? null,
     });
     if (!submitted.ok) return this.#fail(submitted.error);
     await this.#dropPending(pending.id);
-    return ok({ kind: 'confirmed', txHash: submitted.value.tx_hash, receipt: pending.receipt });
+    return ok({ kind: 'confirmed', txHash: submitted.value.tx_hash, receipt: pending.receipt ?? null });
   }
 
   async #cancelSend(previewId: string): UiResult<void> {
@@ -509,6 +679,36 @@ export class SwissquoteBridge implements UiBridge {
     if (unauthorized && options.stepUpSent) return err(BAD_STEP_UP);
     if (unauthorized) await this.#update(EMPTY_STATE);
     return err(toUiError(error));
+  }
+}
+
+/** The analysis could not be reached (down, offline, 5xx): self-custody lets the user go ahead. */
+function isUnavailable(error: SdkError): boolean {
+  return error.code === 'UNREACHABLE' || (error.status !== undefined && error.status >= 500);
+}
+
+/** What the new device shows: the server's recovery, in the UI's words. */
+function recoveryView(r: RecoveryState, nowSecs: number): RecoveryView {
+  const base = {
+    id: r.id,
+    address: r.address,
+    qr: recoveryQr(r.id),
+    newKeyFingerprint: keyFingerprint(r.new_owner),
+    reasons: r.risk?.reasons ?? [],
+    band: r.risk?.band ?? null,
+    contested: r.contested,
+  };
+  switch (r.status.state) {
+    case 'prepared':
+      return { ...base, phase: r.status.expires_at < nowSecs ? 'expired' : 'waiting_phone', unlockAt: null, detail: null };
+    case 'pending':
+      return { ...base, phase: 'pending', unlockAt: r.status.unlock_at, detail: null };
+    case 'rejected':
+      return { ...base, phase: 'rejected', unlockAt: null, detail: r.status.reason };
+    case 'cancelled':
+      return { ...base, phase: 'cancelled', unlockAt: null, detail: null };
+    case 'completed':
+      return { ...base, phase: 'completed', unlockAt: null, detail: null };
   }
 }
 

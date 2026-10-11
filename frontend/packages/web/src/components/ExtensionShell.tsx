@@ -50,7 +50,7 @@ const tierLabels: Record<RiskTier, string> = {
   low: "Low risk",
   moderate: "Moderate risk",
   high: "High risk",
-  refused: "Not signed",
+  sanctioned: "Sanctioned address",
 }
 
 export default function ExtensionShell({
@@ -241,7 +241,7 @@ function ExtensionHome({
         <div className="balance-topline">
           <span>Total balance</span>
           <Badge tone="low">
-            <ShieldCheck size={12} /> Dual signature
+            <ShieldCheck size={12} /> Self-custody
           </Badge>
         </div>
         <strong>$184,392.60</strong>
@@ -560,9 +560,9 @@ function ReviewScreen({
   const scenario = getScenario(scenarioId)
   const report = getRiskReport(scenarioId, personaId)
   const persona = getPersona(personaId)
-  const needsAck = report.tier === "moderate" || report.tier === "high"
+  const needsAck = report.tier !== "low"
   const tierIcon =
-    report.tier === "refused" ? (
+    report.tier === "sanctioned" ? (
       <Landmark />
     ) : report.tier === "high" ? (
       <AlertOctagon />
@@ -580,24 +580,16 @@ function ReviewScreen({
           <h2>{tierLabels[report.tier]}</h2>
         </div>
         <div className="score-ring">
-          {report.tier === "refused" ? (
-            <strong>—</strong>
-          ) : (
-            <>
-              <strong>{report.score}</strong>
-              <small>/100</small>
-            </>
-          )}
+          <strong>{report.score}</strong>
+          <small>/100</small>
         </div>
       </div>
       <Card className="risk-summary">
         <strong>{report.headline}</strong>
         <p>{scenario.summary}</p>
-        {report.tier !== "refused" && (
-          <div className="risk-meter">
-            <span style={{ width: `${report.score}%` }} />
-          </div>
-        )}
+        <div className="risk-meter">
+          <span style={{ width: `${report.score}%` }} />
+        </div>
       </Card>
       {scenario.reasons.length > 0 && (
         <div className="report-section">
@@ -632,8 +624,8 @@ function ReviewScreen({
         <div>
           <span>Policy status</span>
           <strong>
-            {report.tier === "refused"
-              ? "Not signed by Swissquote"
+            {report.tier === "sanctioned"
+              ? "Strongest warning: you decide"
               : report.tier === "low"
                 ? "Within limits"
                 : "Exception required"}
@@ -655,17 +647,6 @@ function ReviewScreen({
           </span>
         </label>
       )}
-      {report.tier === "refused" ? (
-        <div className="refused-actions">
-          <Button size="lg" className="full-width" onClick={onCancel}>
-            Return to wallet
-          </Button>
-          <p>
-            <Info size={14} /> This is the only case where Swissquote does not
-            sign: a regulatory obligation, not a risk score.
-          </p>
-        </div>
-      ) : (
         <div className="screen-actions stacked">
           <Button
             size="lg"
@@ -681,7 +662,6 @@ function ReviewScreen({
             Cancel transaction
           </Button>
         </div>
-      )}
       <p className="legal-copy">
         {APP_NAME} analysis is indicative: it does not guarantee the detection
         of fraudulent transactions and does not block them. You remain the
@@ -707,8 +687,8 @@ function PasskeyScreen({ onConfirm }: { onConfirm: () => void }) {
       <span className="eyebrow">FINAL APPROVAL</span>
       <h2>Confirm with your passkey</h2>
       <p className="screen-lede">
-        Your approval authorises this action. Swissquote then adds its signature under
-        your {APP_NAME} policy.
+        Your passkey alone authorises this action. Swissquote has analysed it and
+        records its analysis in your audit trail.
       </p>
       <div className="signing-steps">
         <div className="active">
@@ -726,7 +706,7 @@ function PasskeyScreen({ onConfirm }: { onConfirm: () => void }) {
             <ShieldCheck size={17} />
           </span>
           <div>
-            <strong>Swissquote signature</strong>
+            <strong>Swissquote analysis</strong>
             <small>Policy confirmation</small>
           </div>
           <Badge>Next</Badge>
@@ -774,7 +754,8 @@ function SuccessScreen({
       <Badge tone="low">SIGNED BY SWISSQUOTE</Badge>
       <h2>Transaction submitted</h2>
       <p className="screen-lede">
-        Your approval was signed by Swissquote too and sent to the network.
+        Your passkey authorised it and it was sent to the network. Swissquote's
+        analysis is in your audit trail.
       </p>
       <Card className="receipt-card">
         <div className="receipt-row">
@@ -846,7 +827,7 @@ function ActivityScreen() {
         {items.map((item) => (
           <button className="activity-item" key={item.id}>
             <span className={`activity-icon badge-${item.tier}`}>
-              {item.tier === "refused" ? (
+              {item.tier === "sanctioned" ? (
                 <Landmark size={17} />
               ) : item.amount.startsWith("+") ? (
                 <ArrowDownLeft size={17} />

@@ -9,6 +9,11 @@ export interface PasskeySigner {
   sign(name: string, hash: string): Promise<Result<OwnerSignature, SdkError>>;
   /** True when this device already holds the key named `name` (then sign-in unlocks instead of creating). */
   has(name: string): Promise<boolean>;
+  /**
+   * Recovery: a brand-new key under `name`, even if one is recorded. Absent (dev keyring, which is
+   * deterministic per name): the bridge falls back to `create`.
+   */
+  replace?(name: string): Promise<Result<OwnerKey, SdkError>>;
 }
 
 /**

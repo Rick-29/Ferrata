@@ -4,7 +4,7 @@ export type JourneyStep = "landing" | "signin" | "passkey" | "profile" | "dashbo
 
 export type PersonaId = "holder" | "active" | "frequency"
 
-export type RiskTier = "low" | "moderate" | "high" | "refused"
+export type RiskTier = "low" | "moderate" | "high" | "sanctioned"
 
 export type ScenarioId = "routine" | "exposure" | "mismatch" | "regulatory"
 

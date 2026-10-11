@@ -299,6 +299,7 @@ pub(super) fn kind_tag(k: TxKind) -> &'static str {
         TxKind::Flag => "flag",
         TxKind::External => "external",
         TxKind::SettingsChanged => "settings_changed",
+        TxKind::RecoveryKeySet => "recovery_key_set",
         TxKind::Intent => "intent",
         TxKind::IntentOutcome => "intent_outcome",
         TxKind::AddressReport => "address_report",

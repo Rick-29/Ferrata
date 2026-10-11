@@ -65,7 +65,7 @@ pub fn diff(address: Address, txs: &[ChainTx], log: &AuditLog) -> (Vec<Finding>,
                     ));
                 }
             }
-            TxKind::AccountCreated | TxKind::Faucet | TxKind::EscapeCancel | TxKind::Flag | TxKind::External | TxKind::SettingsChanged | TxKind::Intent | TxKind::IntentOutcome | TxKind::AddressReport => {}
+            TxKind::AccountCreated | TxKind::Faucet | TxKind::EscapeCancel | TxKind::Flag | TxKind::External | TxKind::SettingsChanged | TxKind::RecoveryKeySet | TxKind::Intent | TxKind::IntentOutcome | TxKind::AddressReport => {}
         }
     }
 

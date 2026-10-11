@@ -56,6 +56,15 @@ export class SettingsScreen extends Screen {
           @retry=${this.#load}
         ></sq-settings-form>
       </section>
+      <section>
+        <span class="eyebrow">Récupération</span>
+        <p class="muted">Votre téléphone de secours permet de récupérer le wallet si vous perdez votre passkey.</p>
+        <div>
+          <sq-button variant="secondary" ?disabled=${this.busy} @click=${() => this.router.go('recovery-phone', undefined)}
+            >Téléphone de secours</sq-button
+          >
+        </div>
+      </section>
       ${this.address
         ? html`<section>
             <span class="eyebrow">Adresse du compte</span>

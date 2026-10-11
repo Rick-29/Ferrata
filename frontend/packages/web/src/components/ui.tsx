@@ -50,7 +50,7 @@ export function Badge({
   tone = "neutral",
 }: {
   children: ReactNode
-  tone?: "neutral" | "low" | "moderate" | "high" | "refused" | "brand"
+  tone?: "neutral" | "low" | "moderate" | "high" | "sanctioned" | "brand"
 }) {
   return <span className={`badge badge-${tone}`}>{children}</span>
 }

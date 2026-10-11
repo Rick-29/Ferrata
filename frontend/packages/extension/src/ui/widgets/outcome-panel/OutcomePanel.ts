@@ -1,4 +1,4 @@
-import { css, html, type TemplateResult } from 'lit';
+import { css, html, nothing, type TemplateResult } from 'lit';
 import { customElement } from 'lit/decorators.js';
 import { shortAddress } from '../../core/format';
 import { surfaceStyles, textStyles } from '../../core/styles';
@@ -119,10 +119,14 @@ export class OutcomePanel extends Widget<FinalOutcome> {
     switch (outcome.kind) {
       case 'confirmed':
         return html`
-          <h1>Signée par Swissquote</h1>
-          <p class="muted">La transaction est exécutée et inscrite au journal d'audit.</p>
+          <h1>${outcome.receipt ? 'Analysée par Swissquote' : 'Envoyée avec votre seule passkey'}</h1>
+          <p class="muted">
+            ${outcome.receipt
+              ? "La transaction est exécutée et l'analyse de Swissquote est inscrite au journal d'audit."
+              : "La transaction est exécutée sans l'analyse de Swissquote : votre passkey suffit."}
+          </p>
           <div class="details">
-            <span class="receipt">Reçu n° ${outcome.receipt.seq} · signé par Swissquote</span>
+            ${outcome.receipt ? html`<span class="receipt">Reçu d'analyse n° ${outcome.receipt.seq} · Swissquote</span>` : nothing}
             <span class="mono muted">Tx ${shortAddress(outcome.txHash)}</span>
           </div>
         `;

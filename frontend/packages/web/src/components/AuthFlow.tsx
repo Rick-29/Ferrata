@@ -58,10 +58,10 @@ export default function AuthFlow({
         <div className="auth-story">
           <Brand />
           <Badge tone="brand">SWISSQUOTE SIGN-IN</Badge>
-          <h1>Swissquote identity. {APP_NAME} dual signature.</h1>
+          <h1>Swissquote identity. Your keys, your funds.</h1>
           <p>
-            Your funds remain yours. Swissquote evaluates and adds its signature to sensitive
-            actions, but can never move assets without you.
+            Your funds remain yours: your passkey alone authorises a transaction.
+            Swissquote analyses each one and warns you, but can never move or block your assets.
           </p>
           <div className="auth-benefits">
             <span>
@@ -71,7 +71,7 @@ export default function AuthFlow({
               <Fingerprint /> Passkey-backed approval
             </span>
             <span>
-              <LockKeyhole /> Auditable dual signature
+              <LockKeyhole /> Auditable risk analysis
             </span>
           </div>
         </div>

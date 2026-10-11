@@ -31,7 +31,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "node --no-warnings --test src/identity/mrz.test.mjs"
+    "test": "node --no-warnings --test src/identity/mrz.test.mjs src/recovery/links.test.ts"
   },
   "private": true
 }

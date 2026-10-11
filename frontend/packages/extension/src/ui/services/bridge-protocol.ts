@@ -28,6 +28,17 @@ const METHODS: ReadonlySet<string> = new Set<BridgeMethod>([
   'getTestnetWallets',
   'requestAirdrop',
   'sendTestnet',
+  'getRecoveryPhone',
+  'startPhonePairing',
+  'pollPhonePairing',
+  'confirmPhonePairing',
+  'listRecoverableWallets',
+  'startRecovery',
+  'getRecovery',
+  'finishRecovery',
+  'abandonRecovery',
+  'getRecoveryAlerts',
+  'cancelRecovery',
 ]);
 
 export function isBridgeRequest(message: unknown): message is BridgeRequest {

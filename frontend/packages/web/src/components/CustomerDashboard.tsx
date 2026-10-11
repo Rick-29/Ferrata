@@ -166,7 +166,7 @@ export default function CustomerDashboard({
               <span className="eyebrow">{APP_NAME.toUpperCase()} CONTROL CENTER</span>
               <h1>Good morning, Jordan.</h1>
               <p>
-                Dual signature and risk analysis are active on your account.
+                Self-custody and Swissquote risk analysis are active on your account.
               </p>
             </div>
             <Button variant="secondary" icon={<WalletCards size={17} />}>
@@ -228,12 +228,12 @@ export default function CustomerDashboard({
                   <span className="metric-icon">
                     <ShieldCheck size={19} />
                   </span>
-                  <span className="metric-label">Dual signature status</span>
+                  <span className="metric-label">Protection status</span>
                   <strong className="status-title">All systems active</strong>
                   <div className="status-list">
                     <span>
                       <i />
-                      Swissquote signature
+                      Swissquote risk analysis
                     </span>
                     <span>
                       <i />

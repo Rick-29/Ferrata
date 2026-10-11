@@ -50,6 +50,10 @@ pub enum ChainError {
     MissingCosignature,
     #[error("co-signature invalid")]
     BadCosignature,
+    #[error("no recovery key registered for this account")]
+    NoRecoveryKey,
+    #[error("recovery key signature invalid")]
+    BadRecoverySignature,
     #[error("insufficient {symbol} balance: have {have}, need {need}")]
     InsufficientBalance { symbol: String, have: U256, need: U256 },
     #[error("escape hatch not started")]
@@ -88,6 +92,8 @@ impl ChainError {
             ChainError::BadOwnerSignature => "CHAIN_BAD_OWNER_SIGNATURE",
             ChainError::MissingCosignature => "CHAIN_MISSING_COSIGNATURE",
             ChainError::BadCosignature => "CHAIN_BAD_COSIGNATURE",
+            ChainError::NoRecoveryKey => "CHAIN_NO_RECOVERY_KEY",
+            ChainError::BadRecoverySignature => "CHAIN_BAD_RECOVERY_SIGNATURE",
             ChainError::InsufficientBalance { .. } => "CHAIN_INSUFFICIENT_BALANCE",
             ChainError::EscapeNotStarted => "CHAIN_ESCAPE_NOT_STARTED",
             ChainError::EscapeLocked { .. } => "CHAIN_ESCAPE_LOCKED",
@@ -252,7 +258,9 @@ pub enum TxKind {
     EscapeCancel,
     /// Left through the escape hatch: owner signature only, no Swissquote involvement.
     EscapeExit,
-    /// Owner key rotated after a recovery timelock (`extra.new_owner`), Swissquote co-signed.
+    /// Owner key rotated after a recovery timelock (`extra.new_owner`): signed by the account's
+    /// recovery key (`extra.recovery_signature` over `recovery_hash`) AND attested by Swissquote
+    /// (co-signature = KYC passed, timelock over). Neither can rotate alone.
     OwnerRotation,
     /// Audit-log head anchored by Swissquote (`user_op_hash` = anchored head), co-signed.
     Anchor,
@@ -269,6 +277,9 @@ pub enum TxKind {
     /// Someone reported an address (on any network) as a scam / fraud; Swissquote-attested
     /// (`extra.report`). Reports are append-only evidence, never a verdict by themselves.
     AddressReport,
+    /// The owner registered the account's recovery key (`extra.recovery_key`, e.g. their phone's
+    /// key), owner-signed. One at a time: a new one replaces it; a rotation consumes it.
+    RecoveryKeySet,
 }
 
 /// One report about an address. Who reported is a client id or a free label, never a wallet key.
@@ -529,7 +540,7 @@ pub struct SignedUserOp {
     #[ts(type = "number")]
     pub nonce: u64,
     pub owner_signature: OwnerSignature,
-    /// Swissquote's co-signature from `/cosign`; may be omitted only for an unlocked escape-hatch exit.
+    /// Swissquote's risk-analysis receipt from `/cosign`; optional (self-custody: the owner's signature alone is valid).
     #[ts(type = "string | null")]
     pub cosignature: Option<Bytes>,
 }

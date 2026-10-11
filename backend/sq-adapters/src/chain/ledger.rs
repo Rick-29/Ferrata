@@ -386,6 +386,19 @@ impl MockChain {
         self.auth_hash(ESCAPE_CANCEL_DOMAIN, address, &[], nonce)
     }
 
+    /// What the account's recovery key signs to approve replacing the owner by `new_owner`, for
+    /// the recovery `recovery_id`. Not bound to the nonce: the owner's activity cannot void it.
+    pub fn recovery_hash(&self, address: Address, new_owner: &OwnerKey, recovery_id: &str) -> B256 {
+        let owner = serde_json::to_vec(new_owner).unwrap_or_default();
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"SQW-RECOVERY-v1");
+        buf.extend_from_slice(&self.chain_id().to_be_bytes());
+        buf.extend_from_slice(address.as_slice());
+        buf.extend_from_slice(keccak256(owner).as_slice());
+        buf.extend_from_slice(recovery_id.as_bytes());
+        keccak256(buf)
+    }
+
     pub fn rotate_hash(&self, address: Address, new_owner: &OwnerKey, nonce: u64) -> B256 {
         self.auth_hash(ROTATE_DOMAIN, address, new_owner.bytes(), nonce)
     }
@@ -432,12 +445,15 @@ impl MockChain {
             .collect())
     }
 
-    /// Validates both signatures and executes. This is the 2-of-2 rule the real account enforces.
+    /// Validates the owner's signature and executes. Self-custody: the owner alone authorises a
+    /// transfer; Swissquote's co-signature, when present, is its risk-analysis receipt (checked, not
+    /// required). Without one, an account in an escape hatch still goes through the hatch's rules.
     pub fn submit(&mut self, op: &SignedUserOp, meta: &SubmitMeta, now: u64) -> Result<SubmitResult, ChainError> {
         self.check_chain(op.tx.chain_id)?;
         let action = self.decoder.decode(&op.tx)?;
         let hash = self.user_op_hash(&op.tx, op.nonce);
-        let kind = if op.cosignature.is_some() { TxKind::Cosigned } else { TxKind::EscapeExit };
+        let in_escape = self.accounts.get(&op.tx.from).is_some_and(|a| a.escape.is_some());
+        let kind = if op.cosignature.is_none() && in_escape { TxKind::EscapeExit } else { TxKind::Cosigned };
         let mut extra = BTreeMap::new();
         if let Some(o) = &op.tx.origin {
             extra.insert("origin".into(), serde_json::Value::String(o.clone()));
@@ -494,12 +510,16 @@ impl MockChain {
 
     // ----- recovery -----
 
-    /// Replaces the owner key. Only Swissquote may authorise this, after its off-chain timelock.
-    pub fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+    /// Replaces the owner key. Needs the account's recovery key (the user's phone) AND Swissquote's
+    /// attestation (KYC passed, timelock over): Swissquote alone cannot rotate, nor can the phone.
+    pub fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, recovery_id: &str, recovery_signature: &OwnerSignature, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
         let nonce = self.nonce_of(address)?;
         let hash = self.rotate_hash(address, &new_owner, nonce);
+        let to_json = |v: serde_json::Result<serde_json::Value>| v.map_err(|e| ChainError::MalformedEvent(e.to_string()));
         let mut extra = BTreeMap::new();
-        extra.insert("new_owner".into(), serde_json::to_value(&new_owner).map_err(|e| ChainError::MalformedEvent(e.to_string()))?);
+        extra.insert("new_owner".into(), to_json(serde_json::to_value(&new_owner))?);
+        extra.insert("recovery_id".into(), serde_json::Value::String(recovery_id.to_string()));
+        extra.insert("recovery_signature".into(), to_json(serde_json::to_value(recovery_signature))?);
         let action = DecodedAction::ContractCall { target: address, selector: selector(b"rotateOwner(bytes)"), value: U256::ZERO };
         let tx = ChainTx {
             cosignature: Some(cosignature.clone()),
@@ -624,6 +644,18 @@ impl MockChain {
         extra.insert("settings".into(), serde_json::to_value(&settings).map_err(|e| ChainError::MalformedEvent(e.to_string()))?);
         let action = DecodedAction::ContractCall { target: address, selector: selector(b"setSettings(bytes)"), value: U256::ZERO };
         let tx = ChainTx { owner_signature: Some(sig.clone()), extra, ..self.event(TxKind::SettingsChanged, address, address, U256::ZERO, Bytes::new(), nonce, hash, action, now) };
+        self.commit(tx, &SubmitMeta::default())
+    }
+
+    /// Owner-signed registration of the recovery key; consumes a nonce like any owner action.
+    pub fn set_recovery_key(&mut self, address: Address, key: OwnerKey, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError> {
+        key.validate().map_err(|e| ChainError::MalformedEvent(format!("recovery key: {e}")))?;
+        let nonce = self.nonce_of(address)?;
+        let hash = self.recovery_key_hash(address, nonce, &key);
+        let mut extra = BTreeMap::new();
+        extra.insert("recovery_key".into(), serde_json::to_value(&key).map_err(|e| ChainError::MalformedEvent(e.to_string()))?);
+        let action = DecodedAction::ContractCall { target: address, selector: selector(b"setRecoveryKey(bytes)"), value: U256::ZERO };
+        let tx = ChainTx { owner_signature: Some(sig.clone()), extra, ..self.event(TxKind::RecoveryKeySet, address, address, U256::ZERO, Bytes::new(), nonce, hash, action, now) };
         self.commit(tx, &SubmitMeta::default())
     }
 
@@ -994,7 +1026,8 @@ impl MockChain {
                 self.check_hash_and_owner(tx, acc, hash)?;
                 match (&tx.kind, &tx.cosignature) {
                     (TxKind::Cosigned, Some(sig)) => self.verify_cosignature(&hash, sig),
-                    (TxKind::Cosigned, None) => Err(ChainError::MissingCosignature),
+                    // Owner-signed only: valid on its own (self-custody), Swissquote only advised.
+                    (TxKind::Cosigned, None) => Ok(()),
                     (_, _) => {
                         let escape = acc.escape.as_ref().ok_or(ChainError::EscapeNotStarted)?;
                         if tx.timestamp < escape.unlock_at {
@@ -1029,6 +1062,14 @@ impl MockChain {
                 if tx.user_op_hash != hash {
                     return Err(ChainError::MalformedEvent("rotation hash mismatch".into()));
                 }
+                // The user's side: the recovery key registered by the owner approved this new owner.
+                let recovery_key = self.recovery_key_of(tx.from).ok_or(ChainError::NoRecoveryKey)?;
+                let recovery_id: String = extra_field(tx, "recovery_id")?;
+                let recovery_signature: OwnerSignature = extra_field(tx, "recovery_signature")?;
+                if !verify_owner(&recovery_key, &self.recovery_hash(tx.from, &new_owner, &recovery_id), &recovery_signature) {
+                    return Err(ChainError::BadRecoverySignature);
+                }
+                // Swissquote's side: KYC passed and the timelock is over.
                 let sig = tx.cosignature.as_ref().ok_or(ChainError::MissingCosignature)?;
                 self.verify_cosignature(&hash, sig)
             }
@@ -1053,6 +1094,12 @@ impl MockChain {
                 }
                 let sig = tx.cosignature.as_ref().ok_or(ChainError::MissingCosignature)?;
                 self.verify_cosignature(&tx.user_op_hash, sig)
+            }
+            TxKind::RecoveryKeySet => {
+                let acc = self.account_for(tx)?;
+                let key: OwnerKey = extra_field(tx, "recovery_key")?;
+                key.validate().map_err(|e| ChainError::MalformedEvent(format!("recovery key: {e}")))?;
+                self.check_hash_and_owner(tx, acc, self.recovery_key_hash(tx.from, tx.nonce, &key))
             }
             TxKind::SettingsChanged => {
                 let acc = self.account_for(tx)?;
@@ -1156,7 +1203,7 @@ impl MockChain {
                 self.bump_nonce(tx.from);
             }
             TxKind::Anchor | TxKind::External | TxKind::Intent | TxKind::IntentOutcome => {}
-            TxKind::SettingsChanged => self.bump_nonce(tx.from),
+            TxKind::SettingsChanged | TxKind::RecoveryKeySet => self.bump_nonce(tx.from),
             TxKind::Flag => {
                 let flag: Flag = extra_field(tx, "flag")?;
                 self.flags.entry(flag.target).or_default().push(flag);
@@ -1404,14 +1451,15 @@ mod tests {
     }
 
     #[test]
-    fn rejects_missing_or_forged_cosignature_and_bad_owner_and_nonce() {
+    fn owner_alone_is_enough_but_forged_cosignature_bad_owner_and_nonce_are_rejected() {
         let (mut chain, sq, owner, addr) = setup();
         let tx = usdc_tx(addr, Address::repeat_byte(0x22), 1);
         let prep = chain.prepare(&tx).unwrap();
         let good_owner = owner.sign(&prep.user_op_hash);
 
-        let no_cosig = SignedUserOp { tx: tx.clone(), nonce: 0, owner_signature: good_owner.clone(), cosignature: None };
-        assert_eq!(chain.submit(&no_cosig, &SubmitMeta::default(), 1_010).unwrap_err(), ChainError::EscapeNotStarted);
+        // Self-custody: no co-signature is fine, a wrong owner signature never is.
+        let no_cosig_wrong_owner = SignedUserOp { tx: tx.clone(), nonce: 0, owner_signature: Owner::new(2).sign(&prep.user_op_hash), cosignature: None };
+        assert_eq!(chain.submit(&no_cosig_wrong_owner, &SubmitMeta::default(), 1_010).unwrap_err(), ChainError::BadOwnerSignature);
 
         let other = Ed25519Signer::from_seed([9u8; 32]);
         let forged = SignedUserOp { tx: tx.clone(), nonce: 0, owner_signature: good_owner.clone(), cosignature: Some(other.cosign(&prep.user_op_hash)) };
@@ -1420,9 +1468,12 @@ mod tests {
         let wrong_owner = SignedUserOp { tx: tx.clone(), nonce: 0, owner_signature: Owner::new(2).sign(&prep.user_op_hash), cosignature: Some(sq.cosign(&prep.user_op_hash)) };
         assert_eq!(chain.submit(&wrong_owner, &SubmitMeta::default(), 1_010).unwrap_err(), ChainError::BadOwnerSignature);
 
-        let bad_nonce = SignedUserOp { tx, nonce: 3, owner_signature: good_owner, cosignature: Some(sq.cosign(&prep.user_op_hash)) };
+        let bad_nonce = SignedUserOp { tx: tx.clone(), nonce: 3, owner_signature: good_owner.clone(), cosignature: Some(sq.cosign(&prep.user_op_hash)) };
         assert_eq!(chain.submit(&bad_nonce, &SubmitMeta::default(), 1_010).unwrap_err(), ChainError::BadNonce { expected: 0, got: 3 });
         assert_eq!(chain.latest().number, 3, "rejected submissions mine nothing");
+
+        let owner_only = SignedUserOp { tx, nonce: 0, owner_signature: good_owner, cosignature: None };
+        assert_eq!(chain.submit(&owner_only, &SubmitMeta::default(), 1_010).unwrap().kind, TxKind::Cosigned);
     }
 
     #[test]
@@ -1471,12 +1522,24 @@ mod tests {
     }
 
     #[test]
-    fn owner_rotation_needs_swissquote_and_old_owner_stops_working() {
+    fn owner_rotation_needs_the_recovery_key_and_swissquote_and_old_owner_stops_working() {
         let (mut chain, sq, owner, addr) = setup();
         let new_owner = Owner::new(5);
+        let phone = Owner::new(6);
+        let rid = "rec_test";
+        let rec_hash = chain.recovery_hash(addr, &new_owner.key(), rid);
+        // No recovery key registered: Swissquote alone cannot rotate.
         let h = chain.rotate_hash(addr, &new_owner.key(), 0);
-        assert_eq!(chain.rotate_owner(addr, new_owner.key(), &Bytes::from(vec![0u8; 64]), 3_000).unwrap_err(), ChainError::BadCosignature);
-        chain.rotate_owner(addr, new_owner.key(), &sq.cosign(&h), 3_000).unwrap();
+        assert_eq!(chain.rotate_owner(addr, new_owner.key(), rid, &phone.sign(&rec_hash), &sq.cosign(&h), 3_000).unwrap_err(), ChainError::NoRecoveryKey);
+
+        let k = chain.recovery_key_hash(addr, 0, &phone.key());
+        chain.set_recovery_key(addr, phone.key(), &owner.sign(&k), 3_000).unwrap();
+        let h = chain.rotate_hash(addr, &new_owner.key(), 1);
+        // Wrong recovery signature, or no valid Swissquote attestation: refused.
+        assert_eq!(chain.rotate_owner(addr, new_owner.key(), rid, &Owner::new(7).sign(&rec_hash), &sq.cosign(&h), 3_000).unwrap_err(), ChainError::BadRecoverySignature);
+        assert_eq!(chain.rotate_owner(addr, new_owner.key(), rid, &phone.sign(&rec_hash), &Bytes::from(vec![0u8; 64]), 3_000).unwrap_err(), ChainError::BadCosignature);
+        chain.rotate_owner(addr, new_owner.key(), rid, &phone.sign(&rec_hash), &sq.cosign(&h), 3_000).unwrap();
+        assert_eq!(chain.recovery_key_of(addr), None, "the recovery key that served is consumed");
 
         let tx = usdc_tx(addr, Address::repeat_byte(0x22), 1);
         let prep = chain.prepare(&tx).unwrap();

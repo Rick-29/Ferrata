@@ -39,6 +39,14 @@ export class WebAuthnPasskeySigner implements PasskeySigner {
     return ok({ kind: 'p256', key: created.value.publicKey });
   }
 
+  /** Recovery: always a brand-new passkey under `name` (the old one is lost), replacing the record. */
+  async replace(name: string): Promise<Result<OwnerKey, SdkError>> {
+    const created = await this.#ask<CreatedPasskey>({ channel: PASSKEY_CHANNEL, op: 'create', userName: name });
+    if (!created.ok) return created;
+    await this.#store.set(KEY, { ...(await this.#all()), [name]: created.value });
+    return ok({ kind: 'p256', key: created.value.publicKey });
+  }
+
   async has(name: string): Promise<boolean> {
     return (await this.#all())[name] !== undefined;
   }

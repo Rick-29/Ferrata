@@ -166,13 +166,14 @@ async fn cosign(State(state): State<SharedState>, caller: Caller, Json(req): Jso
     let scored = score(&state, &req.tx, &account)?;
     let band = scored.assessment.band;
 
-    // Swissquote never blocks on risk (Positionnement légal du blocage): it warns and asks for a
-    // second confirmation; the user decides. The only refusal is regulatory.
-    let regulatory = scored.assessment.reasons.iter().any(|r| r.code == ReasonCode::Sanctioned);
-    let warned = matches!(band, RiskBand::High | RiskBand::Critical);
+    // Self-custody: Swissquote never blocks, not even a sanctioned recipient. It warns, explains,
+    // asks for a second confirmation and records the user's informed decision; the user decides.
+    // (The owner's signature alone is valid on chain anyway: this receipt is advice, not a gate.)
+    let sanctioned = scored.assessment.reasons.iter().any(|r| r.code == ReasonCode::Sanctioned);
+    let warned = sanctioned || matches!(band, RiskBand::High | RiskBand::Critical);
     let risk_accepted = warned && stepped_up && req.accepted_risk;
-    let (outcome, level) = if regulatory {
-        (OutcomeKind::Refused, None)
+    let (outcome, level) = if sanctioned && !risk_accepted {
+        (OutcomeKind::StepUp, Some(ConfirmationLevel::HighRisk))
     } else {
         match band {
             RiskBand::Low => (OutcomeKind::Cosigned, None),
@@ -188,6 +189,9 @@ async fn cosign(State(state): State<SharedState>, caller: Caller, Json(req): Jso
     }
     if risk_accepted {
         warnings.push(format!("user was warned ({band:?}) and explicitly accepted the risk"));
+    }
+    if sanctioned && risk_accepted {
+        warnings.push("recipient is on a sanctions list: user was warned and proceeded".to_string());
     }
     let entry = LogEntry {
         seq: req.seq,

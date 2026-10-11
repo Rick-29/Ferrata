@@ -35,6 +35,8 @@ pub struct AppState {
     pub sessions: Mutex<HashMap<String, Session>>,
     pub challenges: Mutex<HashMap<B256, u64>>,
     pub recoveries: Mutex<HashMap<String, RecoveryState>>,
+    /// Recovery-phone pairings in progress (a relay for a public key, see pairing.rs).
+    pub pairings: Mutex<HashMap<String, api_types::PairingState>>,
     /// Which Swissquote client registered each wallet address. A session may only act on its own.
     pub owners: Mutex<HashMap<Address, String>>,
     /// When each user-op hash was prepared, so the chain can record decision latency.
@@ -130,6 +132,7 @@ impl AppState {
             sessions: Mutex::new(HashMap::new()),
             challenges: Mutex::new(HashMap::new()),
             recoveries: Mutex::new(HashMap::new()),
+            pairings: Mutex::new(HashMap::new()),
             owners: Mutex::new(HashMap::new()),
             prepared: Mutex::new(HashMap::new()),
             validator: Mutex::new(Default::default()),
@@ -171,6 +174,7 @@ impl AppState {
         self.chains.reset(|_| Self::make_mock_chain(&self.config, &signer, self.validator_seed, now))?;
         self.log.clear()?;
         self.lock(&self.recoveries)?.clear();
+        self.lock(&self.pairings)?.clear();
         self.lock(&self.challenges)?.clear();
         self.lock(&self.owners)?.clear();
         self.lock(&self.prepared)?.clear();

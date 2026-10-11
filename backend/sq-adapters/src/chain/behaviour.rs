@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use wallet_core::RiskBand;
 
+use super::auth::OwnerKey;
 use super::ledger::MockChain;
 use super::{ChainTx, Flag, FlagSource, TxKind};
 
@@ -233,6 +234,31 @@ impl MockChain {
         buf.extend_from_slice(&nonce.to_be_bytes());
         buf.extend_from_slice(keccak256(body).as_slice());
         keccak256(buf)
+    }
+
+    /// What the owner signs to register `key` as the account's recovery key (bound to the nonce).
+    pub fn recovery_key_hash(&self, address: Address, nonce: u64, key: &OwnerKey) -> B256 {
+        let body = serde_json::to_vec(key).unwrap_or_default();
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"SQW-RECOVERY-KEY-v1");
+        buf.extend_from_slice(&self.chain_id().to_be_bytes());
+        buf.extend_from_slice(address.as_slice());
+        buf.extend_from_slice(&nonce.to_be_bytes());
+        buf.extend_from_slice(keccak256(body).as_slice());
+        keccak256(buf)
+    }
+
+    /// The account's current recovery key: the last `recovery_key_set`, unless an owner rotation
+    /// happened since (a recovery consumes the key that served).
+    pub fn recovery_key_of(&self, address: Address) -> Option<OwnerKey> {
+        for t in self.order.iter().rev().filter_map(|h| self.txs.get(h)).filter(|t| t.from == address) {
+            match t.kind {
+                TxKind::OwnerRotation => return None,
+                TxKind::RecoveryKeySet => return t.extra.get("recovery_key").cloned().and_then(|v| serde_json::from_value(v).ok()),
+                _ => {}
+            }
+        }
+        None
     }
 
     pub fn intent_hash(&self, address: Address, intent_id: &str) -> B256 {

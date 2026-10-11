@@ -7,6 +7,9 @@ export default defineManifest({
   manifest_version: 3,
   name: APP_NAME,
   version: '0.1.0',
+  // Public key: fixes the extension ID (afibghkochajcmpmdojmdaeiflhkjodm) on every machine and folder.
+  // Passkeys are bound to that ID (their RP ID), so it must not change. Private half: extension-key.pem (gitignored).
+  key: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwoLReWqkruOSzqrmNtW0OqhuNF8eXaJv0ZonIWpuw0T12KN/XvCaDkZ7WPcaSrj9RS7ph4RYTrC3EVAryCzvCVIyude6MCblXnPZQr7omkYBgikcz1Nxdwzp2JVZT5KgC/1eqaH40nsJmTwrVEy/85UHHkpxAp78QbSNOJHpEaz5iJ8aSHrt7iDMH3FbZ+i5c1Yq8YLlQisbPlIty50FEget9cqHfAqZ31xhRRqSBe2pkq5gtoyraaacw2pQYFcMD4rTpM7d87xLYm7z6bWaCpPwb5OvB2NL4MP7h59ksq3EazJ1o0miXWr5YDgw67FoHIHSkx51NaDg4RCRRT+oawIDAQAB',
   action: { default_popup: 'src/popup/index.html' },
   background: { service_worker: 'src/background/index.ts', type: 'module' },
   permissions: ['storage'],

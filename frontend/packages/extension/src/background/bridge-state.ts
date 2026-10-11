@@ -35,6 +35,15 @@ export interface PendingSend {
   readonly assessment: AssessResponse;
 }
 
+/** A recovery started on this device (new passkey created, waiting for the phone and the timelock). */
+export interface OngoingRecovery {
+  readonly id: string;
+  readonly address: string;
+  /** The new passkey: it becomes the wallet's owner once the recovery completes. */
+  readonly passkeyName: string;
+  readonly owner: OwnerKey;
+}
+
 export interface BridgeState {
   readonly session: Session | null;
   readonly wallet: WalletRef | null;
@@ -43,6 +52,7 @@ export interface BridgeState {
   readonly unlockedUntil?: number;
   /** Epoch ms of the last passkey proof the backend verified (sign-in to the website checks it). */
   readonly provenAt?: number;
+  readonly recovery?: OngoingRecovery;
 }
 
 export const EMPTY_STATE: BridgeState = { session: null, wallet: null, pending: {} };

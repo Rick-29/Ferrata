@@ -2,7 +2,7 @@
 //! profile, and provenance checks of external events.
 
 use alloy_primitives::{Address, B256};
-use api_types::{HashResponse, IntentOutcomeKind, IntentState, ProvenanceResponse, RiskPreviewRequest, SetSettingsRequest, SettingsHashRequest, SettingsResponse, WalletProfile};
+use api_types::{HashResponse, IntentOutcomeKind, IntentState, ProvenanceResponse, RecoveryKeyHashRequest, RecoveryKeyResponse, RiskPreviewRequest, SetRecoveryKeyRequest, SetSettingsRequest, SettingsHashRequest, SettingsResponse, WalletProfile};
 use axum::extract::{Path, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -19,6 +19,8 @@ pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/settings/{address}", get(get_settings).post(set_settings))
         .route("/settings/{address}/hash", post(settings_hash))
+        .route("/recovery-key/{address}", get(get_recovery_key).post(set_recovery_key))
+        .route("/recovery-key/{address}/hash", post(recovery_key_hash))
         .route("/intents/{address}/{id}", get(get_intent))
         .route("/intents/{address}/{id}/cancel", post(cancel_intent))
         .route("/profile/{address}", get(profile))
@@ -130,6 +132,29 @@ async fn set_settings(State(state): State<SharedState>, caller: Caller, Path(add
     let tx = chain.set_settings(address, req.settings.clone(), &req.signature, state.now())?;
     tracing::info!(%address, "wallet settings changed on-chain");
     Ok(Json(SettingsResponse { address, settings: req.settings, tx: Some(tx) }))
+}
+
+async fn get_recovery_key(State(state): State<SharedState>, caller: Caller, Path(address): Path<Address>) -> ApiResult<RecoveryKeyResponse> {
+    state.check_owner(&caller, address)?;
+    Ok(Json(RecoveryKeyResponse { address, key: state.chain()?.recovery_key_of(address), tx: None }))
+}
+
+/// Hash the owner signs to register `key` as the recovery key (bound to the account's current nonce).
+async fn recovery_key_hash(State(state): State<SharedState>, caller: Caller, Path(address): Path<Address>, Json(req): Json<RecoveryKeyHashRequest>) -> ApiResult<HashResponse> {
+    state.check_owner(&caller, address)?;
+    req.key.validate().map_err(|e| ServiceError::BadRequest(format!("recovery key: {e}")))?;
+    let chain = state.chain()?;
+    let nonce = chain.account(address, state.now())?.nonce;
+    Ok(Json(HashResponse { hash: chain.recovery_key_hash(address, nonce, &req.key), nonce }))
+}
+
+/// Registers (or replaces) the recovery key. Owner-signed: Swissquote only records it.
+async fn set_recovery_key(State(state): State<SharedState>, caller: Caller, Path(address): Path<Address>, Json(req): Json<SetRecoveryKeyRequest>) -> ApiResult<RecoveryKeyResponse> {
+    state.check_owner(&caller, address)?;
+    let mut chain = state.chain()?;
+    let tx = chain.set_recovery_key(address, req.key.clone(), &req.signature, state.now())?;
+    tracing::info!(%address, "recovery key registered on-chain");
+    Ok(Json(RecoveryKeyResponse { address, key: Some(req.key), tx: Some(tx) }))
 }
 
 async fn get_intent(State(state): State<SharedState>, caller: Caller, Path((address, id)): Path<(Address, String)>) -> ApiResult<IntentState> {

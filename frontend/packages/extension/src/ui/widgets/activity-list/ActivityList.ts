@@ -118,7 +118,7 @@ export class ActivityList extends Widget<readonly ActivityRow[]> {
           ${row.flags.map(
             (f) => html`<span class="chip" style="--tone: ${bandColor(f.severity)}" title=${f.message}>⚑ ${f.code}</span>`,
           )}
-          ${row.hasReceipt ? html`<span class="chip receipt" title="Reçu signé par Swissquote">✓ Reçu</span>` : nothing}
+          ${row.hasReceipt ? html`<span class="chip receipt" title="Analysé par Swissquote, reçu inscrit au journal">✓ Analysé</span>` : nothing}
           ${row.explorerUrl
             ? html`<a href=${row.explorerUrl} target="_blank" rel="noopener noreferrer">Explorateur ↗</a>`
             : nothing}

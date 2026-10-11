@@ -3,36 +3,31 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { apiUrl, createRecoveryService } from './src/config';
 import { useRecoveryFlow, type RecoveryStep } from './src/recovery/useRecoveryFlow';
-import { AddressStep } from './src/screens/AddressStep';
 import { FinishedStep } from './src/screens/FinishedStep';
+import { HomeStep } from './src/screens/HomeStep';
 import { IdentifyStep } from './src/screens/IdentifyStep';
 import { LoginStep } from './src/screens/LoginStep';
-import { WaitingStep } from './src/screens/WaitingStep';
+import { PairedStep } from './src/screens/PairedStep';
+import { ReviewStep } from './src/screens/ReviewStep';
+import { ScanStep } from './src/screens/ScanStep';
 import { CryptoBackdrop } from './src/ui/CryptoBackdrop';
-import { Body, Brand, ErrorBanner, Eyebrow, Steps, Title } from './src/ui/components';
+import { Body, Brand, ErrorBanner, Eyebrow, Title } from './src/ui/components';
 import { SPACE, useTheme } from './src/ui/theme';
 
-const STEP_LABELS = ['Connexion', 'Wallet', 'Identité', 'Délai'] as const;
-
 const HEADINGS: Readonly<Record<RecoveryStep['kind'], string>> = {
-  login: 'Récupérer mon wallet',
-  address: 'Quel wallet ?',
+  login: 'Téléphone de secours',
+  home: 'Téléphone de secours',
+  scan: 'Scanner le code',
+  paired: 'Comparer l’empreinte',
+  review: 'Approuver la récupération ?',
   identify: 'Vérifions votre identité',
-  waiting: 'Récupération en cours',
-  finished: 'Récupération',
-};
-
-const STEP_INDEX: Readonly<Record<RecoveryStep['kind'], number>> = {
-  login: 0,
-  address: 1,
-  identify: 2,
-  waiting: 3,
-  finished: 3,
+  approved: 'Récupération',
 };
 
 /**
- * Ferrata (APP_NAME), recovery app: this phone is the new device of a client who lost their
- * passkey. Login → wallet → new passkey + simulated video identification → timelock → rotation.
+ * Ferrata (APP_NAME), the recovery phone: associated with the wallet (its key registered by the
+ * owner's passkey), it approves a recovery started on a new computer, with the KYC. It never
+ * holds the wallet and never moves funds; Swissquote alone cannot recover without it.
  */
 export default function App() {
   const t = useTheme();
@@ -50,11 +45,7 @@ export default function App() {
             <Brand />
             <Eyebrow>· Récupération</Eyebrow>
           </View>
-          <View style={styles.header}>
-            <Eyebrow color="#d78cff">Étape {STEP_INDEX[step.kind] + 1} sur 4</Eyebrow>
-            <Title>{HEADINGS[step.kind]}</Title>
-          </View>
-          <Steps current={STEP_INDEX[step.kind]} labels={STEP_LABELS} />
+          <Title>{HEADINGS[step.kind]}</Title>
           <ErrorBanner message={flow.error} />
           {renderStep(step, flow)}
           <Body muted>{apiUrl ? `Service : ${apiUrl}` : 'Mode démo : données simulées, aucun serveur.'}</Body>
@@ -67,21 +58,36 @@ export default function App() {
 function renderStep(step: RecoveryStep, flow: ReturnType<typeof useRecoveryFlow>) {
   switch (step.kind) {
     case 'login':
-      return <LoginStep isBusy={flow.busy} onSubmit={flow.login} />;
-    case 'address':
-      return <AddressStep displayName={step.displayName} isBusy={flow.busy} onSubmit={flow.chooseWallet} />;
+      return (
+        <>
+          {flow.hasPendingCode ? <Body>Code Ferrata reçu : connectez-vous pour continuer.</Body> : null}
+          <LoginStep isBusy={flow.busy} onSubmit={flow.login} />
+        </>
+      );
+    case 'home':
+      return <HomeStep displayName={step.displayName} hasKey={step.hasKey} onScan={flow.scan} />;
+    case 'scan':
+      return <ScanStep isBusy={flow.busy} onScanned={(text) => void flow.scanned(text)} onCancel={() => void flow.home()} />;
+    case 'paired':
+      return <PairedStep fingerprint={step.fingerprint} address={step.address} onDone={() => void flow.home()} />;
+    case 'review':
+      return (
+        <ReviewStep
+          recovery={step.recovery}
+          newKeyFingerprint={step.newKeyFingerprint}
+          onConfirm={flow.confirmReview}
+          onCancel={() => void flow.home()}
+        />
+      );
     case 'identify':
-      return <IdentifyStep isBusy={flow.busy} onSubmit={flow.identify} />;
-    case 'waiting':
-      return <WaitingStep recovery={step.recovery} isBusy={flow.busy} onExecute={flow.execute} />;
-    case 'finished':
-      return <FinishedStep recovery={step.recovery} onRestart={flow.restart} />;
+      return <IdentifyStep isBusy={flow.busy} onSubmit={(script, name) => void flow.identify(script, name)} />;
+    case 'approved':
+      return <FinishedStep recovery={step.recovery} onDone={() => void flow.home()} />;
   }
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingHorizontal: SPACE.xl, paddingTop: 72, paddingBottom: SPACE.xxl, gap: SPACE.xl },
-  header: { gap: SPACE.sm },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
 });

@@ -11,6 +11,7 @@ import './balance-delta/BalanceDelta';
 import './outcome-panel/OutcomePanel';
 import './reason-list/ReasonList';
 import './risk-badge/RiskBadge';
+import './risk-explainer/RiskExplainer';
 
 const create = <K extends keyof HTMLElementTagNameMap>(tag: K): HTMLElementTagNameMap[K] => document.createElement(tag);
 
@@ -153,5 +154,41 @@ describe('sq-button', () => {
     el.click();
 
     expect(onClick).toHaveBeenCalledOnce();
+  });
+});
+
+describe('sq-risk-explainer', () => {
+  it('lays the score open: each signal with its weight, meaning and advice, and says the user decides', async () => {
+    const el = create('sq-risk-explainer');
+    el.state = ready({
+      score: 60,
+      band: 'High',
+      reasons: [
+        { code: 'NEW_RECIPIENT', points: 20, message: 'first interaction' },
+        { code: 'MIXER_EXPOSURE', points: 40, message: 'counterparty is 1 hop(s) from a flagged address' },
+      ],
+      exposureHops: 1,
+      balanceShare: 0.85,
+    });
+    await mount(el);
+    const text = deepText(el);
+    expect(text).toContain('Pourquoi cet avertissement ?');
+    expect(text).toContain('Score 60/100');
+    expect(text).toMatch(/\+40 pts · 67 %[\s\S]*\+20 pts · 33 %/);
+    expect(text).toContain('Comparez l’adresse');
+    expect(text).toContain('85 % de votre solde');
+    expect(text).toContain('à 1 intermédiaire(s) d’une adresse signalée');
+    expect(text).toContain('Vous décidez.');
+  });
+
+  it('closes on "J’ai compris"', async () => {
+    const el = create('sq-risk-explainer');
+    el.state = ready({ score: 0, band: 'Low', reasons: [], exposureHops: null, balanceShare: null });
+    await mount(el);
+    const closed = vi.fn();
+    el.addEventListener('explainer-closed', closed);
+    const button = [...(el.shadowRoot?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.includes('compris'));
+    button?.click();
+    expect(closed).toHaveBeenCalledOnce();
   });
 });

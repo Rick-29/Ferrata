@@ -54,7 +54,7 @@ impl ServiceError {
             ServiceError::Core(_) => StatusCode::UNPROCESSABLE_ENTITY,
             ServiceError::Chain(ChainError::UnknownAccount(_) | ChainError::UnknownTx(_) | ChainError::UnknownToken(_)) => StatusCode::NOT_FOUND,
             ServiceError::Chain(ChainError::BadNonce { .. } | ChainError::AccountExists(_)) => StatusCode::CONFLICT,
-            ServiceError::Chain(ChainError::BadOwnerSignature | ChainError::BadCosignature | ChainError::MissingCosignature) => StatusCode::UNAUTHORIZED,
+            ServiceError::Chain(ChainError::BadOwnerSignature | ChainError::BadCosignature | ChainError::MissingCosignature | ChainError::BadRecoverySignature) => StatusCode::UNAUTHORIZED,
             ServiceError::Chain(_) => StatusCode::UNPROCESSABLE_ENTITY,
             ServiceError::NotFound(_) => StatusCode::NOT_FOUND,
             ServiceError::Unauthorized => StatusCode::UNAUTHORIZED,

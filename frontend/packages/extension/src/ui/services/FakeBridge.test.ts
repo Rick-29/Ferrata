@@ -85,15 +85,25 @@ describe('FakeBridge risk scenarios (README demo table)', () => {
     expect(outcome.ok && outcome.value).toMatchObject({ kind: 'confirmation_required', level: 'high_risk' });
   });
 
-  it('Sanctions: refused for a regulatory reason, without disclosing it, even after a second confirmation', async () => {
+  it('Sanctions: warned, never refused; goes through once the user accepted the risk (self-custody)', async () => {
     const bridge = await loggedInWithWallet();
     const { preview, outcome } = await send(bridge, { to: DEMO_ADDRESSES.sanctioned, asset: USDC, amount: usdc(10n) });
 
-    expect(outcome.ok && outcome.value).toEqual({ kind: 'refused', reason: 'regulatory' });
+    expect(outcome.ok && outcome.value).toMatchObject({ kind: 'confirmation_required', level: 'high_risk' });
+    expect(preview.assessment.assessment.reasons.map((r) => r.code)).toContain('SANCTIONED');
+    const accepted = await bridge.confirmSend(preview.id, { stepUp: true, acceptedRisk: true });
+    expect(accepted.ok && accepted.value.kind).toBe('confirmed');
     const wallet = await bridge.getWallet();
     const usdcBalance = wallet.ok ? wallet.value.balances.find((b) => b.asset === USDC)?.amount : undefined;
-    expect(usdcBalance).toBe(usdc(5_000n));
-    expect(preview.assessment.assessment.reasons.map((r) => r.code)).toContain('SANCTIONED');
+    expect(usdcBalance).toBe(usdc(4_990n));
+  });
+
+  it('sends with the passkey alone when the user goes ahead without the analysis', async () => {
+    const bridge = await loggedInWithWallet();
+    const preview = await bridge.previewSend({ to: DEMO_ADDRESSES.knownMerchant, asset: USDC, amount: usdc(5n) });
+    if (!preview.ok) throw new Error(preview.error.code);
+    const outcome = await bridge.confirmSend(preview.value.id, { stepUp: false, acceptedRisk: false, withoutAnalysis: true });
+    expect(outcome.ok && outcome.value).toMatchObject({ kind: 'confirmed', receipt: null });
   });
 });
 

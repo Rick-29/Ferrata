@@ -33,7 +33,8 @@ export const DEMO_PASSWORD = 'demo';
 const LARGE_AMOUNT_LIMIT = 1_000n * 10n ** BigInt(USDC_DECIMALS);
 const BAND_THRESHOLDS = { medium: 25, high: 50, critical: 80 } as const;
 /** Reasons that trigger a regulatory refusal. Everything else only warns: Swissquote never blocks on risk alone. */
-const REGULATORY_REASONS: ReadonlySet<Reason['code']> = new Set(['SANCTIONED']);
+/** Always the strongest warning, whatever the score (sanctions): warned, never refused. */
+const WARN_MAX_REASONS: ReadonlySet<Reason['code']> = new Set(['SANCTIONED']);
 
 export const CHAIN_ID = 84532;
 export const DEMO_TOKENS: readonly TokenInfo[] = [{ address: USDC, symbol: 'USDC', decimals: USDC_DECIMALS }];
@@ -157,16 +158,17 @@ export function actionFor(draft: SendDraft): DecodedAction {
 
 export type FakeDecision =
   | { readonly kind: 'cosign' }
-  | { readonly kind: 'confirm'; readonly level: 'standard' | 'high_risk' }
-  | { readonly kind: 'refuse_regulatory' };
+  | { readonly kind: 'confirm'; readonly level: 'standard' | 'high_risk' };
 
 /**
- * Swissquote's co-signer, same rules as backend `assess.rs::cosign`: refuses only for a regulatory
- * reason; Medium co-signs after a second passkey confirmation; High and Critical only once the
- * user also explicitly accepted the risk.
+ * Swissquote's analysis, same rules as backend `assess.rs::cosign` (self-custody: never refuses):
+ * Medium goes through after a second passkey confirmation; High, Critical and sanctioned
+ * recipients only once the user also explicitly accepted the risk.
  */
 export function decide(assessment: RiskAssessment, stepUp: boolean, acceptedRisk: boolean): FakeDecision {
-  if (assessment.reasons.some((r) => REGULATORY_REASONS.has(r.code))) return { kind: 'refuse_regulatory' };
+  if (assessment.reasons.some((r) => WARN_MAX_REASONS.has(r.code))) {
+    return stepUp && acceptedRisk ? { kind: 'cosign' } : { kind: 'confirm', level: 'high_risk' };
+  }
   switch (assessment.band) {
     case 'Low':
       return { kind: 'cosign' };
@@ -184,8 +186,6 @@ export function loggedOutcome(decision: FakeDecision): OutcomeKind {
       return 'cosigned';
     case 'confirm':
       return 'step_up';
-    case 'refuse_regulatory':
-      return 'refused';
   }
 }
 

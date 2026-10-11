@@ -95,6 +95,31 @@ pub struct SetSettingsRequest {
     pub signature: OwnerSignature,
 }
 
+/// The phone's (or another device's) public key to register as the account's recovery key.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RecoveryKeyHashRequest {
+    pub key: OwnerKey,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SetRecoveryKeyRequest {
+    pub key: OwnerKey,
+    /// Owner signature over the hash from `POST /recovery-key/{address}/hash`.
+    pub signature: OwnerSignature,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RecoveryKeyResponse {
+    #[ts(type = "string")]
+    pub address: Address,
+    /// `None`: no recovery key, or the last one was consumed by a recovery.
+    pub key: Option<OwnerKey>,
+    pub tx: Option<SubmitResult>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct SettingsResponse {
@@ -429,19 +454,76 @@ pub struct KycAttestation {
     pub full_name: String,
 }
 
+/// Opens a recovery-phone pairing for a wallet (shown by the extension as a QR).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
-pub struct StartRecoveryRequest {
+pub struct StartPairingRequest {
+    #[ts(type = "string")]
+    pub address: Address,
+}
+
+/// The phone's answer: its public key (the future recovery key).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PairingKeyRequest {
+    pub key: OwnerKey,
+    pub device_label: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PairingState {
+    pub id: String,
+    #[ts(type = "string")]
+    pub address: Address,
+    #[ts(type = "number")]
+    pub expires_at: u64,
+    /// Set once the phone answered.
+    pub key: Option<OwnerKey>,
+    /// Short fingerprint of `key` (e.g. `7F3A-91C2`), shown on both screens for the user to compare.
+    pub fingerprint: Option<String>,
+    pub device_label: Option<String>,
+}
+
+/// Step 1, on the new device: the wallet to recover and the new owner key (its new passkey).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PrepareRecoveryRequest {
     #[ts(type = "string")]
     pub address: Address,
     pub new_owner: OwnerKey,
+}
+
+/// Step 2, on the phone: the recovery key's signature over `RecoveryState.recovery_hash`, and the KYC.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StartRecoveryRequest {
+    pub id: String,
+    pub recovery_signature: OwnerSignature,
     pub kyc: KycAttestation,
+}
+
+/// The smart delay: Swissquote reads the account's Ferra chain history and sets the timelock.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RecoveryRisk {
+    pub score: u32,
+    pub band: RiskBand,
+    /// Plain-language reasons shown to both devices.
+    pub reasons: Vec<String>,
+    #[ts(type = "number")]
+    pub delay_secs: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "state", rename_all = "snake_case")]
 #[ts(export)]
 pub enum RecoveryStatus {
+    /// Prepared on the new device, waiting for the phone's signature and the KYC.
+    Prepared {
+        #[ts(type = "number")]
+        expires_at: u64,
+    },
     Pending {
         #[ts(type = "number")]
         unlock_at: u64,
@@ -473,6 +555,15 @@ pub struct RecoveryState {
     /// What an existing device must sign to cancel.
     #[ts(type = "string")]
     pub cancel_hash: B256,
+    /// What the recovery key (the phone) signs to approve `new_owner`.
+    #[ts(type = "string")]
+    pub recovery_hash: B256,
+    pub recovery_signature: Option<OwnerSignature>,
+    /// Set once started: the smart delay and its reasons.
+    pub risk: Option<RecoveryRisk>,
+    /// A recovery started after an earlier one was cancelled: longer delay, and the current
+    /// passkey can no longer cancel it alone (a stolen passkey cannot block recovery forever).
+    pub contested: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

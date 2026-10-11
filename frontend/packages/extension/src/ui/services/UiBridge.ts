@@ -1,3 +1,4 @@
+import type { RiskBand } from '@sqw/types/RiskBand';
 import type { AccountView } from '@sqw/types/AccountView';
 import type { AssessResponse } from '@sqw/types/AssessResponse';
 import type { ChainTx } from '@sqw/types/ChainTx';
@@ -45,17 +46,78 @@ export interface ActivityFeed {
 export interface ConfirmOptions {
   readonly stepUp: boolean;
   readonly acceptedRisk: boolean;
+  /**
+   * Self-custody: send with the passkey alone, without Swissquote's analysis (used when the
+   * analysis is unreachable and the user chose to go ahead). The chain accepts the owner's signature.
+   */
+  readonly withoutAnalysis?: boolean;
 }
 
 /**
- * Swissquote never blocks a transaction because it looks risky: it warns and asks for a double
- * confirmation, and the user decides (see implementation/… Positionnement légal du blocage.md).
- * The only refusal is regulatory (sanctions), and its reason is deliberately not detailed.
+ * Self-custody: Swissquote never blocks a transaction, not even for sanctions. It warns, explains
+ * and asks for a double confirmation; the user decides. `refused` is kept only for older backends.
+ * `receipt` is null when the transfer went through without Swissquote's analysis.
  */
 export type SendOutcome =
-  | { readonly kind: 'confirmed'; readonly txHash: string; readonly receipt: Receipt }
+  | { readonly kind: 'confirmed'; readonly txHash: string; readonly receipt: Receipt | null }
   | { readonly kind: 'confirmation_required'; readonly previewId: string; readonly level: ConfirmationLevel }
   | { readonly kind: 'refused'; readonly reason: 'regulatory' };
+
+/** The wallet's recovery phone: the fingerprint of its key registered on the Ferra chain, or null. */
+export interface RecoveryPhoneStatus {
+  readonly fingerprint: string | null;
+}
+
+/** A pairing in progress: `qr` is what the phone scans (`ferrata:pair?…`). */
+export interface PhonePairing {
+  readonly pairingId: string;
+  readonly qr: string;
+  readonly expiresAt: number;
+}
+
+export type PairingProgress =
+  | { readonly status: 'waiting' }
+  /** The phone answered: compare `fingerprint` with the one shown on the phone before confirming. */
+  | { readonly status: 'answered'; readonly fingerprint: string; readonly deviceLabel: string | null };
+
+/** Where a recovery started on this device stands (new device, after losing the passkey). */
+export type RecoveryPhase =
+  /** Waiting for the recovery phone to scan the QR, sign, and pass the KYC. */
+  | 'waiting_phone'
+  /** Started: the smart-delay timelock runs; the current passkey may still cancel (unless contested). */
+  | 'pending'
+  | 'rejected'
+  | 'cancelled'
+  | 'expired'
+  | 'completed';
+
+export interface RecoveryView {
+  readonly id: string;
+  readonly address: string;
+  /** What the phone scans: `ferrata:recover?id=…`. */
+  readonly qr: string;
+  /** Fingerprint of this device's new passkey: the phone shows it too, the user compares. */
+  readonly newKeyFingerprint: string;
+  readonly phase: RecoveryPhase;
+  /** Epoch seconds when it can be finalised (`pending`). */
+  readonly unlockAt: number | null;
+  /** The smart delay's reasons, in plain language. */
+  readonly reasons: readonly string[];
+  readonly band: RiskBand | null;
+  readonly contested: boolean;
+  /** Why it was rejected, if it was. */
+  readonly detail: string | null;
+}
+
+/** A recovery of this wallet started elsewhere: the existing device warns and can cancel. */
+export interface RecoveryAlert {
+  readonly id: string;
+  readonly unlockAt: number;
+  readonly reasons: readonly string[];
+  readonly newKeyFingerprint: string;
+  /** A contested recovery can no longer be cancelled by the passkey alone. */
+  readonly contested: boolean;
+}
 
 /** Public test networks the wallet holds an address on (testnet_plan M3, M8). */
 export type TestnetNetwork = 'solana-devnet' | 'base-sepolia' | 'eth-sepolia';
@@ -139,4 +201,27 @@ export interface UiBridge {
   requestAirdrop(network: TestnetNetwork): Promise<Result<AirdropOutcome, UiError>>;
   /** Sends test coins: the passkey approves this exact transfer, then the network key signs and broadcasts. */
   sendTestnet(draft: TestnetSendDraft): Promise<Result<TestnetSendOutcome, UiError>>;
+
+  /** Recovery phone (P3): which phone is registered as the wallet's recovery key, if any. */
+  getRecoveryPhone(): Promise<Result<RecoveryPhoneStatus, UiError>>;
+  /** Opens a pairing shown as a QR for the phone to scan. */
+  startPhonePairing(): Promise<Result<PhonePairing, UiError>>;
+  pollPhonePairing(pairingId: string): Promise<Result<PairingProgress, UiError>>;
+  /** The passkey signs the phone's key: it becomes the wallet's recovery key on the Ferra chain. */
+  confirmPhonePairing(pairingId: string): Promise<Result<RecoveryPhoneStatus, UiError>>;
+
+  /** New device, passkey lost: the client's wallets (after the Swissquote login). */
+  listRecoverableWallets(): Promise<Result<readonly string[], UiError>>;
+  /** Creates this device's new passkey and prepares the recovery; the phone does the rest. */
+  startRecovery(address: string): Promise<Result<RecoveryView, UiError>>;
+  /** The recovery started on this device, if any. */
+  getRecovery(): Promise<Result<RecoveryView | null, UiError>>;
+  /** After the timelock: the new passkey becomes the owner; the wallet opens. */
+  finishRecovery(): Promise<Result<AccountView, UiError>>;
+  /** Forget the recovery started on this device (it expires on the server). */
+  abandonRecovery(): Promise<Result<void, UiError>>;
+  /** Existing device: recoveries of this wallet started elsewhere. */
+  getRecoveryAlerts(): Promise<Result<readonly RecoveryAlert[], UiError>>;
+  /** Existing device: "ce n'est pas moi", signed with the current passkey. */
+  cancelRecovery(id: string): Promise<Result<void, UiError>>;
 }

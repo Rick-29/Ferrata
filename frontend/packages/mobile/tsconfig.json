@@ -8,5 +8,6 @@
       "@sqw/types/*": ["../types/src/*"],
       "@sqw/brand": ["../brand/src/index.ts"]
     }
-  }
+  },
+  "exclude": ["node_modules", "**/*.test.ts"]
 }

@@ -59,9 +59,9 @@ export default function MarketingSite({
           <div className="hero-copy">
             <Badge tone="brand">
               <ShieldCheck size={14} />
-              Dual signature with Swissquote
+              Self-custody, Swissquote analysis
             </Badge>
-            <h1>Your crypto wallet, with a second signature.</h1>
+            <h1>Your crypto wallet, with a second opinion.</h1>
             <p className="hero-lede">
               {APP_NAME} gives you direct access to Ethereum and Solana while
               Swissquote assesses, signs, and records every critical action.
@@ -193,7 +193,7 @@ export default function MarketingSite({
                 icon: <Fingerprint />,
                 number: "03",
                 title: "Sign",
-                copy: "Approve with your passkey. Swissquote adds the second signature and records the audit trail.",
+                copy: "Approve with your passkey: you decide. Swissquote explains the risk and records the audit trail.",
               },
             ].map((item) => (
               <Card key={item.number} className="process-card">

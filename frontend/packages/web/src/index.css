@@ -245,7 +245,7 @@ h3 {
   background: var(--red-soft);
 }
 
-.badge-refused {
+.badge-sanctioned {
   color: var(--critical);
   background: var(--critical-soft);
 }
@@ -2670,7 +2670,7 @@ h3 {
 .risk-low .risk-emblem { color: var(--green); background: var(--green-soft); }
 .risk-moderate .risk-emblem { color: var(--amber); background: var(--amber-soft); }
 .risk-high .risk-emblem { color: var(--red); background: var(--red-soft); }
-.risk-refused .risk-emblem { color: var(--critical); background: var(--critical-soft); }
+.risk-sanctioned .risk-emblem { color: var(--critical); background: var(--critical-soft); }
 
 .risk-score-header h2 {
   margin-top: 3px;
@@ -2689,7 +2689,7 @@ h3 {
 .risk-low .score-ring { border-color: var(--green); }
 .risk-moderate .score-ring { border-color: var(--amber); }
 .risk-high .score-ring { border-color: var(--red); }
-.risk-refused .score-ring { border-color: var(--critical); }
+.risk-sanctioned .score-ring { border-color: var(--critical); }
 
 .score-ring strong {
   font-size: 13px;
@@ -2735,7 +2735,7 @@ h3 {
 .risk-low .risk-meter span { background: var(--green); }
 .risk-moderate .risk-meter span { background: var(--amber); }
 .risk-high .risk-meter span { background: var(--red); }
-.risk-refused .risk-meter span { background: var(--critical); }
+.risk-sanctioned .risk-meter span { background: var(--critical); }
 
 .report-section {
   margin-top: 16px;
@@ -2849,11 +2849,8 @@ h3 {
   font-size: 7px;
 }
 
-.refused-actions {
-  margin-top: 16px;
-}
 
-.refused-actions p,
+
 .legal-copy {
   display: flex;
   align-items: flex-start;

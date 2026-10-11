@@ -3,4 +3,4 @@
 /**
  * What kind of event this is. New kinds may be added; readers must treat unknown ones as opaque.
  */
-export type TxKind = "account_created" | "faucet" | "cosigned" | "escape_start" | "escape_cancel" | "escape_exit" | "owner_rotation" | "anchor" | "flag" | "external" | "settings_changed" | "intent" | "intent_outcome" | "address_report";
+export type TxKind = "account_created" | "faucet" | "cosigned" | "escape_start" | "escape_cancel" | "escape_exit" | "owner_rotation" | "anchor" | "flag" | "external" | "settings_changed" | "intent" | "intent_outcome" | "address_report" | "recovery_key_set";

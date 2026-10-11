@@ -100,17 +100,20 @@ export const scenarios: Scenario[] = [
   },
   {
     id: "regulatory",
-    tier: "refused",
-    label: "Regulatory refusal",
-    title: "Transfer Swissquote cannot sign",
+    tier: "sanctioned",
+    label: "Sanctioned address",
+    title: "Transfer to a sanctioned address",
     summary:
-      "Swissquote cannot sign this transfer for regulatory reasons. Your funds have not moved.",
+      "This address is on a public sanctions list. Swissquote strongly advises against it, but the decision is yours.",
     amount: "2,500",
     asset: "USDC",
     destination: "0x71cB…0A19",
-    // Regulatory refusals never disclose what was flagged (see implementation/… Positionnement légal).
-    reasons: [],
-    action: "Return to wallet",
+    // Self-custody: Swissquote warns and explains, it never refuses. Sanctions lists are public.
+    reasons: [
+      "Destination is on a public sanctions list (SECO, UN, OFAC)",
+      "Sending funds there may be illegal for you",
+    ],
+    action: "Acknowledge and continue",
   },
 ]
 
@@ -187,24 +190,24 @@ const reports: Record<ScenarioId, Record<PersonaId, RiskReport>> = {
   regulatory: {
     holder: {
       score: 100,
-      tier: "refused",
-      headline: "Swissquote cannot sign this request for regulatory reasons.",
+      tier: "sanctioned",
+      headline: "This address is on a sanctions list. Swissquote strongly advises against sending.",
       personalReason:
-        "This applies to every profile. No amount was sent and your balance is unchanged.",
+        "This applies to every profile. Swissquote does not block it: you remain the sole decision-maker.",
     },
     active: {
       score: 100,
-      tier: "refused",
-      headline: "Swissquote cannot sign this request for regulatory reasons.",
+      tier: "sanctioned",
+      headline: "This address is on a sanctions list. Swissquote strongly advises against sending.",
       personalReason:
-        "This applies to every profile. No amount was sent and your balance is unchanged.",
+        "This applies to every profile. Swissquote does not block it: you remain the sole decision-maker.",
     },
     frequency: {
       score: 100,
-      tier: "refused",
-      headline: "Swissquote cannot sign this request for regulatory reasons.",
+      tier: "sanctioned",
+      headline: "This address is on a sanctions list. Swissquote strongly advises against sending.",
       personalReason:
-        "This applies to every profile. No amount was sent and your balance is unchanged.",
+        "This applies to every profile. Swissquote does not block it: you remain the sole decision-maker.",
     },
   },
 }
@@ -245,9 +248,9 @@ export const activity: ActivityItem[] = [
   },
   {
     id: "4",
-    title: "Transfer not signed by Swissquote",
-    meta: "May 17, 21:48 · regulatory",
+    title: "Transfer to sanctioned address cancelled by you",
+    meta: "May 17, 21:48 · after warning",
     amount: "Not sent",
-    tier: "refused",
+    tier: "sanctioned",
   },
 ]

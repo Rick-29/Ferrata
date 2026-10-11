@@ -15,5 +15,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts', '../sdk/src/**/*.test.ts'],
     // Cold starts on a loaded Windows machine (antivirus scanning node_modules) exceed the 5 s default.
     testTimeout: 20_000,
+    // Tests use the default `ferrata:` codes, whatever a developer's .env.local points the QR at.
+    env: { VITE_PHONE_LINK_BASE: '' },
   },
 });

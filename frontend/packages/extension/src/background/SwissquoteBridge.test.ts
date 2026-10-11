@@ -2,6 +2,7 @@ import type { AccountView } from '@sqw/types/AccountView';
 import type { AssessResponse } from '@sqw/types/AssessResponse';
 import type { CosignOutcome } from '@sqw/types/CosignOutcome';
 import type { CosignRequest } from '@sqw/types/CosignRequest';
+import type { RecoveryState } from '@sqw/types/RecoveryState';
 import type { Session } from '@sqw/types/Session';
 import type { SignedEntry } from '@sqw/types/SignedEntry';
 import { err, ok, sdkError, type SwissquoteApi } from '@sqw/sdk';
@@ -16,6 +17,7 @@ import { SwissquoteBridge } from './SwissquoteBridge';
 // with hooks to inject the failures the review found.
 
 const ADDRESS = '0x5a11e7000000000000000000000000000000a11c';
+const PHONE_KEY = { kind: 'ed25519' as const, key: `0x${'11'.repeat(32)}` };
 const RECIPIENT = `0x${'12'.repeat(20)}`;
 const USER_OP = `0x${'ab'.repeat(32)}`;
 const OWNER = { kind: 'ed25519', key: '0x01' } as const;
@@ -77,6 +79,15 @@ function scriptedApi(overrides: Partial<SwissquoteApi> = {}): SwissquoteApi {
     settings: vi.fn(async () => err(sdkError('NOT_FOUND', 'swissquote', 'n/a', 404))),
     settingsHash: vi.fn(async () => ok({ hash: '0xh', nonce: 0 })),
     setSettings: vi.fn(async () => err(sdkError('NOT_FOUND', 'swissquote', 'n/a', 404))),
+    recoveryKey: vi.fn(async () => ok({ address: ADDRESS, key: null, tx: null })),
+    recoveryKeyHash: vi.fn(async () => ok({ hash: `0x${'ab'.repeat(32)}`, nonce: 0 })),
+    setRecoveryKey: vi.fn(async () => err(sdkError('NOT_FOUND', 'swissquote', 'n/a', 404))),
+    recoverableWallets: vi.fn(async () => ok([ADDRESS])),
+    prepareRecovery: vi.fn(async () => err(sdkError('NOT_FOUND', 'swissquote', 'n/a', 404))),
+    startPairing: vi.fn(async () => ok({ id: 'pair_1', address: ADDRESS, expires_at: 1_900_000_000, key: null, fingerprint: null, device_label: null })),
+    pairing: vi.fn(async () => ok({ id: 'pair_1', address: ADDRESS, expires_at: 1_900_000_000, key: PHONE_KEY, fingerprint: '5FA8-122B', device_label: 'iPhone' })),
+    offerPairingKey: vi.fn(async () => err(sdkError('NOT_FOUND', 'swissquote', 'n/a', 404))),
+    recoveries: vi.fn(async () => ok([])),
     startRecovery: vi.fn(async () => err(sdkError('NOT_FOUND', 'swissquote', 'n/a', 404))),
     recovery: vi.fn(async () => err(sdkError('NOT_FOUND', 'swissquote', 'n/a', 404))),
     cancelRecovery: vi.fn(async () => err(sdkError('NOT_FOUND', 'swissquote', 'n/a', 404))),
@@ -140,6 +151,42 @@ describe('SwissquoteBridge', () => {
     expect(retry.ok && retry.value.kind).toBe('confirmed');
     expect(api.cosign).toHaveBeenCalledTimes(1);
     expect(submit).toHaveBeenCalledTimes(2);
+  });
+
+  it('recovery phone: shows the fingerprint computed from the key, then the passkey registers it', async () => {
+    const api = scriptedApi({
+      setRecoveryKey: vi.fn(async () => ok({ address: ADDRESS, key: PHONE_KEY, tx: null })),
+      // A lying relay: the fingerprint it sends is ignored.
+      pairing: vi.fn(async () => ok({ id: 'pair_1', address: ADDRESS, expires_at: 1_900_000_000, key: PHONE_KEY, fingerprint: 'FFFF-FFFF', device_label: 'iPhone' })),
+    });
+    const bridge = await readyBridge(api);
+
+    const pairing = await bridge.startPhonePairing();
+    expect(pairing.ok && pairing.value.qr).toBe(`ferrata:pair?v=1&id=pair_1&address=${ADDRESS}`);
+    const progress = await bridge.pollPhonePairing('pair_1');
+    expect(progress.ok && progress.value).toEqual({ status: 'answered', fingerprint: '5FA8-122B', deviceLabel: 'iPhone' });
+
+    const confirmed = await bridge.confirmPhonePairing('pair_1');
+    expect(confirmed.ok && confirmed.value).toEqual({ fingerprint: '5FA8-122B' });
+    expect(api.recoveryKeyHash).toHaveBeenCalledWith(ADDRESS, PHONE_KEY);
+    const request = vi.mocked(api.setRecoveryKey).mock.calls[0]?.[1];
+    expect(request?.key).toEqual(PHONE_KEY);
+    expect(request?.signature).toBeTruthy();
+  });
+
+  it('self-custody: when the analysis is down, the user can send with the passkey alone', async () => {
+    const cosign = vi.fn<SwissquoteApi['cosign']>().mockResolvedValue(err(sdkError('INTERNAL', 'swissquote', 'risk engine down', 503)));
+    const api = scriptedApi({ cosign });
+    const bridge = await readyBridge(api);
+    const preview = await bridge.previewSend(draft);
+    if (!preview.ok) throw new Error('preview');
+
+    const first = await bridge.confirmSend(preview.value.id, NO_STEP_UP);
+    expect(!first.ok && first.error.code).toBe('SQ_ANALYSIS_UNAVAILABLE');
+
+    const sent = await bridge.confirmSend(preview.value.id, { ...NO_STEP_UP, withoutAnalysis: true });
+    expect(sent.ok && sent.value).toMatchObject({ kind: 'confirmed', receipt: null });
+    expect(vi.mocked(api.submit).mock.calls[0]?.[0]).toMatchObject({ cosignature: null });
   });
 
   it('a rejected step-up signature is a signing error, not a logout', async () => {
@@ -327,5 +374,74 @@ describe('SwissquoteBridge.identitySince (website sign-in)', () => {
     now = 9_000;
     await bridge.createWallet();
     expect((await bridge.identitySince(8_000))?.clientId).toBe('SQ-100001');
+  });
+});
+
+describe('SwissquoteBridge recovery', () => {
+  const NEW_KEY = { kind: 'ed25519' as const, key: `0x${'22'.repeat(32)}` };
+  const recoveryState = (status: RecoveryState['status'], extra: Partial<RecoveryState> = {}): RecoveryState => ({
+    id: 'rec_1',
+    address: ADDRESS,
+    new_owner: NEW_KEY,
+    status,
+    started_at: 1_000,
+    kyc_passed: status.state === 'pending',
+    cancel_hash: `0x${'cc'.repeat(32)}`,
+    recovery_hash: `0x${'dd'.repeat(32)}`,
+    recovery_signature: null,
+    risk: status.state === 'pending' ? { score: 40, band: 'Medium', reasons: ['Plus de 1 000 CHF sont en jeu.'], delay_secs: 90 } : null,
+    contested: false,
+    ...extra,
+  });
+
+  async function newDevice(api: SwissquoteApi): Promise<SwissquoteBridge> {
+    const bridge = new SwissquoteBridge({ api, passkey: new DevPasskeySigner(api), store: new MemoryStore(), auditLog: new LocalAuditLog(new MemoryStore()), onSession: () => undefined });
+    await bridge.login({ username: 'alice', password: 'demo' });
+    return bridge;
+  }
+
+  it('new device: new passkey, QR for the phone, smart delay, then the new passkey owns the same wallet', async () => {
+    const recovery = vi
+      .fn<SwissquoteApi['recovery']>()
+      .mockResolvedValueOnce(ok(recoveryState({ state: 'pending', unlock_at: 2_000 })))
+      .mockResolvedValue(ok(recoveryState({ state: 'completed', at: 2_001, tx_hash: '0xrot' })));
+    const api = scriptedApi({
+      devPasskey: vi.fn(async () => ok({ name: 'passkey-SQ-100001', owner: NEW_KEY, address: ADDRESS })),
+      prepareRecovery: vi.fn(async () => ok(recoveryState({ state: 'prepared', expires_at: 9_999_999_999 }))),
+      recovery,
+      executeRecovery: vi.fn(async () => ok(recoveryState({ state: 'completed', at: 2_001, tx_hash: '0xrot' }))),
+    });
+    const bridge = await newDevice(api);
+
+    expect(await bridge.listRecoverableWallets()).toEqual({ ok: true, value: [ADDRESS] });
+    const started = await bridge.startRecovery(ADDRESS);
+    expect(started.ok && started.value).toMatchObject({ phase: 'waiting_phone', qr: 'ferrata:recover?v=1&id=rec_1', newKeyFingerprint: expect.stringMatching(/^[0-9A-F]{4}-[0-9A-F]{4}$/) });
+    expect(api.prepareRecovery).toHaveBeenCalledWith({ address: ADDRESS, new_owner: NEW_KEY });
+
+    const pending = await bridge.getRecovery();
+    expect(pending.ok && pending.value).toMatchObject({ phase: 'pending', unlockAt: 2_000, band: 'Medium', reasons: ['Plus de 1 000 CHF sont en jeu.'] });
+
+    const opened = await bridge.finishRecovery();
+    expect(opened.ok).toBe(true);
+    expect(await bridge.getRecovery()).toEqual({ ok: true, value: null });
+  });
+
+  it('existing device: sees the alert with its reasons and cancels with the current passkey, never a contested one', async () => {
+    const pending = recoveryState({ state: 'pending', unlock_at: 2_000 });
+    const api = scriptedApi({
+      recoveries: vi.fn(async () => ok([pending])),
+      recovery: vi.fn<SwissquoteApi['recovery']>().mockResolvedValueOnce(ok(pending)).mockResolvedValue(ok({ ...pending, contested: true })),
+      cancelRecovery: vi.fn(async () => ok(recoveryState({ state: 'cancelled', at: 1_500 }))),
+    });
+    const bridge = await readyBridge(api);
+
+    const alerts = await bridge.getRecoveryAlerts();
+    expect(alerts.ok && alerts.value).toEqual([{ id: 'rec_1', unlockAt: 2_000, reasons: ['Plus de 1 000 CHF sont en jeu.'], newKeyFingerprint: expect.any(String), contested: false }]);
+    expect(await bridge.cancelRecovery('rec_1')).toEqual({ ok: true, value: undefined });
+    expect(vi.mocked(api.cancelRecovery).mock.calls[0]?.[0]).toBe('rec_1');
+
+    const contested = await bridge.cancelRecovery('rec_1');
+    expect(!contested.ok && contested.error.code).toBe('RECOVERY_CONTESTED');
+    expect(api.cancelRecovery).toHaveBeenCalledTimes(1);
   });
 });

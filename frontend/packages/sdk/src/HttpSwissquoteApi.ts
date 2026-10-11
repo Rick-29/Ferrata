@@ -13,7 +13,12 @@ import type { LoginRequest } from '@sqw/types/LoginRequest';
 import type { LogResponse } from '@sqw/types/LogResponse';
 import type { OwnerKey } from '@sqw/types/OwnerKey';
 import type { OwnerSignature } from '@sqw/types/OwnerSignature';
+import type { PairingKeyRequest } from '@sqw/types/PairingKeyRequest';
+import type { PairingState } from '@sqw/types/PairingState';
+import type { PrepareRecoveryRequest } from '@sqw/types/PrepareRecoveryRequest';
+import type { RecoveryKeyResponse } from '@sqw/types/RecoveryKeyResponse';
 import type { RecoveryState } from '@sqw/types/RecoveryState';
+import type { SetRecoveryKeyRequest } from '@sqw/types/SetRecoveryKeyRequest';
 import type { RegisterWalletRequest } from '@sqw/types/RegisterWalletRequest';
 import type { RegisterWalletResponse } from '@sqw/types/RegisterWalletResponse';
 import type { Session } from '@sqw/types/Session';
@@ -103,6 +108,42 @@ export class HttpSwissquoteApi implements SwissquoteApi {
 
   setSettings(address: string, request: SetSettingsRequest): Call<SettingsResponse> {
     return this.#http.post(`/settings/${seg(address)}`, request);
+  }
+
+  recoveryKey(address: string): Call<RecoveryKeyResponse> {
+    return this.#http.get(`/recovery-key/${seg(address)}`);
+  }
+
+  recoveryKeyHash(address: string, key: OwnerKey): Call<HashResponse> {
+    return this.#http.post(`/recovery-key/${seg(address)}/hash`, { key });
+  }
+
+  setRecoveryKey(address: string, request: SetRecoveryKeyRequest): Call<RecoveryKeyResponse> {
+    return this.#http.post(`/recovery-key/${seg(address)}`, request);
+  }
+
+  startPairing(address: string): Call<PairingState> {
+    return this.#http.post('/pairing', { address });
+  }
+
+  pairing(id: string): Call<PairingState> {
+    return this.#http.get(`/pairing/${seg(id)}`);
+  }
+
+  offerPairingKey(id: string, request: PairingKeyRequest): Call<PairingState> {
+    return this.#http.post(`/pairing/${seg(id)}/key`, request);
+  }
+
+  recoverableWallets(): Call<readonly string[]> {
+    return this.#http.get('/recovery/wallets');
+  }
+
+  prepareRecovery(request: PrepareRecoveryRequest): Call<RecoveryState> {
+    return this.#http.post('/recovery/prepare', request);
+  }
+
+  recoveries(address: string): Call<readonly RecoveryState[]> {
+    return this.#http.get(`/recovery?address=${seg(address)}`);
   }
 
   startRecovery(request: StartRecoveryRequest): Call<RecoveryState> {

@@ -1,15 +1,23 @@
 # Ferrata Recovery (Expo Go)
 
-App mobile de **récupération de wallet** : le téléphone est le nouvel appareil d'un client qui a
-perdu sa passkey. Elle fait une seule chose :
+App mobile du **téléphone de secours** : associé au wallet (sa clé est enregistrée dans Ferra chain
+par la passkey du propriétaire), il approuve une récupération lancée sur un nouvel ordinateur. Il ne
+détient jamais le wallet et ne peut pas déplacer de fonds ; Swissquote seul ne peut pas récupérer sans lui.
 
 1. Connexion Swissquote (`alice` / `demo`).
-2. Adresse du wallet à récupérer (copiable dans les Réglages de l'extension).
-3. Nouvelle passkey créée sur le téléphone : **simulée** (`/dev/passkeys`), car Expo Go n'a pas accès aux vraies passkeys. L'extension, elle, utilise de vraies passkeys WebAuthn.
-4. **Vérification faciale simulée** (optionnelle, facteur en plus) : aperçu caméra et scan factice, aucune image prise, enregistrée ni envoyée.
-5. **Identification vidéo simulée** : titulaire (`kyc-pass`) ou attaquant (`kyc-fail`, rejeté).
-6. Délai de sécurité (2 min en démo) : les autres appareils peuvent annuler.
-7. Finaliser : Swissquote fait tourner la clé ; la passkey du téléphone devient la clé du wallet.
+2. **Associer** : dans l'extension, Réglages → Téléphone de secours affiche un QR. Le téléphone le scanne,
+   crée sa clé (P-256, coffre sécurisé, biométrie) et l'envoie ; les deux écrans affichent la même
+   **empreinte**, puis la passkey confirme dans l'extension.
+3. **Approuver une récupération** : sur le nouvel ordinateur, « J'ai perdu ma passkey » crée une nouvelle
+   passkey et affiche un QR. Le téléphone le scanne, montre l'empreinte de la nouvelle passkey (à comparer),
+   puis la **vérification faciale** (simulée, optionnelle), le **document d'identité**, l'**identification
+   vidéo simulée** (`kyc-pass` / `kyc-fail`) et la **signature** par la clé du téléphone (biométrie).
+4. Le **délai intelligent** (raisons affichées) court ; l'ancienne passkey peut annuler. L'ordinateur
+   finalise : sa nouvelle passkey devient la clé du wallet (même adresse, mêmes fonds).
+
+La clé du téléphone n'est pas une vraie passkey FIDO (Expo Go n'y a pas accès) : elle signe au format
+d'une assertion WebAuthn, celui que le backend vérifie pour une clé P-256 (`src/device/assertion.ts`,
+vérifié côté Rust par `recovery_phone_assertion_verifies`).
 
 Elle réutilise le SDK (`../sdk`) et les types du backend (`../types`) ; elle n'est pas dans les
 workspaces npm (React Native et Vite ne partagent pas bien leurs dépendances).

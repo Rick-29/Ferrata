@@ -38,7 +38,16 @@ import type {
   TestnetSendOutcome,
   TestnetWallet,
   UiBridge,
+  PairingProgress,
+  PhonePairing,
+  RecoveryPhoneStatus,
+  RecoveryAlert,
+  RecoveryView,
 } from './UiBridge';
+import { pairingQr, recoveryQr } from '../../recovery/qr';
+
+const FAKE_PHONE_FINGERPRINT = '5FA8-122B';
+const FAKE_RECOVERABLE_ADDRESS = '0x5a11e7000000000000000000000000000000a11c';
 
 /** Mock test-network wallets for offline demos and UI tests (labelled fake, never real addresses). */
 const FAKE_SOLANA_WALLET: Omit<TestnetWallet, 'balance'> = {
@@ -187,6 +196,13 @@ export class FakeBridge implements UiBridge {
     if (!preview || !prepared) return err(uiError('SQ_NOT_FOUND'));
 
     const { assessment, action } = preview.assessment;
+    if (options.withoutAnalysis) {
+      // Self-custody: the passkey alone, no analysis and so no receipt.
+      this.#previews = new Map([...this.#previews].filter(([id]) => id !== previewId));
+      this.#applyTransfer(preview.draft);
+      this.#record({ kind: 'cosigned', from: this.#account.address, to: preview.draft.to, action, band: assessment.band, userOpHash: prepared.user_op_hash });
+      return ok({ kind: 'confirmed', txHash: fakeHash(this.#nextId()), receipt: null });
+    }
     const decision = decide(assessment, options.stepUp, options.acceptedRisk);
     if (decision.kind === 'confirm') return ok({ kind: 'confirmation_required', previewId, level: decision.level });
 
@@ -206,7 +222,6 @@ export class FakeBridge implements UiBridge {
     this.#previews = new Map([...this.#previews].filter(([id]) => id !== previewId));
 
     this.#receiptHashes = [...this.#receiptHashes, prepared.user_op_hash];
-    if (decision.kind === 'refuse_regulatory') return ok({ kind: 'refused', reason: 'regulatory' });
     this.#applyTransfer(preview.draft);
     this.#record({
       kind: 'cosigned',
@@ -279,6 +294,131 @@ export class FakeBridge implements UiBridge {
       explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=devnet`,
       recordedOnFerra: 1,
     });
+  }
+
+  // Recovery phone: the fake phone answers on the second poll.
+  #phoneFingerprint: string | null = null;
+  #pairingPolls = 0;
+
+  async getRecoveryPhone(): Promise<Result<RecoveryPhoneStatus, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    return ok({ fingerprint: this.#phoneFingerprint });
+  }
+
+  async startPhonePairing(): Promise<Result<PhonePairing, UiError>> {
+    await this.#latency();
+    if (!this.#session || !this.#account) return err(UNAUTHORIZED);
+    this.#pairingPolls = 0;
+    const pairingId = `pair_fake${this.#nextId()}`;
+    return ok({ pairingId, qr: pairingQr(pairingId, this.#account.address), expiresAt: Math.floor(Date.now() / 1000) + 600 });
+  }
+
+  async pollPhonePairing(_pairingId: string): Promise<Result<PairingProgress, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    this.#pairingPolls += 1;
+    return ok(this.#pairingPolls < 2 ? { status: 'waiting' } : { status: 'answered', fingerprint: FAKE_PHONE_FINGERPRINT, deviceLabel: 'iPhone de démo' });
+  }
+
+  async confirmPhonePairing(_pairingId: string): Promise<Result<RecoveryPhoneStatus, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    this.#phoneFingerprint = FAKE_PHONE_FINGERPRINT;
+    return ok({ fingerprint: this.#phoneFingerprint });
+  }
+
+  // Recovery on a new device: the fake phone signs on the first poll, the timelock is 30 s.
+  #recovery: { view: RecoveryView; polls: number } | null = null;
+  #alerts: RecoveryAlert[] = [];
+
+  async listRecoverableWallets(): Promise<Result<readonly string[], UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    return ok([this.#account?.address ?? FAKE_RECOVERABLE_ADDRESS]);
+  }
+
+  async startRecovery(address: string): Promise<Result<RecoveryView, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    const id = `rec_fake${this.#nextId()}`;
+    const view: RecoveryView = {
+      id,
+      address,
+      qr: recoveryQr(id),
+      newKeyFingerprint: 'A1B2-C3D4',
+      phase: 'waiting_phone',
+      unlockAt: null,
+      reasons: [],
+      band: null,
+      contested: false,
+      detail: null,
+    };
+    this.#recovery = { view, polls: 0 };
+    return ok(view);
+  }
+
+  async getRecovery(): Promise<Result<RecoveryView | null, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    const current = this.#recovery;
+    if (!current) return ok(null);
+    current.polls += 1;
+    if (current.view.phase === 'waiting_phone' && current.polls >= 1) {
+      current.view = {
+        ...current.view,
+        phase: 'pending',
+        unlockAt: Math.floor(Date.now() / 1000) + 30,
+        reasons: ['Aucun signal particulier : délai minimal.'],
+        band: 'Low',
+      };
+    }
+    return ok(current.view);
+  }
+
+  async finishRecovery(): Promise<Result<AccountView, UiError>> {
+    await this.#latency();
+    const current = this.#recovery;
+    if (!this.#session || !current) return err(UNAUTHORIZED);
+    if (current.view.phase !== 'pending' || (current.view.unlockAt ?? 0) > Math.floor(Date.now() / 1000)) return err(uiError('SQ_CONFLICT'));
+    this.#recovery = null;
+    if (!this.#account) this.#account = newDemoAccount(fakeHash(this.#nextId()));
+    return ok(this.#account);
+  }
+
+  async abandonRecovery(): Promise<Result<void, UiError>> {
+    await this.#latency();
+    this.#recovery = null;
+    return ok(undefined);
+  }
+
+  /** Demo hook: a recovery of this wallet started elsewhere (the existing device's alert). */
+  simulateRecoveryElsewhere(contested = false): void {
+    this.#alerts = [
+      {
+        id: `rec_other${this.#nextId()}`,
+        unlockAt: Math.floor(Date.now() / 1000) + 90,
+        reasons: ['Votre passkey actuelle a signé il y a moins de 24 h : pourquoi récupérer un accès encore utilisé ?'],
+        newKeyFingerprint: 'E5F6-0718',
+        contested,
+      },
+    ];
+  }
+
+  async getRecoveryAlerts(): Promise<Result<readonly RecoveryAlert[], UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    return ok(this.#alerts);
+  }
+
+  async cancelRecovery(id: string): Promise<Result<void, UiError>> {
+    await this.#latency();
+    if (!this.#session) return err(UNAUTHORIZED);
+    const alert = this.#alerts.find((a) => a.id === id);
+    if (!alert) return err(uiError('SQ_NOT_FOUND'));
+    if (alert.contested) return err(uiError('SQ_CONFLICT'));
+    this.#alerts = this.#alerts.filter((a) => a.id !== id);
+    return ok(undefined);
   }
 
   #record(event: Omit<ChainEvent, 'block'>): void {

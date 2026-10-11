@@ -83,6 +83,28 @@ export function dispatch(bridge: UiBridge, request: BridgeRequest): Promise<Resu
       return a === 'solana-devnet' ? bridge.requestAirdrop(a) : rejected();
     case 'sendTestnet':
       return isTestnetSendDraft(a) ? bridge.sendTestnet(a) : rejected();
+    case 'getRecoveryPhone':
+      return bridge.getRecoveryPhone();
+    case 'startPhonePairing':
+      return bridge.startPhonePairing();
+    case 'pollPhonePairing':
+      return isString(a) ? bridge.pollPhonePairing(a) : rejected();
+    case 'confirmPhonePairing':
+      return isString(a) ? bridge.confirmPhonePairing(a) : rejected();
+    case 'listRecoverableWallets':
+      return bridge.listRecoverableWallets();
+    case 'startRecovery':
+      return isString(a) ? bridge.startRecovery(a) : rejected();
+    case 'getRecovery':
+      return bridge.getRecovery();
+    case 'finishRecovery':
+      return bridge.finishRecovery();
+    case 'abandonRecovery':
+      return bridge.abandonRecovery();
+    case 'getRecoveryAlerts':
+      return bridge.getRecoveryAlerts();
+    case 'cancelRecovery':
+      return isString(a) ? bridge.cancelRecovery(a) : rejected();
   }
 }
 

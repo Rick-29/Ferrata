@@ -1,11 +1,11 @@
 {
-  "_comment": "Pseudo-chain world. Timelocks are minutes for the demo (14 days / 24h in production).",
+  "_comment": "Pseudo-chain world. Timelocks are seconds or minutes for the demo. recovery_delay_secs is the smart delay's base (24h in production): x1 low, x3 medium, x7 high, x14 critical.",
   "chain_id": 84532,
   "tokens": [
     { "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "symbol": "USDC", "decimals": 6 }
   ],
   "escape_delay_secs": 120,
-  "recovery_delay_secs": 120,
+  "recovery_delay_secs": 30,
   "hold_ttl_secs": 600,
   "faucet": {
     "native": "0xde0b6b3a7640000",

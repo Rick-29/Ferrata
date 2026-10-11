@@ -29,7 +29,7 @@ export interface ActivityRow {
 const KIND_LABELS: Readonly<Record<TxKind, string>> = {
   account_created: 'Compte créé',
   faucet: 'Fonds de démo reçus',
-  cosigned: 'Envoi signé par Swissquote',
+  cosigned: 'Envoi',
   escape_start: 'Sortie de secours lancée',
   escape_cancel: 'Sortie de secours annulée',
   escape_exit: 'Sortie de secours exécutée',
@@ -38,6 +38,7 @@ const KIND_LABELS: Readonly<Record<TxKind, string>> = {
   flag: 'Signalement',
   external: 'Transaction externe',
   settings_changed: 'Réglages modifiés',
+  recovery_key_set: 'Téléphone de secours enregistré',
   intent: 'Transaction préparée',
   intent_outcome: 'Suite de transaction',
   address_report: 'Adresse signalée',

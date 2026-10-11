@@ -16,6 +16,7 @@ import '../../widgets/legal-notice/LegalNotice';
 import '../../widgets/outcome-panel/OutcomePanel';
 import '../../widgets/passkey-prompt/PasskeyPrompt';
 import '../../widgets/reason-list/ReasonList';
+import '../../widgets/risk-explainer/RiskExplainer';
 import '../../widgets/risk-badge/RiskBadge';
 import '../../widgets/risk-warning/RiskWarning';
 import '../../widgets/tx-summary/TxSummary';
@@ -25,7 +26,7 @@ const NATIVE_DECIMALS = 18;
 /**
  * `review` → the user signs. Swissquote may then ask for a second confirmation: `standard` (e.g. a
  * large amount) or `high_risk`, where the user is warned and must accept the risk themselves.
- * Swissquote never blocks on risk; the only refusal is regulatory.
+ * Self-custody: Swissquote never blocks, and if its analysis is unreachable the user may send anyway.
  */
 type Phase =
   | { readonly kind: 'review' }
@@ -41,7 +42,7 @@ interface PromptCopy {
 const PROMPT_COPY: Readonly<Record<'review' | ConfirmationLevel, PromptCopy>> = {
   review: {
     title: 'Signer avec votre passkey',
-    description: 'Votre signature autorise la transaction. Swissquote ajoute la seconde signature et l’inscrit au journal d’audit.',
+    description: 'Votre passkey suffit pour autoriser la transaction. Swissquote l’a analysée et inscrit son analyse au journal d’audit.',
     actionLabel: 'Confirmer et signer',
   },
   standard: {
@@ -56,7 +57,7 @@ const PROMPT_COPY: Readonly<Record<'review' | ConfirmationLevel, PromptCopy>> = 
   },
 };
 
-/** Shows exactly what will happen and how risky it is, then gets the passkey signature(s) and Swissquote's second signature. */
+/** Shows exactly what will happen and how risky it is, then gets the passkey signature(s); Swissquote only advises. */
 @customElement('sq-confirm-screen')
 export class ConfirmScreen extends Screen {
   @property({ attribute: false }) preview!: SendPreview;
@@ -65,6 +66,7 @@ export class ConfirmScreen extends Screen {
   @state() private busy = false;
   @state() private error: UiError | null = null;
   @state() private riskAccepted = false;
+  @state() private explainerOpen = false;
 
   static override styles = [
     screenStyles,
@@ -94,6 +96,16 @@ export class ConfirmScreen extends Screen {
       }
       .cancel {
         justify-self: center;
+      }
+      .why {
+        justify-self: start;
+        padding: 0;
+        border: 0;
+        background: none;
+        font: 600 10px var(--sq-font);
+        color: var(--sq-accent);
+        text-decoration: underline;
+        cursor: pointer;
       }
     `,
   ];
@@ -131,6 +143,7 @@ export class ConfirmScreen extends Screen {
         <div class="block">
           <span class="eyebrow">Pourquoi ce niveau ?</span>
           <sq-reason-list .state=${ready(assessment.reasons)}></sq-reason-list>
+          <button type="button" class="why" @click=${() => (this.explainerOpen = true)}>Comprendre ce score</button>
         </div>
       </section>
       ${highRisk
@@ -140,9 +153,36 @@ export class ConfirmScreen extends Screen {
           ></sq-risk-warning>`
         : nothing}
       ${this.#prompt(highRisk)}
+      ${this.error?.code === 'SQ_ANALYSIS_UNAVAILABLE'
+        ? html`<sq-button variant="secondary" ?disabled=${this.busy} @click=${this.#sendWithoutAnalysis}
+            >Envoyer sans l’analyse (passkey seule)</sq-button
+          >`
+        : nothing}
       <sq-legal-notice></sq-legal-notice>
       <sq-button class="cancel" variant="ghost" ?disabled=${this.busy} @click=${this.#cancel}>Annuler</sq-button>
+      ${this.explainerOpen
+        ? html`<sq-risk-explainer
+            .state=${ready({
+              score: assessment.score,
+              band: assessment.band,
+              reasons: assessment.reasons,
+              exposureHops: signals.exposure_hops,
+              balanceShare: this.#balanceShare(signals.simulation),
+            })}
+            @explainer-closed=${() => (this.explainerOpen = false)}
+          ></sq-risk-explainer>`
+        : nothing}
     `;
+  }
+
+  /** Share of the sent asset's balance that leaves the account, from the simulation. */
+  #balanceShare(simulation: SendPreview['assessment']['signals']['simulation']): number | null {
+    const row = simulation.find((d) => d.asset === this.asset.asset);
+    if (!row) return null;
+    const before = BigInt(row.before);
+    const after = BigInt(row.after);
+    if (before <= 0n || after >= before) return null;
+    return Number(((before - after) * 1000n) / before) / 1000;
   }
 
   #prompt(highRisk: boolean): TemplateResult {
@@ -186,6 +226,21 @@ export class ConfirmScreen extends Screen {
       outcome.kind === 'confirmation_required'
         ? { kind: 'confirm-again', level: outcome.level }
         : { kind: 'done', outcome };
+  };
+
+  /** Self-custody: the analysis is down and the user goes ahead with the passkey alone. */
+  readonly #sendWithoutAnalysis = async (): Promise<void> => {
+    if (this.busy) return;
+    this.busy = true;
+    this.error = null;
+    const result = await this.bridge.confirmSend(this.preview.id, { stepUp: false, acceptedRisk: false, withoutAnalysis: true });
+    this.busy = false;
+    if (!this.isConnected) return;
+    if (!result.ok) {
+      this.error = result.error;
+      return;
+    }
+    if (result.value.kind !== 'confirmation_required') this.phase = { kind: 'done', outcome: result.value };
   };
 
   readonly #cancel = async (): Promise<void> => {

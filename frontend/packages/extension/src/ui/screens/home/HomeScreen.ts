@@ -1,15 +1,17 @@
 import type { AccountView } from '@sqw/types/AccountView';
 import type { AssetBalance } from '@sqw/types/AssetBalance';
-import { css, html, type TemplateResult } from 'lit';
+import { css, html, nothing, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { icon } from '../../core/icons';
 import { Screen, toWidgetState } from '../../core/Screen';
 import { screenStyles, textStyles } from '../../core/styles';
 import { idle, loading, type WidgetState } from '../../core/Widget';
-import type { TestnetWallet } from '../../services/UiBridge';
+import type { UiError } from '../../core/errors';
+import type { RecoveryAlert, TestnetWallet } from '../../services/UiBridge';
 import '../../widgets/asset-list/AssetList';
 import '../../widgets/balance-card/BalanceCard';
 import '../../widgets/brand/Brand';
+import '../../widgets/recovery-alert/RecoveryAlert';
 import '../../widgets/testnet-balance/TestnetBalanceCard';
 import './TestnetReceivePanel';
 import './TestnetSendPanel';
@@ -37,6 +39,9 @@ export class HomeScreen extends Screen {
   @state() private testnet: WidgetState<readonly TestnetWallet[]> = idle;
   @state() private receiving = false;
   @state() private sending = false;
+  @state() private alerts: readonly RecoveryAlert[] = [];
+  @state() private alertBusy = false;
+  @state() private alertError: UiError | null = null;
 
   static override styles = [
     screenStyles,
@@ -160,6 +165,14 @@ export class HomeScreen extends Screen {
         <sq-brand compact></sq-brand>
         <button type="button" class="lock" title="Verrouiller le wallet" @click=${this.#lock}>${icon('key', 16)} Verrouiller</button>
       </div>
+      ${this.alerts.map(
+        (alert) => html`<sq-recovery-alert
+          .alert=${alert}
+          ?busy=${this.alertBusy}
+          .error=${this.alertError}
+          @cancel-recovery=${(e: CustomEvent<string>) => void this.#cancelRecovery(e.detail)}
+        ></sq-recovery-alert>`,
+      )}
       <div class="networks" role="group" aria-label="Réseau">
         ${this.#tabButton('mainnet', 'Mainnet')} ${this.#tabButton('testnet', 'Testnet')}
       </div>
@@ -264,6 +277,24 @@ export class HomeScreen extends Screen {
   readonly #load = async (): Promise<void> => {
     this.wallet = loading;
     this.wallet = toWidgetState(await this.bridge.getWallet());
+    // Best effort: a failure to read alerts must not hide the wallet.
+    const alerts = await this.bridge.getRecoveryAlerts();
+    if (this.isConnected) this.alerts = alerts.ok ? alerts.value : [];
+  };
+
+  /** "Ce n'est pas moi": the current passkey cancels a recovery started elsewhere. */
+  readonly #cancelRecovery = async (id: string): Promise<void> => {
+    if (this.alertBusy) return;
+    this.alertBusy = true;
+    this.alertError = null;
+    const cancelled = await this.bridge.cancelRecovery(id);
+    this.alertBusy = false;
+    if (!this.isConnected) return;
+    if (!cancelled.ok) {
+      this.alertError = cancelled.error;
+      return;
+    }
+    this.alerts = this.alerts.filter((a) => a.id !== id);
   };
 
   /** Also makes the backend sync each test address, so new deposits land on the Ferra chain. */

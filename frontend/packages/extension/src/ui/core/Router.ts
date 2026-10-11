@@ -9,6 +9,7 @@ export interface RouteParams {
   send: void;
   confirm: { readonly preview: SendPreview; readonly asset: AssetBalance };
   'recovery-start': void;
+  'recovery-phone': void;
   'security-alert': void;
   activity: void;
   settings: void;

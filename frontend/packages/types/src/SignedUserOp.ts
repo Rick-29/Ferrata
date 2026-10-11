@@ -4,6 +4,6 @@ import type { TxRequest } from "./TxRequest";
 
 export type SignedUserOp = { tx: TxRequest, nonce: number, owner_signature: OwnerSignature, 
 /**
- * Swissquote's co-signature from `/cosign`; may be omitted only for an unlocked escape-hatch exit.
+ * Swissquote's risk-analysis receipt from `/cosign`; optional (self-custody: the owner's signature alone is valid).
  */
 cosignature: string | null, };

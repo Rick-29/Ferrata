@@ -120,6 +120,22 @@ mod tests {
     use ed25519_dalek::{Signer, SigningKey};
     use p256::ecdsa::SigningKey as P256Signing;
 
+    /// Vector produced by the recovery phone's own code (`frontend/packages/mobile/src/device/assertion.ts`,
+    /// secret = 32 x 0x07): the phone's key answers in the WebAuthn format this verifies.
+    #[test]
+    fn recovery_phone_assertion_verifies() {
+        let hex = |s: &str| Bytes::from(alloy_primitives::hex::decode(s).unwrap());
+        let key = OwnerKey::P256 { key: hex("0x041e18532fd4754c02f3041d9c75ceb33b83ffd81ac7ce4fe882ccb1c98bc5896ea46c311c4e2ff40dd96a3653e6e45445d32dfe486eced75c7a90c6a18881c0a3") };
+        let sig = OwnerSignature::WebAuthn {
+            authenticator_data: hex("0xd0b0f41ab28539f3f9fd83a1d7d65a25daa1edd779d7dcbe332a8c94895fd5d90500000000"),
+            client_data_json: hex("0x7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2271367572713675727136757271367572713675727136757271367572713675727136757271367572713673222c226f726967696e223a22666572726174612d7265636f766572792d70686f6e65227d"),
+            signature: hex("0x304402201c91fbc7267916ecc575d2751282e5027836a03e7500bb264126d18ae4ae6bdf022007eb653699add0938badf052143b7bc47193dcfe35e1fbf2abc6c9904e296a3e"),
+        };
+        let hash = B256::repeat_byte(0xab);
+        assert!(verify_owner(&key, &hash, &sig));
+        assert!(!verify_owner(&key, &B256::repeat_byte(0xcd), &sig), "bound to the recovery hash");
+    }
+
     #[test]
     fn ed25519_roundtrip() {
         let sk = SigningKey::from_bytes(&[1u8; 32]);

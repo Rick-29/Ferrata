@@ -54,13 +54,17 @@ pub trait ChainBackend: Send + Sync {
     fn cancel_escape_hatch(&mut self, address: Address, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError>;
 
     // ----- recovery (Swissquote only, after its timelock) -----
+    fn recovery_hash(&self, address: Address, new_owner: &OwnerKey, recovery_id: &str) -> B256;
     fn rotate_hash(&self, address: Address, new_owner: &OwnerKey, nonce: u64) -> B256;
-    fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
+    fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, recovery_id: &str, recovery_signature: &OwnerSignature, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
 
     // ----- the owner's settings and intentions -----
     fn settings_hash(&self, address: Address, nonce: u64, settings: &WalletSettings) -> B256;
     fn settings_of(&self, address: Address) -> WalletSettings;
     fn set_settings(&mut self, address: Address, settings: WalletSettings, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError>;
+    fn recovery_key_hash(&self, address: Address, nonce: u64, key: &OwnerKey) -> B256;
+    fn recovery_key_of(&self, address: Address) -> Option<OwnerKey>;
+    fn set_recovery_key(&mut self, address: Address, key: OwnerKey, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError>;
     fn intent_hash(&self, address: Address, id: &str) -> B256;
     fn record_intent(&mut self, address: Address, intent: Intent, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
     fn record_intent_outcome(&mut self, address: Address, outcome: IntentOutcome, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError>;
@@ -212,11 +216,14 @@ impl ChainBackend for super::MockChain {
     fn cancel_escape_hatch(&mut self, address: Address, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError> {
         super::MockChain::cancel_escape_hatch(self, address, sig, now)
     }
+    fn recovery_hash(&self, address: Address, new_owner: &OwnerKey, recovery_id: &str) -> B256 {
+        super::MockChain::recovery_hash(self, address, new_owner, recovery_id)
+    }
     fn rotate_hash(&self, address: Address, new_owner: &OwnerKey, nonce: u64) -> B256 {
         super::MockChain::rotate_hash(self, address, new_owner, nonce)
     }
-    fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
-        super::MockChain::rotate_owner(self, address, new_owner, cosignature, now)
+    fn rotate_owner(&mut self, address: Address, new_owner: OwnerKey, recovery_id: &str, recovery_signature: &OwnerSignature, cosignature: &Bytes, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::rotate_owner(self, address, new_owner, recovery_id, recovery_signature, cosignature, now)
     }
     fn settings_hash(&self, address: Address, nonce: u64, settings: &WalletSettings) -> B256 {
         super::MockChain::settings_hash(self, address, nonce, settings)
@@ -226,6 +233,15 @@ impl ChainBackend for super::MockChain {
     }
     fn set_settings(&mut self, address: Address, settings: WalletSettings, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError> {
         super::MockChain::set_settings(self, address, settings, sig, now)
+    }
+    fn recovery_key_hash(&self, address: Address, nonce: u64, key: &OwnerKey) -> B256 {
+        super::MockChain::recovery_key_hash(self, address, nonce, key)
+    }
+    fn recovery_key_of(&self, address: Address) -> Option<OwnerKey> {
+        super::MockChain::recovery_key_of(self, address)
+    }
+    fn set_recovery_key(&mut self, address: Address, key: OwnerKey, sig: &OwnerSignature, now: u64) -> Result<SubmitResult, ChainError> {
+        super::MockChain::set_recovery_key(self, address, key, sig, now)
     }
     fn intent_hash(&self, address: Address, id: &str) -> B256 {
         super::MockChain::intent_hash(self, address, id)

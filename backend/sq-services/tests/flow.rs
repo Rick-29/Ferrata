@@ -292,17 +292,23 @@ async fn server_derived_known_recipients_make_second_payment_low() {
 }
 
 #[tokio::test]
-async fn chain_rejects_submission_without_cosignature() {
+async fn owner_alone_can_submit_self_custody() {
     let app = App::logged_in().await;
     let owner = Owner::new(2);
     let addr = app.onboard(&owner).await;
     let tx = usdc_tx(addr, KNOWN, 1);
     let prepared: PreparedOp = app.post("/chain/prepare", SimulateRequest { tx: tx.clone() }).await;
+    // No Swissquote co-signature: the owner's passkey alone authorises the transfer.
+    let r = app.submit(&owner, tx.clone(), &prepared, None).await;
+    assert_eq!(r.kind, TxKind::Cosigned);
+
+    // A forged owner signature is still refused.
+    let prepared: PreparedOp = app.post("/chain/prepare", SimulateRequest { tx: tx.clone() }).await;
     let (s, e) = app
-        .post_err("/chain/submit", SignedUserOp { tx, nonce: prepared.nonce, owner_signature: owner.sign(&prepared.user_op_hash), cosignature: None })
+        .post_err("/chain/submit", SignedUserOp { tx, nonce: prepared.nonce, owner_signature: Owner::new(99).sign(&prepared.user_op_hash), cosignature: None })
         .await;
-    assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(e.code, "CHAIN_ESCAPE_NOT_STARTED");
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    assert_eq!(e.code, "CHAIN_BAD_OWNER_SIGNATURE");
 }
 
 #[tokio::test]
@@ -372,16 +378,20 @@ async fn high_band_warns_and_needs_acceptance_plus_second_signature_never_a_hold
 }
 
 #[tokio::test]
-async fn critical_band_is_refused_and_chain_rejects_forged_cosignature() {
+async fn sanctioned_recipient_is_warned_never_refused_and_chain_rejects_forged_cosignature() {
     let app = App::logged_in().await;
     let owner = Owner::new(5);
     let addr = app.onboard(&owner).await;
     let tx = usdc_tx(addr, SANCTIONED, 1);
-    let (outcome, prepared) = app.cosign(&tx, &AccountContext::default(), None).await;
-    let CosignOutcome::Refused { entry, reason } = outcome else { panic!("{outcome:?}") };
-    assert_eq!(reason, "regulatory");
+    let (outcome, _) = app.cosign(&tx, &AccountContext::default(), None).await;
+    // Self-custody: the strongest warning, not a refusal.
+    let CosignOutcome::StepUp { entry, step_up_hash: h, level } = outcome else { panic!("{outcome:?}") };
+    assert_eq!(level, ConfirmationLevel::HighRisk);
     assert_eq!(entry.entry.assessment.band, RiskBand::Critical);
-    // a non-regulatory Critical (no sanctions) is warned, not refused: the escape-active drain below shows it
+    let (accepted, _) = app.cosign_with(&tx, &AccountContext::default(), Some(owner.sign(&h)), true).await;
+    let CosignOutcome::Cosigned { entry, .. } = accepted else { panic!("{accepted:?}") };
+    assert!(entry.entry.warnings.iter().any(|w| w.contains("sanctions list")));
+    let prepared: PreparedOp = app.post("/chain/prepare", SimulateRequest { tx: tx.clone() }).await;
 
     let forged = Bytes::from(vec![1u8; 64]);
     let (s, e) = app
@@ -439,23 +449,43 @@ async fn escape_hatch_exit_is_flagged_by_reconciliation() {
 }
 
 #[tokio::test]
-async fn recovery_cancel_during_timelock_wins_and_execute_after_timelock_rotates_owner() {
+async fn recovery_needs_the_phone_and_kyc_cancel_wins_contested_cannot_be_cancelled_and_rotation_works() {
     let app = App::logged_in().await;
     let real = Owner::new(8);
     let addr = app.onboard(&real).await;
-
-    // attacker fails KYC
+    let phone = Owner::new(20);
     let attacker = Owner::new(9);
-    let rejected: RecoveryState = app
-        .post("/recovery/start", StartRecoveryRequest { address: addr, new_owner: attacker.key(), kyc: KycAttestation { script_id: "kyc-fail".into(), full_name: "Mallory".into() } })
-        .await;
+    let kyc = |script: &str| KycAttestation { script_id: script.into(), full_name: "Alice Keller".into() };
+
+    // The new device finds the client's wallets to recover.
+    let mine: Vec<Address> = app.get("/recovery/wallets").await;
+    assert!(mine.contains(&addr));
+
+    // No recovery phone registered yet: nothing can start.
+    let (s, _) = app.post_err("/recovery/prepare", PrepareRecoveryRequest { address: addr, new_owner: attacker.key() }).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    let h: HashResponse = app.post(&format!("/recovery-key/{addr}/hash"), RecoveryKeyHashRequest { key: phone.key() }).await;
+    let _: RecoveryKeyResponse = app.post(&format!("/recovery-key/{addr}"), SetRecoveryKeyRequest { key: phone.key(), signature: real.sign(&h.hash) }).await;
+
+    // Without the phone's signature (Swissquote alone, or a thief without the phone): refused.
+    let rec: RecoveryState = app.post("/recovery/prepare", PrepareRecoveryRequest { address: addr, new_owner: attacker.key() }).await;
+    assert!(matches!(rec.status, RecoveryStatus::Prepared { .. }));
+    let (s, _) = app.post_err("/recovery/start", StartRecoveryRequest { id: rec.id.clone(), recovery_signature: attacker.sign(&rec.recovery_hash), kyc: kyc("kyc-pass") }).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    // Phone stolen but KYC fails: rejected.
+    let rejected: RecoveryState = app.post("/recovery/start", StartRecoveryRequest { id: rec.id.clone(), recovery_signature: phone.sign(&rec.recovery_hash), kyc: kyc("kyc-fail") }).await;
     assert!(matches!(rejected.status, RecoveryStatus::Rejected { .. }));
 
-    // attacker passes KYC (stolen documents); real user cancels from an existing device
-    let rec: RecoveryState = app
-        .post("/recovery/start", StartRecoveryRequest { address: addr, new_owner: attacker.key(), kyc: KycAttestation { script_id: "kyc-pass".into(), full_name: "Alice Keller".into() } })
-        .await;
+    // Phone + KYC: pending with the smart delay and its reasons; the real owner cancels.
+    let rec: RecoveryState = app.post("/recovery/prepare", PrepareRecoveryRequest { address: addr, new_owner: attacker.key() }).await;
+    let rec: RecoveryState = app.post("/recovery/start", StartRecoveryRequest { id: rec.id.clone(), recovery_signature: phone.sign(&rec.recovery_hash), kyc: kyc("kyc-pass") }).await;
     let RecoveryStatus::Pending { unlock_at } = rec.status else { panic!("{:?}", rec.status) };
+    let risk = rec.risk.clone().expect("smart delay");
+    assert!(!risk.reasons.is_empty());
+    assert!(risk.reasons.iter().any(|r| r.contains("moins de 24 h")), "the passkey just signed the recovery key: {:?}", risk.reasons);
+    let listed: Vec<RecoveryState> = app.get(&format!("/recovery?address={addr}")).await;
+    assert_eq!(listed.first().map(|r| r.id.as_str()), Some(rec.id.as_str()));
     let (s, _) = app.post_err(&format!("/recovery/{}/execute", rec.id), serde_json::json!({})).await;
     assert_eq!(s, StatusCode::CONFLICT);
     let (s, _) = app.post_err(&format!("/recovery/{}/cancel", rec.id), CancelRecoveryRequest { signature: attacker.sign(&rec.cancel_hash) }).await;
@@ -466,15 +496,19 @@ async fn recovery_cancel_during_timelock_wins_and_execute_after_timelock_rotates
     let (s, _) = app.post_err(&format!("/recovery/{}/execute", rec.id), serde_json::json!({})).await;
     assert_eq!(s, StatusCode::CONFLICT);
 
-    // real user lost the device: recovery runs to completion, old key stops working
+    // The real user lost the passkey and retries: contested, longer, and the old passkey cannot block it.
     let new_device = Owner::new(10);
-    let rec: RecoveryState = app
-        .post("/recovery/start", StartRecoveryRequest { address: addr, new_owner: new_device.key(), kyc: KycAttestation { script_id: "kyc-pass".into(), full_name: "Alice Keller".into() } })
-        .await;
+    let rec: RecoveryState = app.post("/recovery/prepare", PrepareRecoveryRequest { address: addr, new_owner: new_device.key() }).await;
+    let rec: RecoveryState = app.post("/recovery/start", StartRecoveryRequest { id: rec.id.clone(), recovery_signature: phone.sign(&rec.recovery_hash), kyc: kyc("kyc-pass") }).await;
+    assert!(rec.contested);
     let RecoveryStatus::Pending { unlock_at } = rec.status else { panic!("{:?}", rec.status) };
+    let (s, _) = app.post_err(&format!("/recovery/{}/cancel", rec.id), CancelRecoveryRequest { signature: real.sign(&rec.cancel_hash) }).await;
+    assert_eq!(s, StatusCode::CONFLICT);
     app.clock.set(unlock_at);
     let done: RecoveryState = app.post(&format!("/recovery/{}/execute", rec.id), serde_json::json!({})).await;
     assert!(matches!(done.status, RecoveryStatus::Completed { .. }));
+    let consumed: RecoveryKeyResponse = app.get(&format!("/recovery-key/{addr}")).await;
+    assert!(consumed.key.is_none(), "the phone that served must be associated again");
 
     let tx = usdc_tx(addr, KNOWN, 1);
     let (outcome, prepared) = app.cosign(&tx, &AccountContext { known_recipients: vec![KNOWN], own_per_tx_limit: None }, None).await;
@@ -929,4 +963,56 @@ async fn validator_worker_judges_pending_events_and_address_reports_weigh_on_the
     let risk = report.transfers[0].risk.as_ref().unwrap();
     assert!(risk.reasons.iter().any(|r| r.code == "REPORTED_COUNTERPARTY"), "{:?}", risk.reasons);
     assert_eq!(risk.features.counterparty_reports, 2);
+}
+
+#[tokio::test]
+async fn owner_registers_and_replaces_the_recovery_key_on_chain() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(11);
+    let addr = app.onboard(&owner).await;
+    let phone = Owner::new(12);
+
+    let none: RecoveryKeyResponse = app.get(&format!("/recovery-key/{addr}")).await;
+    assert!(none.key.is_none());
+
+    let h: HashResponse = app.post(&format!("/recovery-key/{addr}/hash"), RecoveryKeyHashRequest { key: phone.key() }).await;
+    // Only the owner can register it: the phone signing for itself is refused.
+    let (s, _) = app.post_err(&format!("/recovery-key/{addr}"), SetRecoveryKeyRequest { key: phone.key(), signature: phone.sign(&h.hash) }).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
+    let set: RecoveryKeyResponse = app.post(&format!("/recovery-key/{addr}"), SetRecoveryKeyRequest { key: phone.key(), signature: owner.sign(&h.hash) }).await;
+    assert_eq!(set.tx.expect("recorded").kind, TxKind::RecoveryKeySet);
+    let got: RecoveryKeyResponse = app.get(&format!("/recovery-key/{addr}")).await;
+    assert_eq!(got.key, Some(phone.key()));
+
+    // A new phone replaces it; the old signature (old nonce) cannot be replayed.
+    let new_phone = Owner::new(13);
+    let (s, _) = app.post_err(&format!("/recovery-key/{addr}"), SetRecoveryKeyRequest { key: phone.key(), signature: owner.sign(&h.hash) }).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+    let h2: HashResponse = app.post(&format!("/recovery-key/{addr}/hash"), RecoveryKeyHashRequest { key: new_phone.key() }).await;
+    let _: RecoveryKeyResponse = app.post(&format!("/recovery-key/{addr}"), SetRecoveryKeyRequest { key: new_phone.key(), signature: owner.sign(&h2.hash) }).await;
+    let got: RecoveryKeyResponse = app.get(&format!("/recovery-key/{addr}")).await;
+    assert_eq!(got.key, Some(new_phone.key()));
+}
+
+#[tokio::test]
+async fn the_phone_pairs_through_the_relay_and_only_the_owner_registers_it() {
+    let app = App::logged_in().await;
+    let owner = Owner::new(30);
+    let addr = app.onboard(&owner).await;
+    let phone = Owner::new(31);
+
+    let p: PairingState = app.post("/pairing", StartPairingRequest { address: addr }).await;
+    assert!(p.key.is_none());
+    let answered: PairingState = app.post(&format!("/pairing/{}/key", p.id), PairingKeyRequest { key: phone.key(), device_label: Some("iPhone".into()) }).await;
+    let fp = answered.fingerprint.clone().expect("fingerprint");
+    assert_eq!(fp.len(), 9);
+    // Only one phone may answer a pairing.
+    let (s, _) = app.post_err(&format!("/pairing/{}/key", p.id), PairingKeyRequest { key: Owner::new(32).key(), device_label: None }).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    let read: PairingState = app.get(&format!("/pairing/{}", p.id)).await;
+    assert_eq!((read.key, read.fingerprint), (Some(phone.key()), Some(fp)));
+    // Nothing is registered until the owner's passkey signs it.
+    let none: RecoveryKeyResponse = app.get(&format!("/recovery-key/{addr}")).await;
+    assert!(none.key.is_none());
 }

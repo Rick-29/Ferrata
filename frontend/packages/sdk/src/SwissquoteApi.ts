@@ -13,7 +13,12 @@ import type { LoginRequest } from '@sqw/types/LoginRequest';
 import type { LogResponse } from '@sqw/types/LogResponse';
 import type { OwnerKey } from '@sqw/types/OwnerKey';
 import type { OwnerSignature } from '@sqw/types/OwnerSignature';
+import type { PairingKeyRequest } from '@sqw/types/PairingKeyRequest';
+import type { PairingState } from '@sqw/types/PairingState';
+import type { PrepareRecoveryRequest } from '@sqw/types/PrepareRecoveryRequest';
+import type { RecoveryKeyResponse } from '@sqw/types/RecoveryKeyResponse';
 import type { RecoveryState } from '@sqw/types/RecoveryState';
+import type { SetRecoveryKeyRequest } from '@sqw/types/SetRecoveryKeyRequest';
 import type { RegisterWalletRequest } from '@sqw/types/RegisterWalletRequest';
 import type { RegisterWalletResponse } from '@sqw/types/RegisterWalletResponse';
 import type { Session } from '@sqw/types/Session';
@@ -61,8 +66,27 @@ export interface SwissquoteApi {
   settingsHash(address: string, settings: WalletSettings): Call<HashResponse>;
   setSettings(address: string, request: SetSettingsRequest): Call<SettingsResponse>;
 
-  /** Device recovery: new passkey + simulated KYC → timelock → execute (or cancel from an existing device). */
+  /** The account's recovery key (the user's phone), registered by the owner on the Ferra chain. */
+  recoveryKey(address: string): Call<RecoveryKeyResponse>;
+  recoveryKeyHash(address: string, key: OwnerKey): Call<HashResponse>;
+  setRecoveryKey(address: string, request: SetRecoveryKeyRequest): Call<RecoveryKeyResponse>;
+
+  /** Pairing relay for the recovery phone: the extension opens it, the phone drops its public key. */
+  startPairing(address: string): Call<PairingState>;
+  pairing(id: string): Call<PairingState>;
+  offerPairingKey(id: string, request: PairingKeyRequest): Call<PairingState>;
+
+  /**
+   * Recovery (KYC mandatory): `prepare` on the new device (new passkey) → the phone signs
+   * `recovery_hash` and passes KYC in `start` → smart-delay timelock → `execute`, or `cancel`
+   * from the current passkey (not for a contested recovery).
+   */
+  /** The wallets of the signed-in client: the new device picks the one to recover. */
+  recoverableWallets(): Call<readonly string[]>;
+  prepareRecovery(request: PrepareRecoveryRequest): Call<RecoveryState>;
   startRecovery(request: StartRecoveryRequest): Call<RecoveryState>;
+  /** Recoveries of a wallet, newest first (the existing device's alert). */
+  recoveries(address: string): Call<readonly RecoveryState[]>;
   recovery(id: string): Call<RecoveryState>;
   cancelRecovery(id: string, signature: OwnerSignature): Call<RecoveryState>;
   executeRecovery(id: string): Call<RecoveryState>;

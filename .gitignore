@@ -5,3 +5,7 @@ frontend/packages/core-wasm/
 .env
 ferra-chain.jsonl
 backend-server.log
+
+# Private key of the extension (fixes its ID); never commit
+extension-key.pem
+.env.local

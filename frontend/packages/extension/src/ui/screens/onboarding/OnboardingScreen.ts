@@ -1,5 +1,5 @@
 import type { LoginRequest } from '@sqw/types/LoginRequest';
-import { css, html, type TemplateResult } from 'lit';
+import { css, html, nothing, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { UiError } from '../../core/errors';
 import type { WidgetEvent } from '../../core/events';
@@ -41,6 +41,16 @@ export class OnboardingScreen extends Screen {
         display: grid;
         gap: 25px;
         margin-top: 34px;
+      }
+      .lost {
+        justify-self: center;
+        padding: 0;
+        border: 0;
+        background: none;
+        font: 500 11px var(--sq-font);
+        color: var(--sq-accent);
+        text-decoration: underline;
+        cursor: pointer;
       }
       .lead {
         max-width: 290px;
@@ -110,7 +120,7 @@ export class OnboardingScreen extends Screen {
         ? html`<header>
             <sq-brand></sq-brand>
             <p class="lead">
-              Vos fonds restent à vous. Chaque transaction porte une double signature : la vôtre et celle de Swissquote, qui ne peut jamais déplacer vos fonds.
+              Vos fonds restent à vous : votre passkey seule autorise une transaction. Swissquote analyse chaque envoi et vous avertit, mais ne peut jamais déplacer ni bloquer vos fonds.
             </p>
           </header>`
         : html`<div class="hero">
@@ -161,6 +171,11 @@ export class OnboardingScreen extends Screen {
             @passkey-requested=${this.#createWallet}
             @retry=${this.#createWallet}
           ></sq-passkey-prompt>`}
+      ${this.step === 'login'
+        ? nothing
+        : html`<button type="button" class="lost" ?disabled=${this.busy} @click=${() => this.router.go('recovery-start', undefined)}>
+            J’ai perdu ma passkey : récupérer mon wallet
+          </button>`}
       <sq-step-progress .state=${ready({ steps: STEPS, current: this.step === 'login' ? 0 : 1 })}></sq-step-progress>
     `;
   }

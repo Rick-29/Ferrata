@@ -17,6 +17,11 @@ import type {
   TestnetSendOutcome,
   TestnetWallet,
   UiBridge,
+  PairingProgress,
+  PhonePairing,
+  RecoveryPhoneStatus,
+  RecoveryAlert,
+  RecoveryView,
 } from './UiBridge';
 
 type UiResult<T> = Promise<Result<T, UiError>>;
@@ -86,6 +91,50 @@ export class RuntimeBridge implements UiBridge {
 
   sendTestnet(draft: TestnetSendDraft): UiResult<TestnetSendOutcome> {
     return call('sendTestnet', draft);
+  }
+
+  getRecoveryPhone(): UiResult<RecoveryPhoneStatus> {
+    return call('getRecoveryPhone');
+  }
+
+  startPhonePairing(): UiResult<PhonePairing> {
+    return call('startPhonePairing');
+  }
+
+  pollPhonePairing(pairingId: string): UiResult<PairingProgress> {
+    return call('pollPhonePairing', pairingId);
+  }
+
+  confirmPhonePairing(pairingId: string): UiResult<RecoveryPhoneStatus> {
+    return call('confirmPhonePairing', pairingId);
+  }
+
+  listRecoverableWallets(): UiResult<readonly string[]> {
+    return call('listRecoverableWallets');
+  }
+
+  startRecovery(address: string): UiResult<RecoveryView> {
+    return call('startRecovery', address);
+  }
+
+  getRecovery(): UiResult<RecoveryView | null> {
+    return call('getRecovery');
+  }
+
+  finishRecovery(): UiResult<AccountView> {
+    return call('finishRecovery');
+  }
+
+  abandonRecovery(): UiResult<void> {
+    return call('abandonRecovery');
+  }
+
+  getRecoveryAlerts(): UiResult<readonly RecoveryAlert[]> {
+    return call('getRecoveryAlerts');
+  }
+
+  cancelRecovery(id: string): UiResult<void> {
+    return call('cancelRecovery', id);
   }
 }
 
