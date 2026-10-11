@@ -43,6 +43,8 @@ const solanaTxUrl = (signature: string): string => `https://explorer.solana.com/
 const BASE_FAUCET_URL = 'https://portal.cdp.coinbase.com/products/faucet';
 /** Proof-of-work faucet: no account and no mainnet balance needed (checked 2026-10-10). */
 const SEPOLIA_FAUCET_URL = 'https://sepolia-faucet.pk910.de/';
+/** Ethereum Sepolia is hidden for the demo (Base Sepolia covers EVM); flip to show it again. */
+const SHOW_ETH_SEPOLIA = false;
 
 export class TestnetWallets {
   readonly #deps: TestnetWalletsDeps;
@@ -58,13 +60,13 @@ export class TestnetWallets {
     const smartAddress = gasless?.enabled ? await this.#smartAccountAddress(gasless) : null;
     this.#syncInBackground(ferraWallet, SOLANA, solAddress);
     this.#syncInBackground(ferraWallet, BASE, evmAddress);
-    this.#syncInBackground(ferraWallet, SEPOLIA, evmAddress);
+    if (SHOW_ETH_SEPOLIA) this.#syncInBackground(ferraWallet, SEPOLIA, evmAddress);
     if (smartAddress !== null) this.#syncInBackground(ferraWallet, BASE, smartAddress);
 
     const [solBalance, baseBalance, sepoliaBalance, usdcBalance] = await Promise.all([
       devnet.balance(solAddress),
       evmBalance('base-sepolia', evmAddress),
-      evmBalance('eth-sepolia', evmAddress),
+      SHOW_ETH_SEPOLIA ? evmBalance('eth-sepolia', evmAddress) : Promise.resolve(null),
       smartAddress === null || !gasless ? Promise.resolve(null) : gasless.balance(smartAddress),
     ]);
     const gaslessWallet: TestnetWallet[] =
@@ -108,17 +110,21 @@ export class TestnetWallets {
         inWalletAirdrop: false,
         faucetUrl: BASE_FAUCET_URL,
       },
-      {
-        network: SEPOLIA,
-        label: 'Ethereum Sepolia',
-        address: evmAddress,
-        symbol: 'ETH',
-        decimals: 18,
-        balance: sepoliaBalance,
-        explorerUrl: `https://sepolia.etherscan.io/address/${evmAddress}`,
-        inWalletAirdrop: false,
-        faucetUrl: SEPOLIA_FAUCET_URL,
-      },
+      ...(SHOW_ETH_SEPOLIA
+        ? [
+            {
+              network: SEPOLIA,
+              label: 'Ethereum Sepolia',
+              address: evmAddress,
+              symbol: 'ETH',
+              decimals: 18,
+              balance: sepoliaBalance,
+              explorerUrl: `https://sepolia.etherscan.io/address/${evmAddress}`,
+              inWalletAirdrop: false,
+              faucetUrl: SEPOLIA_FAUCET_URL,
+            },
+          ]
+        : []),
       ...gaslessWallet,
     ]);
   }

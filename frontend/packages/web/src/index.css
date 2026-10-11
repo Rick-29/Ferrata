@@ -3761,3 +3761,9 @@ h3 {
     display: none;
   }
 }
+
+.live-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

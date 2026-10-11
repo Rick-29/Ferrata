@@ -129,20 +129,11 @@ describe('TestnetWallets', () => {
     expect(sync).toHaveBeenCalledWith(expect.objectContaining({ wallet: '0xFerraWallet', network: 'base-sepolia', address_raw: address }));
   });
 
-  it('lists Ethereum Sepolia on the same EVM address, with the PoW faucet, and syncs it', async () => {
-    const { service, evm, sync } = setup();
+  it('hides Ethereum Sepolia for the demo: not listed, not read, not synced', async () => {
+    const { service, sync } = setup();
     const result = await service.list('0xFerraWallet');
-    const address = await evm.address();
-    expect(result.ok && result.value.map((w) => w.network)).toEqual(['solana-devnet', 'base-sepolia', 'eth-sepolia']);
-    expect(result.ok && result.value[2]).toMatchObject({
-      network: 'eth-sepolia',
-      address,
-      symbol: 'ETH',
-      balance: '30000000000000000',
-      inWalletAirdrop: false,
-      faucetUrl: 'https://sepolia-faucet.pk910.de/',
-    });
-    expect(sync).toHaveBeenCalledWith(expect.objectContaining({ wallet: '0xFerraWallet', network: 'eth-sepolia', address_raw: address }));
+    expect(result.ok && result.value.map((w) => w.network)).toEqual(['solana-devnet', 'base-sepolia']);
+    expect(sync).not.toHaveBeenCalledWith(expect.objectContaining({ network: 'eth-sepolia' }));
   });
 
   it('shows a null ETH balance when the Base Sepolia node cannot be read', async () => {

@@ -53,6 +53,7 @@ function setup(options: { ready?: boolean; approve?: boolean; rpc?: (body: unkno
       options.siteReads?.push(method);
       return { ok: true, result: { method } };
     },
+    openSend: async (preset) => ({ ok: true, result: { closed: true, preset } }),
   });
   return { router, keyring, keyStore, rpcCalls, approvals };
 }
@@ -175,5 +176,18 @@ describe('DappRouter website reads', () => {
     expect((await router.handle(EVIL, 'sqw_activity', [])).ok).toBe(false);
     expect(siteReads).toEqual(['sqw_wallet']);
     expect(rpcCalls).toHaveLength(0);
+  });
+});
+
+describe('DappRouter website send', () => {
+  it("opens the send window for Ferrata's own website only, with a sanitised preset", async () => {
+    const { router } = setup();
+    const to = `0x${'a'.repeat(40)}`;
+    expect(await router.handle('http://localhost:5174', 'sqw_openSend', [{ to, amount: '12.5', extra: 'ignored' }])).toEqual({
+      ok: true,
+      result: { closed: true, preset: { to, amount: '12.5' } },
+    });
+    expect(await router.handle('http://localhost:5174', 'sqw_openSend', [])).toEqual({ ok: true, result: { closed: true, preset: { to: '', amount: '' } } });
+    expect((await router.handle(UNISWAP, 'sqw_openSend', [{ to }])).ok).toBe(false);
   });
 });

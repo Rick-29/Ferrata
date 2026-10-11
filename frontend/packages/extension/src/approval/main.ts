@@ -12,6 +12,9 @@ import { SIGNIN_PARAM } from '../signin/protocol';
 import { AppShell } from '../ui/core/AppShell';
 import { Router } from '../ui/core/Router';
 import '../ui/screens/onboarding/OnboardingScreen';
+import '../ui/screens/send/SendScreen';
+import '../ui/screens/confirm/ConfirmScreen';
+import { SEND_PARAM, sendPreset } from './SendWindow';
 import { RuntimeBridge } from '../ui/services/RuntimeBridge';
 import { SignInBanner } from './SignInWindow';
 
@@ -42,6 +45,26 @@ if (signInId !== null) {
     'onboarding',
   );
   document.body.append(banner, new AppShell(new RuntimeBridge(), router));
+}
+
+const sendMode = new URLSearchParams(location.search).get(SEND_PARAM) !== null;
+
+if (sendMode) {
+  document.querySelector('sq-approval-app')?.remove();
+  const preset = sendPreset(location.search);
+  const bridge = new RuntimeBridge();
+  // Locked: unlock with the passkey first (onboarding), then the window's home forwards to Send.
+  const unlocked = await bridge.getWallet();
+  const router = new Router(
+    {
+      onboarding: () => html`<sq-onboarding-screen></sq-onboarding-screen>`,
+      home: () => html`<sq-send-window-home></sq-send-window-home>`,
+      send: () => html`<sq-send-screen .presetTo=${preset.to} .presetAmount=${preset.amount}></sq-send-screen>`,
+      confirm: ({ preview, asset }) => html`<sq-confirm-screen .preview=${preview} .asset=${asset}></sq-confirm-screen>`,
+    },
+    unlocked.ok ? 'home' : 'onboarding',
+  );
+  document.body.append(new AppShell(bridge, router));
 }
 
 document.title = APP_NAME;

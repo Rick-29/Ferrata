@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
+  Send,
   Copy,
   ExternalLink,
   FlaskConical,
@@ -21,6 +22,7 @@ import {
 import { useCallback, useEffect, useState, type ReactElement } from "react"
 import {
   FerrataReadError,
+  openFerrataSend,
   readFerrata,
   shortAddress,
   signInWithFerrata,
@@ -96,6 +98,7 @@ export default function LiveDashboard({
   const [state, setState] = useState<LoadState>({ kind: "loading" })
   const [unlocking, setUnlocking] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [sending, setSending] = useState(false)
 
   const load = useCallback(async () => {
     setState((current) => (current.kind === "ready" ? current : { kind: "loading" }))
@@ -127,6 +130,19 @@ export default function LiveDashboard({
       // Cancelled in the Ferrata window: stay on the locked card.
     } finally {
       setUnlocking(false)
+    }
+  }
+
+  /** The transfer happens in the Ferrata window (analysis + passkey); refresh once it closes. */
+  const send = async () => {
+    setSending(true)
+    try {
+      await openFerrataSend()
+    } catch {
+      // Extension missing or window refused: the status card says so after the refresh.
+    } finally {
+      setSending(false)
+      await load()
     }
   }
 
@@ -220,9 +236,14 @@ export default function LiveDashboard({
                 can never move or block your funds.
               </p>
             </div>
-            <Button variant="secondary" icon={<Copy size={17} />} onClick={() => void copyAddress(identity.address)}>
-              {copied ? "Copied" : `Wallet ${shortAddress(identity.address)}`}
-            </Button>
+            <div className="live-actions">
+              <Button icon={<Send size={17} />} loading={sending} onClick={() => void send()}>
+                {sending ? "Finish in the Ferrata window" : "Send"}
+              </Button>
+              <Button variant="secondary" icon={<Copy size={17} />} onClick={() => void copyAddress(identity.address)}>
+                {copied ? "Copied" : `Wallet ${shortAddress(identity.address)}`}
+              </Button>
+            </div>
           </div>
 
           {alerts.map((alert) => (

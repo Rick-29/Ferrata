@@ -178,3 +178,14 @@ export async function readFerrata<M extends keyof ReadMethods>(method: M): Promi
     throw new FerrataReadError("failed", message ?? "The extension could not answer.")
   }
 }
+
+/**
+ * "Send" from the website: opens the Ferrata window on its own Send screen (optionally prefilled).
+ * The transfer is analysed and signed with the passkey inside the extension; the website only
+ * learns that the window closed, then refreshes.
+ */
+export async function openFerrataSend(preset: { to?: string; amount?: string } = {}): Promise<void> {
+  const provider = await findFerrata()
+  if (provider === null) throw new FerrataReadError("not_installed", "The Ferrata extension was not found in this browser.")
+  await provider.request({ method: "sqw_openSend", params: [{ to: preset.to ?? "", amount: preset.amount ?? "" }] })
+}

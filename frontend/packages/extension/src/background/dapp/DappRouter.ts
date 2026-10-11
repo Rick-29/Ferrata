@@ -33,6 +33,8 @@ export interface DappRouterDeps {
    */
   readonly signIn?: (origin: string) => Promise<DappResponse>;
   readonly firstPartyOrigins?: readonly string[];
+  /** Website "Send": opens the extension's send window; resolves when it closes. First-party only. */
+  readonly openSend?: (preset: { readonly to: string; readonly amount: string }) => Promise<DappResponse>;
   /** Read-only wallet data for the website's dashboard (`sqw_wallet`, …). First-party origins only. */
   readonly siteRead?: (method: SiteRead) => Promise<DappResponse>;
 }
@@ -60,6 +62,8 @@ export class DappRouter {
         return this.#switchChain(params);
       case 'sqw_signIn':
         return this.#signIn(origin);
+      case 'sqw_openSend':
+        return this.#openSend(origin, params);
       default:
         if (isSiteRead(method)) return this.#siteRead(origin, method);
         if (SIGNING_METHODS.has(method)) return this.#signing(origin);
@@ -105,6 +109,18 @@ export class DappRouter {
     const { siteRead, firstPartyOrigins = [] } = this.#deps;
     if (!siteRead || !firstPartyOrigins.includes(origin)) return fail(ProviderErrors.unsupportedMethod);
     return siteRead(method);
+  }
+
+  #openSend(origin: string, params: readonly unknown[]): Promise<DappResponse> | DappResponse {
+    const { openSend, firstPartyOrigins = [] } = this.#deps;
+    if (!openSend || !firstPartyOrigins.includes(origin)) return fail(ProviderErrors.unsupportedMethod);
+    const first = params[0];
+    const field = (key: 'to' | 'amount'): string => {
+      if (typeof first !== 'object' || first === null || !(key in first)) return '';
+      const value: unknown = (first as Record<string, unknown>)[key];
+      return typeof value === 'string' ? value.slice(0, 80) : '';
+    };
+    return openSend({ to: field('to'), amount: field('amount') });
   }
 
   #signIn(origin: string): Promise<DappResponse> | DappResponse {

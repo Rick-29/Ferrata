@@ -1,7 +1,7 @@
 import type { AccountView } from '@sqw/types/AccountView';
 import type { AssetBalance } from '@sqw/types/AssetBalance';
 import { css, html, nothing, type TemplateResult } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 import type { UiError } from '../../core/errors';
 import type { WidgetEvent } from '../../core/events';
 import { formatUnits, isAddress, toBaseUnits, toHexUnits, unitsToDecimal } from '../../core/format';
@@ -43,6 +43,9 @@ export class SendScreen extends Screen {
   @state() private amount = '';
   @state() private busy = false;
   @state() private error: UiError | null = null;
+  /** Recipient and amount prefilled by the Ferrata website (send window); the user can change them. */
+  @property({ attribute: false }) presetTo = '';
+  @property({ attribute: false }) presetAmount = '';
 
   static override styles = [
     screenStyles,
@@ -92,6 +95,8 @@ export class SendScreen extends Screen {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    if (this.to === '' && this.presetTo !== '') this.to = this.presetTo;
+    if (this.amount === '' && this.presetAmount !== '') this.amount = this.presetAmount;
     void this.#load();
   }
 

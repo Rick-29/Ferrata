@@ -6,6 +6,7 @@ import { isBridgeRequest } from '../ui/services/bridge-protocol';
 import { LocalAuditLog, loadState } from './bridge-state';
 import { DappRouter } from './dapp/DappRouter';
 import { AllowlistApprover, DEFAULT_ALLOWED_ORIGINS, FIRST_PARTY_ORIGINS } from './dapp/AllowlistApprover';
+import type { DappResponse } from '../dapp/protocol';
 import { readForSite } from './site/SiteReader';
 import { SignInBroker } from './signin/SignInBroker';
 import { isSignInMessage } from '../signin/protocol';
@@ -162,6 +163,27 @@ const signIns = new SignInBroker({
 });
 chrome.windows.onRemoved.addListener((windowId) => signIns.onWindowClosed(windowId));
 
+// Website "Send" (sqw_openSend): the extension's own Send → Confirm screens in a window; the site
+// only learns when it closes (then it refreshes). Nothing is signed outside the extension.
+const sendWindows = new Map<number, () => void>();
+chrome.windows.onRemoved.addListener((windowId) => {
+  sendWindows.get(windowId)?.();
+  sendWindows.delete(windowId);
+});
+async function openSendWindow(preset: { readonly to: string; readonly amount: string }): Promise<DappResponse> {
+  const query = new URLSearchParams({ send: '1', to: preset.to, amount: preset.amount }).toString();
+  const created = await chrome.windows.create({
+    url: chrome.runtime.getURL(`src/approval/index.html?${query}`),
+    type: 'popup',
+    width: 400,
+    height: 640,
+    focused: true,
+  });
+  const id = created?.id;
+  if (id === undefined) return { ok: false, error: { code: -32603, message: 'could not open the Ferrata window' } };
+  return new Promise((resolve) => sendWindows.set(id, () => resolve({ ok: true, result: { closed: true } })));
+}
+
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (!isSignInMessage(message)) return false;
   // Only our own extension pages (the approval window), never a content script or another extension.
@@ -180,6 +202,7 @@ const dapps = new DappRouter({
   approver: new AllowlistApprover(DEFAULT_ALLOWED_ORIGINS),
   signIn: (origin) => signIns.request(origin),
   siteRead: (method) => readForSite(bridge, method),
+  openSend: (preset) => openSendWindow(preset),
   firstPartyOrigins: FIRST_PARTY_ORIGINS,
   walletReady: async () => {
     const state = await loadState(sessionStore);
