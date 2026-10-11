@@ -1,16 +1,21 @@
-// Manual mode: one canvas. The spine is the chain's validatable events in chain order, zigzagging
-// left to right (up, down, up…), one line from event to event, each circle grey until a
-// validator (automatic or human) has judged it, then light red with a ring in the verdict's
-// colour. Pressing + on an event hangs its counterparty below the spine; expanding that address
-// hangs its own counterparties below it, and so on. Nothing already on the canvas moves.
+// Manual mode: one canvas. The timeline is the chain's validatable events laid out by one of four
+// deterministic layouts (`src/lib/timelineLayout.ts`): Spine (block order on a rail, inbound
+// above, outbound below), Time (one lane per network), Risk (one lane per verdict; dragging a
+// transfer to another lane records a manual verdict) and Free (drag anything anywhere). Each
+// circle is grey until a validator (automatic or human) has judged it, then light red with a ring
+// in the verdict's colour. Pressing + on an event hangs its counterparty below it; expanding that
+// address hangs its own counterparties, and so on. Nothing already on the canvas moves until
+// "Tidy".
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useNodesState, useReactFlow, type Edge, type EdgeTypes, type Node, type NodeChange, type NodeTypes, type OnNodesChange } from "@xyflow/react";
+import { Background, BackgroundVariant, Controls, ReactFlow, ReactFlowProvider, useNodesState, useReactFlow, type Edge, type EdgeTypes, type Node, type NodeChange, type NodeTypes, type OnNodesChange } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { ferra, riskColor, type ChainSummary, type EventView, type GraphNode, type RiskBand, type ValidationSummary } from "@/lib/ferra";
 import { edgeTouches, walletSeed, type GEdge, type GraphApi, type Order } from "@/lib/graphStore";
-import { networkLegend, networkStyle } from "@/lib/networks";
+import { networkLegend } from "@/lib/networks";
+import { LAYOUT_HINT, LAYOUT_LABEL, laneAt, layoutTimeline, orderEvents, type LayoutMode } from "@/lib/timelineLayout";
+import { LaneOverlay, Overview } from "./TimelineDecor";
 import { fmtAmount, fmtDay, shortAddr, shortNode } from "@/lib/format";
 import { AddressNode, type AddressNodeType } from "./AddressNode";
 import { EventNode, type EventNodeType } from "./EventNode";
@@ -32,10 +37,8 @@ export const FLOW = {
   untrusted: "#C026D3",
 };
 
-const TL_STEP = 110;
-const TL_AMP = 80;
-const TL_ROW = 520;
 const HANG_Y = 300;
+const LAYOUTS: LayoutMode[] = ["spine", "time", "risk", "free"];
 
 export interface CanvasProps {
   chain: ChainSummary;
@@ -71,7 +74,11 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [legend, setLegend] = useState(true);
+  const [legend, setLegend] = useState(false);
+  const [layout, setLayout] = useState<LayoutMode>("spine");
+  // Bumped to snap a dragged transfer back to its lane (Risk mode, drop refused).
+  const [snapNonce, setSnapNonce] = useState(0);
+  const [dragging, setDragging] = useState(false);
   const { state } = graph;
   const inflight = useRef(new Set<string>());
   const seenRefresh = useRef(refreshKey);
@@ -100,29 +107,24 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
     [rf],
   );
 
-  // ----- the spine -----
-  const timeline = useMemo(() => {
-    const list = events.filter((e) => e.validatable && (!ferraOnly || e.network.name === ferraName));
-    list.sort((a, b) => a.block_number - b.block_number);
-    return list;
-  }, [events, ferraOnly, ferraName]);
+  // ----- the timeline -----
+  const timeline = useMemo(() => orderEvents(events.filter((e) => e.validatable && (!ferraOnly || e.network.name === ferraName))), [events, ferraOnly, ferraName]);
 
-  const tlLayout = useMemo(() => {
-    const pos: Record<string, { x: number; y: number }> = {};
-    // A zigzag (up, down, up…) left to right; long chains wrap into serpentine rows so the
-    // whole thing stays on one screen. Row r runs right to left when r is odd.
-    const n = timeline.length;
-    const cols = n <= 30 ? Math.max(1, n) : Math.max(24, Math.min(48, Math.ceil(Math.sqrt(n * 2.8))));
-    timeline.forEach((e, i) => {
-      const row = Math.floor(i / cols);
-      const col = i % cols;
-      const x = (row % 2 === 0 ? col : cols - 1 - col) * TL_STEP;
-      pos[e.hash] = { x, y: row * TL_ROW + (i % 2 === 0 ? -TL_AMP : TL_AMP) };
-    });
-    return pos;
-  }, [timeline]);
+  const tlLayout = useMemo(() => layoutTimeline(timeline, layout, ferraName), [timeline, layout, ferraName]);
 
-  const posOfEvent = useCallback((hash: string) => tlPos[hash] ?? tlLayout[hash], [tlPos, tlLayout]);
+  const posOfEvent = useCallback((hash: string) => tlPos[hash] ?? tlLayout.pos[hash], [tlPos, tlLayout]);
+
+  /** Switch layout: hand-moved transfers go back to the grid, the hanging graph stays. */
+  const chooseLayout = (m: LayoutMode) => {
+    setLayout(m);
+    setTlPos({});
+  };
+  /** Hand-moved transfers go back to the grid; hung addresses stay where they were put. */
+  const tidy = () => {
+    setTlPos({});
+    setSnapNonce((k) => k + 1);
+    setTimeout(() => fitTo(null), 80);
+  };
 
   // ----- hanging graph -----
   const expand = useCallback(
@@ -260,12 +262,12 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
         id: `ev:${e.hash}`,
         type: "event",
         position: posOfEvent(e.hash),
-        data: { event: e, index: i, delayMs: n > 1 ? (streamIndex / (n - 1)) * total : 0, selected: selectedEvent === e.hash, dim: focused && !highlight.has(`ev:${e.hash}`), attached: !!e.counterparty && !!state.nodes[e.counterparty.id], onAttach: (h) => void attach(h, false) },
+        data: { event: e, index: i, streamKey, delayMs: n > 1 ? (streamIndex / (n - 1)) * total : 0, selected: selectedEvent === e.hash, dim: focused && !highlight.has(`ev:${e.hash}`), attached: !!e.counterparty && !!state.nodes[e.counterparty.id], onAttach: (h) => void attach(h, false) },
         draggable: true,
         selectable: true,
       };
     });
-  }, [timeline, posOfEvent, newestFirst, selectedEvent, focused, highlight, state.nodes, attach, streamKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [timeline, posOfEvent, newestFirst, selectedEvent, focused, highlight, state.nodes, attach, streamKey, snapNonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gNodes: Node[] = useMemo(
     () =>
@@ -305,7 +307,7 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
       const a = timeline[i - 1];
       const b = timeline[i];
       const delay = n > 1 ? ((newestFirst ? n - 1 - i : i) / (n - 1)) * total : 0;
-      out.push({ id: `tl:${a.hash}:${b.hash}`, source: `ev:${a.hash}`, target: `ev:${b.hash}`, type: "straight", style: { stroke: theme === "dark" ? "#4b505a" : "#9ca1ac", strokeWidth: 1.5, opacity: 0, animation: `ev-in .4s ease-out ${delay}ms forwards` } });
+      out.push({ id: `tl:${a.hash}:${b.hash}`, source: `ev:${a.hash}`, target: `ev:${b.hash}`, type: layout === "free" ? "straight" : "default", style: { stroke: theme === "dark" ? "#4b505a" : "#9ca1ac", strokeWidth: 1.5, opacity: 0, animation: `${streamKey % 2 ? "ev-in-b" : "ev-in"} .4s ease-out ${delay}ms forwards` } });
     }
     // Event -> counterparty links, for every event whose counterparty hangs on the canvas.
     for (const e of timeline) {
@@ -349,7 +351,7 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
       });
     }
     return out;
-  }, [timeline, newestFirst, theme, state.nodes, state.edges, focused, highlight, selected, selectedEdge, isWallet, edgeCount, streamKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [timeline, newestFirst, theme, state.nodes, state.edges, focused, highlight, selected, selectedEdge, isWallet, edgeCount, streamKey, layout]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -358,17 +360,35 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
         if (c.type !== "position" || !c.position || c.dragging) continue;
         const { x, y } = c.position;
         if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-        if (c.id.startsWith("ev:")) setTlPos((p) => ({ ...p, [c.id.slice(3)]: { x, y } }));
-        else graph.move(c.id, x, y, true);
+        if (c.id.startsWith("ev:")) {
+          // In Risk mode the lane is the verdict: the drop is handled in onNodeDragStop.
+          if (layout !== "risk") setTlPos((p) => ({ ...p, [c.id.slice(3)]: { x, y } }));
+        } else graph.move(c.id, x, y, true);
       }
     },
-    [applyRfChanges, graph],
+    [applyRfChanges, graph, layout],
+  );
+
+  /** Risk mode: a transfer dropped on another lane gets that band as a manual verdict. */
+  const onEventDrop = useCallback(
+    (node: Node) => {
+      setDragging(false);
+      if (layout !== "risk" || !node.id.startsWith("ev:")) return;
+      const hash = node.id.slice(3);
+      const ev = events.find((e) => e.hash === hash);
+      const lane = laneAt(tlLayout.lanes, node.position.y, tlLayout.laneHeight);
+      const current = ev && !ev.pending ? ev.effective_risk : null;
+      if (ev && lane?.band && lane.band !== current) onManual(hash, lane.band, `moved to ${lane.band} on the canvas`);
+      // Either the verdict re-lays the node out, or it snaps back.
+      setSnapNonce((k) => k + 1);
+    },
+    [layout, events, tlLayout, onManual],
   );
 
   useEffect(() => {
     setTimeout(() => fitTo(null), 120);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ferraOnly, streamKey, chain.file.name]);
+  }, [ferraOnly, streamKey, chain.file.name, layout]);
 
   const center = (id: string) => {
     const n = state.nodes[id];
@@ -499,24 +519,36 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
               </div>
             )}
           </label>
-          <div className="tool-group">
-            <button className={ferraOnly ? "active" : ""} onClick={() => setFerraOnly(true)} disabled={nativeCount === 0} title={nativeCount === 0 ? "This chain has no native Ferra transfers" : "Only transfers settled on the Ferra chain"}>
-              Ferra only
-            </button>
-            <button className={!ferraOnly ? "active" : ""} onClick={() => setFerraOnly(false)}>
-              All networks
+          {nativeCount > 0 && (
+            <div className="tool-group" role="group" aria-label="Which transfers to show">
+              <button className={ferraOnly ? "active" : ""} onClick={() => setFerraOnly(true)} title="Only transfers settled on the Ferra chain">
+                Ferra only
+              </button>
+              <button className={!ferraOnly ? "active" : ""} onClick={() => setFerraOnly(false)} title="Transfers on every network the wallet touches">
+                All networks
+              </button>
+            </div>
+          )}
+          <div className="tool-group" role="group" aria-label="Layout">
+            {LAYOUTS.map((m) => (
+              <button key={m} className={layout === m ? "active" : ""} onClick={() => chooseLayout(m)} title={LAYOUT_HINT[m]}>
+                {LAYOUT_LABEL[m]}
+              </button>
+            ))}
+            <button onClick={tidy} title="Put every transfer back on its lane">
+              <Icon name="layout" size={13} /> Tidy
             </button>
           </div>
-          <div className="tool-group">
-            <span className="tool-label">Stream</span>
+          <div className="tool-group" role="group" aria-label="Play order">
             <button
               className={!newestFirst ? "active" : ""}
               onClick={() => {
                 setNewestFirst(false);
                 setStreamKey((k) => k + 1);
               }}
+              title="Play the transfers oldest first"
             >
-              Oldest → newest
+              Oldest first
             </button>
             <button
               className={newestFirst ? "active" : ""}
@@ -524,86 +556,112 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
                 setNewestFirst(true);
                 setStreamKey((k) => k + 1);
               }}
+              title="Play the transfers newest first"
             >
-              Newest → oldest
+              Newest first
             </button>
-            <button onClick={() => setStreamKey((k) => k + 1)} title="Play the stream again">
-              <Icon name="refresh" size={14} /> Replay
+            <button onClick={() => setStreamKey((k) => k + 1)} title="Play the transfers again">
+              <Icon name="refresh" size={13} /> Replay
             </button>
           </div>
-          <div className="tool-group">
-            <span className="tool-label">Hang</span>
-            {(["time", "risk", "amount"] as Order[]).map((o) => (
-              <button key={o} className={state.order === o ? "active" : ""} onClick={() => graph.setOrder(o)} title="Order of the counterparties hung below an expanded address">
-                {o === "time" ? "Newest first" : o === "risk" ? "Risk" : "Amount"}
-              </button>
-            ))}
-          </div>
-          <button className="density-toggle" onClick={() => fitTo(null)}>
+          <label className="tool-select" title="How the counterparties hang under an address you open">
+            <span>Hang</span>
+            <select value={state.order} onChange={(e) => graph.setOrder(e.target.value as Order)}>
+              <option value="time">newest first</option>
+              <option value="risk">riskiest first</option>
+              <option value="amount">largest first</option>
+            </select>
+          </label>
+          <button className="density-toggle" onClick={() => fitTo(null)} title="Fit everything on screen">
             <Icon name="fit" size={14} /> Fit
           </button>
-          <button className={`density-toggle ${online ? "active" : ""}`} onClick={() => setOnline(!online)} title="Also query the public indexers of other networks when expanding">
-            <Icon name="globe" size={13} /> {online ? "Online" : "Offline"}
+          <button className={`tool-switch ${online ? "on" : ""}`} onClick={() => setOnline(!online)} title={online ? "Opening an address also asks its network's public indexer for history. Click to use the file only." : "Only what the file says. Click to also ask the public indexers."} aria-pressed={online}>
+            <i />
+            <Icon name="globe" size={13} /> Live lookups
           </button>
-          <button className={`density-toggle ${legend ? "active" : ""}`} onClick={() => setLegend(!legend)}>
+          <button className={`density-toggle ${legend ? "active" : ""}`} onClick={() => setLegend(!legend)} title="How to read the canvas">
             Legend
           </button>
         </div>
         {legend && (
           <div className="canvas-legend-box">
-            <div className="legend-group">
-              <span>TRANSFER · on the zigzag</span>
-              <div>
-                <i style={{ background: "#6B7280" }} />
-                Grey: no verdict yet
-              </div>
-              <div>
-                <i style={{ background: "#e8646f" }} />
-                Light red: validated · its ring is the verdict →
-              </div>
-              {(["Low", "Medium", "High", "Critical"] as const).map((r) => (
-                <div key={r}>
-                  <i className="ring" style={{ borderColor: riskColor(r) }} />
-                  {r}
+            <div className="legend-head">
+              <strong>Reading the canvas</strong>
+              <button className="icon-button" onClick={() => setLegend(false)} title="Hide">
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+            <div className="legend-cols">
+              <div className="legend-group">
+                <span>Transfers</span>
+                <div>
+                  <i className="dot" style={{ background: "#6B7280" }} />
+                  Not judged yet
                 </div>
-              ))}
-              <div>
-                <i className="ring" style={{ borderColor: riskColor(null, false) }} />
-                After a tampered block
-              </div>
-            </div>
-            <div className="legend-group">
-              <span>ADDRESS · hung below</span>
-              <div>Fill = network, ring = worst verdict seen with it.</div>
-              {networksSeen.map((n) => (
-                <div key={n.key}>
-                  <i style={{ background: n.color }} />
-                  {n.label}
+                <div>
+                  <i className="dot" style={{ background: "#e8646f", boxShadow: "0 0 0 2px #2eb67d" }} />
+                  Judged · the ring is the verdict
                 </div>
-              ))}
-            </div>
-            <div className="legend-group">
-              <span>LINE · money moves with the dashes</span>
-              <div>
-                <i className="legend-line" style={{ background: FLOW.out }} />
-                Leaving the wallet under review
+                <div className="legend-rings">
+                  {(["Low", "Medium", "High", "Critical"] as const).map((r) => (
+                    <span key={r}>
+                      <i className="ring" style={{ borderColor: riskColor(r) }} />
+                      {r}
+                    </span>
+                  ))}
+                </div>
+                <div>
+                  <i className="dot" style={{ background: riskColor(null, false) }} />
+                  After a tampered block
+                </div>
+                <div>
+                  <i className="dot diamond" />
+                  Escape-hatch exit
+                </div>
+                <div>
+                  <i className="ring dashed" />
+                  The wallet's own policy disagreed
+                </div>
+                <p>Bigger circle, bigger amount. ↑ leaves the wallet, ↓ arrives.</p>
               </div>
-              <div>
-                <i className="legend-line" style={{ background: FLOW.in }} />
-                Entering the wallet under review
+              <div className="legend-group">
+                <span>Addresses</span>
+                {networksSeen.map((n) => (
+                  <div key={n.key}>
+                    <i className="dot" style={{ background: n.color }} />
+                    {n.label}
+                  </div>
+                ))}
+                <p>The ring around an address is the worst verdict seen with it.</p>
               </div>
-              <div>
-                <i className="legend-line" style={{ background: FLOW.other }} />
-                Between other addresses
+              <div className="legend-group">
+                <span>Lines</span>
+                <div>
+                  <i className="legend-line" style={{ background: FLOW.out }} />
+                  Money leaving the wallet
+                </div>
+                <div>
+                  <i className="legend-line" style={{ background: FLOW.in }} />
+                  Money entering the wallet
+                </div>
+                <div>
+                  <i className="legend-line" style={{ background: FLOW.between }} />
+                  Between two wallets under review
+                </div>
+                <div>
+                  <i className="legend-line" style={{ background: FLOW.other }} />
+                  Between other addresses
+                </div>
+                <p>Dashes move with the money. Heads at both ends: it went both ways. Thicker: more transfers.</p>
               </div>
-              <div>
-                <i className="legend-line thick" />A head at both ends: both ways · thicker: more transfers
+              <div className="legend-group">
+                <span>Actions</span>
+                <div>Click anything for details.</div>
+                <div>Double-click a transfer to bring in its counterparty.</div>
+                <div>Double-click an address to bring in who it dealt with.</div>
+                <div>Drag to rearrange, scroll to zoom, drag the overview window to move sideways.</div>
+                <div>Risk layout: drag a transfer to another lane to change its verdict.</div>
               </div>
-            </div>
-            <div className="legend-group">
-              <span>HOW TO READ</span>
-              <div>Size = amount · ↑ out of the wallet, ↓ into it · diamond = escape-hatch exit · dashed ring = wallet policy disagreed.</div>
-              <div>Click: details · + on a transfer: hang its counterparty · + on an address: hang its counterparties · drag: move.</div>
             </div>
           </div>
         )}
@@ -617,7 +675,8 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
           </span>
           <span>{counts.high} High or Critical</span>
           <span>{Object.keys(state.nodes).length} addresses hung</span>
-          {summary?.running && <span>validating… {summary.phase ?? ""}</span>}
+          <span className="layout-hint">{LAYOUT_HINT[layout]}</span>
+          {summary?.running && <span>validating · {summary.queued} queued</span>}
         </div>
         <ReactFlow
           nodes={rfNodes}
@@ -627,6 +686,8 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
           onNodesChange={onNodesChange}
           onNodeClick={(_, n) => (n.id.startsWith("ev:") ? selectEvent(n.id.slice(3)) : selectNode(n.id))}
           onNodeDoubleClick={(_, n) => (n.id.startsWith("ev:") ? void attach(n.id.slice(3), true) : void expand(n.id))}
+          onNodeDragStart={(_, n) => setDragging(n.id.startsWith("ev:"))}
+          onNodeDragStop={(_, n) => onEventDrop(n)}
           onEdgeClick={(_, e) => {
             if (e.id.startsWith("tl:")) return;
             if (e.id.startsWith("link:")) {
@@ -651,7 +712,8 @@ function Inner({ chain, graph, online, setOnline, focus, onFocused, refreshKey, 
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1} color={theme === "dark" ? "#262a31" : "#c9ccd3"} />
           <Controls showInteractive={false} position="bottom-right" />
-          <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => (n.type === "event" ? riskColor(((n as EventNodeType).data?.event?.effective_risk ?? null) as never) : networkStyle(((n as AddressNodeType).data?.node?.network ?? "other") as string).color)} maskColor={theme === "dark" ? "#0d0f12cc" : "#f3f4f6cc"} />
+          <LaneOverlay layout={tlLayout} theme={theme} dragging={dragging} />
+          <Overview layout={tlLayout} events={timeline} theme={theme} />
         </ReactFlow>
       </div>
       {selected && state.nodes[selected] && (

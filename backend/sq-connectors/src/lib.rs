@@ -47,7 +47,19 @@ pub enum ConnectorError {
 
 impl From<reqwest::Error> for ConnectorError {
     fn from(e: reqwest::Error) -> Self {
-        ConnectorError::Http(e.to_string())
+        // reqwest's Display stops at "error sending request"; the cause (timed out, connection
+        // refused, TLS) sits in the source chain and is what a reader needs.
+        let mut text = e.to_string();
+        let mut src = std::error::Error::source(&e);
+        while let Some(cause) = src {
+            let c = cause.to_string();
+            if !text.contains(&c) {
+                text.push_str(": ");
+                text.push_str(&c);
+            }
+            src = cause.source();
+        }
+        ConnectorError::Http(text)
     }
 }
 
@@ -167,14 +179,47 @@ impl SourceRegistry {
 pub fn http() -> reqwest::Client {
     reqwest::Client::builder()
         .user_agent("ferra-chain-connectors/0.2")
-        .timeout(std::time::Duration::from_secs(20))
+        // A handshake that stalls (route trouble, an overloaded indexer) fails in seconds instead
+        // of holding the request for the whole response timeout, so retries start sooner.
+        .connect_timeout(std::time::Duration::from_secs(8))
+        .timeout(std::time::Duration::from_secs(15))
         .build()
         .unwrap_or_default()
 }
 
 /// At most this many requests in flight per network, so concurrent reports do not burst a public
-/// indexer into rate-limiting us. Permits are taken inside `get_text` / `post_json`.
-const PER_NETWORK_CONCURRENCY: usize = 4;
+/// indexer into rate-limiting us. Permits are taken inside `get_text` / `post_json`. The public
+/// Blockscout and Solana endpoints answer 429 from a handful of parallel requests, so they get a
+/// smaller buffer; `SQ_CONCURRENCY_<NETWORK>` (e.g. `SQ_CONCURRENCY_ETHEREUM=6` with an API key,
+/// `SQ_CONCURRENCY_SOLANA_DEVNET=1`) overrides any of them.
+pub fn concurrency_for(network: &str) -> usize {
+    let key = format!("SQ_CONCURRENCY_{}", network.to_ascii_uppercase().replace('-', "_"));
+    if let Some(n) = std::env::var(key).ok().and_then(|v| v.parse::<usize>().ok()) {
+        return n.max(1);
+    }
+    let n = network.to_ascii_lowercase();
+    let touchy = n.starts_with("sol") || n == "ethereum" || n.ends_with("sepolia") || n.starts_with("base");
+    if touchy {
+        2
+    } else if n.starts_with("bitcoin") {
+        3
+    } else {
+        4
+    }
+}
+
+/// How long to wait after a 429: the indexer's `Retry-After` when it sends one (capped), else
+/// the ladder 1 s, 2 s, 4 s, 8 s. Public indexers recover within a second or two, so a long
+/// first wait only throws away time.
+fn retry_after(resp: &reqwest::Response, attempt: u32) -> std::time::Duration {
+    let header = resp.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse::<u64>().ok());
+    let wait = match header {
+        Some(secs) => std::time::Duration::from_secs(secs.clamp(1, 10)),
+        None => std::time::Duration::from_secs(1 << attempt.min(3)),
+    };
+    ::tracing::debug!(url = %resp.url(), attempt, retry_after = header, wait_secs = wait.as_secs(), "rate limited, waiting");
+    wait
+}
 
 fn permit_for(network: &str) -> std::sync::Arc<tokio::sync::Semaphore> {
     use std::sync::{Arc, Mutex, OnceLock};
@@ -184,15 +229,14 @@ fn permit_for(network: &str) -> std::sync::Arc<tokio::sync::Semaphore> {
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
     };
-    guard.entry(network.to_owned()).or_insert_with(|| Arc::new(tokio::sync::Semaphore::new(PER_NETWORK_CONCURRENCY))).clone()
+    guard.entry(network.to_owned()).or_insert_with(|| Arc::new(tokio::sync::Semaphore::new(concurrency_for(network)))).clone()
 }
 
-/// GET with up to four retries on 429, exponential backoff, bounded concurrency per network.
+/// GET with up to four tries on 429 (`Retry-After` or 1/2/4 s), bounded concurrency per network.
 /// Returns the body text on 2xx.
 pub async fn get_text(client: &reqwest::Client, network: &str, url: &str, headers: &[(&str, String)]) -> Result<String, ConnectorError> {
     let sem = permit_for(network);
     let _permit = sem.acquire().await.map_err(|_| ConnectorError::Http("limiter closed".into()))?;
-    let mut delay = std::time::Duration::from_secs(3);
     for attempt in 0..4u32 {
         let mut req = client.get(url);
         for (k, v) in headers {
@@ -200,9 +244,11 @@ pub async fn get_text(client: &reqwest::Client, network: &str, url: &str, header
         }
         let resp = match req.send().await {
             Ok(r) => r,
-            Err(e) if attempt < 2 && (e.is_connect() || e.is_timeout() || e.is_request()) => {
-                tokio::time::sleep(delay).await;
-                delay *= 2;
+            // A refused or reset connection gets one quick second try. A timeout does not: an
+            // indexer that usually answers in a second and now stalls is tarpitting us, and the
+            // caller (fallback host, next pass) handles that better than another 15 s wait.
+            Err(e) if attempt == 0 && !e.is_timeout() && (e.is_connect() || e.is_request()) => {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 continue;
             }
             Err(e) => return Err(e.into()),
@@ -210,8 +256,7 @@ pub async fn get_text(client: &reqwest::Client, network: &str, url: &str, header
         let status = resp.status().as_u16();
         if status == 429 {
             if attempt < 3 {
-                tokio::time::sleep(delay).await;
-                delay *= 2;
+                tokio::time::sleep(retry_after(&resp, attempt)).await;
                 continue;
             }
             return Err(ConnectorError::RateLimited { network: network.into() });
@@ -229,7 +274,6 @@ pub async fn get_text(client: &reqwest::Client, network: &str, url: &str, header
 pub async fn post_json(client: &reqwest::Client, network: &str, url: &str, body: &serde_json::Value, headers: &[(&str, String)]) -> Result<String, ConnectorError> {
     let sem = permit_for(network);
     let _permit = sem.acquire().await.map_err(|_| ConnectorError::Http("limiter closed".into()))?;
-    let mut delay = std::time::Duration::from_secs(3);
     for attempt in 0..4u32 {
         let mut req = client.post(url).json(body);
         for (k, v) in headers {
@@ -237,9 +281,8 @@ pub async fn post_json(client: &reqwest::Client, network: &str, url: &str, body:
         }
         let resp = match req.send().await {
             Ok(r) => r,
-            Err(e) if attempt < 2 && (e.is_connect() || e.is_timeout() || e.is_request()) => {
-                tokio::time::sleep(delay).await;
-                delay *= 2;
+            Err(e) if attempt == 0 && !e.is_timeout() && (e.is_connect() || e.is_request()) => {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 continue;
             }
             Err(e) => return Err(e.into()),
@@ -247,8 +290,7 @@ pub async fn post_json(client: &reqwest::Client, network: &str, url: &str, body:
         let status = resp.status().as_u16();
         if status == 429 {
             if attempt < 3 {
-                tokio::time::sleep(delay).await;
-                delay *= 2;
+                tokio::time::sleep(retry_after(&resp, attempt)).await;
                 continue;
             }
             return Err(ConnectorError::RateLimited { network: network.into() });

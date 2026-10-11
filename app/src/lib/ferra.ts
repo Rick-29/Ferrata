@@ -940,6 +940,12 @@ export interface ValidationSummary {
   halted: string | null
   last_error: string | null
   phase: string | null
+  /** Origin-network lookups in flight right now, per network (the per-chain buffers). */
+  in_flight: Record<string, number>
+  /** Events judged from the file alone because their origin network stayed out of reach. */
+  unchecked_online: number
+  /** Events still queued in this run. */
+  queued: number
 }
 
 export interface VerdictEvent {

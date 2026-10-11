@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ferra, isAppError, type ChainSummary, type EventView, type Report, type RiskBand, type ServiceState, type ValidationSummary } from "@/lib/ferra";
 import { useGraph } from "@/lib/graphStore";
 import { Icon } from "@/components/ui";
@@ -24,8 +24,23 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
   const [focus, setFocus] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  // The report is rebuilt on the Rust side; during a run verdicts arrive many times a second,
+  // so refreshes are coalesced to a few per second (trailing edge, nothing is lost).
+  const reportTimer = useRef<number | null>(null);
+  const refreshReport = useCallback((immediate = false) => {
+    const fetchIt = () => {
+      reportTimer.current = null;
+      ferra.getReport().then(setReport).catch(() => {});
+    };
+    if (immediate) {
+      if (reportTimer.current) window.clearTimeout(reportTimer.current);
+      fetchIt();
+      return;
+    }
+    if (reportTimer.current) return;
+    reportTimer.current = window.setTimeout(fetchIt, 350);
+  }, []);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
       return localStorage.getItem("ferra-theme") === "light" ? "light" : "dark";
@@ -50,7 +65,6 @@ export default function App() {
     ferra.getReport().then(setReport).catch(() => {});
     ferra.listEvents().then(setEvents).catch(() => setEvents([]));
     ferra.validationStatus().then(setSummary).catch(() => setSummary(null));
-    setReloadKey((k) => k + 1);
     if (reload) setRefreshKey((k) => k + 1);
     setScreen((s) => (s === "open" ? "report" : s));
   }, []);
@@ -71,16 +85,17 @@ export default function App() {
       ferra.onVerdict((v) => {
         setEvents((list) => list.map((e) => (e.hash === v.event.hash ? v.event : e)));
         setSummary(v.summary);
+        refreshReport();
       }),
       ferra.onValidationStatus((s) => {
         setSummary(s);
-        if (!s.running) ferra.getReport().then(setReport).catch(() => {});
+        if (!s.running) refreshReport(true);
       }),
     ];
     return () => {
       offs.forEach((p) => p.then((u) => u()));
     };
-  }, [afterOpen]);
+  }, [afterOpen, refreshReport]);
 
   const run = async (label: string, f: () => Promise<ChainSummary>, reload = false) => {
     setBusy(label);
@@ -131,7 +146,7 @@ export default function App() {
       const ev = await ferra.manualVerdict(hash, band, note);
       setEvents((list) => list.map((e) => (e.hash === hash ? ev : e)));
       setSummary(await ferra.validationStatus());
-      ferra.getReport().then(setReport).catch(() => {});
+      refreshReport(true);
     } catch (e) {
       setError(errText(e));
     }
@@ -226,7 +241,8 @@ export default function App() {
                   <i style={{ width: `${summary.percent}%`, background: summary.halted ? "#E3242B" : summary.running ? "#F2B134" : "#2eb67d" }} />
                 </span>
                 <span className="muted">
-                  {summary.validated}/{summary.validatable} validated{summary.running ? ` · ${summary.phase ?? "running"}` : ""}
+                  {summary.validated}/{summary.validatable} validated
+                  {summary.running ? ` · ${summary.queued} queued${Object.keys(summary.in_flight).length ? ` · ${Object.values(summary.in_flight).reduce((a, b) => a + b, 0)} lookups in flight` : ""}` : ""}
                 </span>
               </span>
             )}
@@ -252,7 +268,7 @@ export default function App() {
           </div>
         </header>
         {screen === "report" ? (
-          <ReportScreen report={report} service={service} onShowNode={showNode} onValidateNow={() => void validateStart()} onServicePass={() => void servicePass()} summary={summary} onReload={() => void run("Reloading…", () => ferra.reloadChain(), true)} reloadKey={reloadKey} />
+          <ReportScreen report={report} service={service} onShowNode={showNode} onValidateNow={() => void validateStart()} onServicePass={() => void servicePass()} summary={summary} onReload={() => void run("Reloading…", () => ferra.reloadChain(), true)} />
         ) : (
           <ChainCanvas chain={chain} graph={graph} online={online} setOnline={setOnline} focus={focus} onFocused={() => setFocus(null)} refreshKey={refreshKey} theme={theme} events={events} summary={summary} onManual={(h, b, n) => void manual(h, b, n)} />
         )}

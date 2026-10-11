@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { save } from "@tauri-apps/plugin-dialog"
 import {
   ferra,
@@ -31,7 +31,6 @@ interface Props {
   onServicePass: () => void
   summary: ValidationSummary | null
   onReload: () => void
-  reloadKey: number
 }
 
 const BANDS: RiskBand[] = ["Low", "Medium", "High", "Critical"]
@@ -56,27 +55,18 @@ function Bar({ slices, total }: { slices: BandSlice[]; total: number }) {
 }
 
 export default function ReportScreen({
-  report: initial,
+  report,
   service,
   onShowNode,
   onValidateNow,
   onServicePass,
   summary,
   onReload,
-  reloadKey,
 }: Props) {
-  const [report, setReport] = useState<Report | null>(initial)
   const [band, setBand] = useState<RiskBand | "all" | "pending">("all")
   const [network, setNetwork] = useState("all")
   const [showAll, setShowAll] = useState(false)
   const [byValue, setByValue] = useState(false)
-
-  useEffect(() => {
-    ferra
-      .getReport()
-      .then(setReport)
-      .catch(() => {})
-  }, [reloadKey])
 
   const rows = useMemo(() => {
     if (!report) return []
@@ -159,7 +149,7 @@ export default function ReportScreen({
             disabled={summary?.running || (summary ? summary.pending === 0 : false)}
             title="Judge every pending transfer in the app, least suspicious first; stops after 3 High / Critical verdicts"
           >
-            {summary?.running ? `Validating… ${Math.round(summary.percent)}%` : "Validate automatically"}
+            {summary?.running ? `Validating… ${Math.round(summary.percent)}% · ${summary.queued} queued` : "Validate automatically"}
           </button>
         </div>
       </div>
@@ -308,6 +298,23 @@ export default function ReportScreen({
               </span>
             </div>
           </div>
+          {summary?.running && (
+            <div className="lanes-line">
+              <span>
+                <i className="pulse" />
+                {summary.phase === "file only" ? "Judging from the file alone" : "Asking the origin networks"} · {summary.queued} queued · {summary.checked_this_run} done this run
+                {summary.unchecked_online ? ` · ${summary.unchecked_online} without origin check` : ""}
+              </span>
+              <div className="lanes">
+                {Object.entries(summary.in_flight).sort().map(([n, c]) => (
+                  <span key={n} title={`${c} lookup${c === 1 ? "" : "s"} in flight on ${n}`}>
+                    <NetworkBadge name={n} /> {c}
+                  </span>
+                ))}
+                {Object.keys(summary.in_flight).length === 0 && summary.phase !== "file only" && <span className="muted">no lookup in flight</span>}
+              </div>
+            </div>
+          )}
           {worker ? (
             <div className="worker-line">
               <span

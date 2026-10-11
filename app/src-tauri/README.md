@@ -15,7 +15,10 @@ cd src-tauri && cargo test            # offline pipeline over the demo chains
 cd src-tauri && cargo test -- --ignored online --nocapture   # hits the public TON indexer
 ```
 
-Optional environment for the indexers: `SQ_TONAPI_KEY`, `SQ_TONCENTER_API_KEY`, `SQ_SOLANA_RPC`.
+Optional environment for the indexers: `SQ_TONAPI_KEY`, `SQ_TONCENTER_API_KEY`, `SQ_SOLANA_RPC`,
+`SQ_ESPLORA_BITCOIN` / `SQ_ESPLORA_BITCOIN_TESTNET` (your own Esplora host, tried before mempool.space
+and blockstream.info), `SQ_CONCURRENCY_<NETWORK>` (requests in flight per network; defaults 2 for
+Ethereum / Solana, 3 for Bitcoin, 4 elsewhere).
 The demo chains, the risk model and the sanctions lists come from `../../fixtures` (bundled as
 resources in a release build, read from the repo in dev).
 

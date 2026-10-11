@@ -4,7 +4,7 @@ import { riskColor, type EventView } from "@/lib/ferra";
 import { networkStyle } from "@/lib/networks";
 import { fmtAmount, fmtDay, shortNode } from "@/lib/format";
 
-export type EventNodeType = Node<{ event: EventView; index: number; delayMs: number; selected: boolean; dim: boolean; attached: boolean; onAttach: (hash: string) => void }, "event">;
+export type EventNodeType = Node<{ event: EventView; index: number; streamKey: number; delayMs: number; selected: boolean; dim: boolean; attached: boolean; onAttach: (hash: string) => void }, "event">;
 
 export function eventRadius(e: EventView): number {
   return Math.min(22, 11 + Math.log10(1 + Math.max(0, e.amount_units)) * 3);
@@ -18,7 +18,7 @@ export const EventNode = memo(function EventNode({ data }: NodeProps<EventNodeTy
   const net = networkStyle(e.network.name);
   const diamond = e.kind === "escape_exit";
   return (
-    <div className={`ev-node ${data.selected ? "selected" : ""} ${data.dim ? "dim" : ""} ${diamond ? "diamond" : ""} ${e.pending ? "pending" : "validated"}`} style={{ "--risk": color, "--net": net.color, animationDelay: `${data.delayMs}ms` } as React.CSSProperties}>
+    <div key={data.streamKey} className={`ev-node ${data.selected ? "selected" : ""} ${data.dim ? "dim" : ""} ${diamond ? "diamond" : ""} ${e.pending ? "pending" : "validated"}`} style={{ "--risk": color, "--net": net.color, animationDelay: `${data.delayMs}ms` } as React.CSSProperties}>
       <Handle type="target" position={Position.Left} className="addr-handle" />
       <Handle type="source" position={Position.Right} className="addr-handle" />
       <div className="ev-bubble" style={{ width: r * 2, height: r * 2 }} title={`${e.hash}\n${e.kind} · ${e.network.name} · ${e.effective_risk ?? "no verdict"}`}>

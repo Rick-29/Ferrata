@@ -4881,6 +4881,7 @@ dependencies = [
  "serde_json",
  "sq-adapters",
  "sq-connectors",
+ "tokio",
  "tracing",
 ]
 

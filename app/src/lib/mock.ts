@@ -56,7 +56,7 @@ async function summary() {
   const done = v.filter((e) => !e.pending)
   const by_band: Record<string, number> = {}
   for (const e of done) by_band[(e.effective_risk as string) ?? "Pending"] = (by_band[(e.effective_risk as string) ?? "Pending"] ?? 0) + 1
-  return { validatable: v.length, validated: done.length, pending: v.length - done.length, percent: v.length ? (done.length * 100) / v.length : 100, by_band, running, checked_this_run: done.length, high, halted, last_error: null, phase: running ? "offline checks" : null }
+  return { validatable: v.length, validated: done.length, pending: v.length - done.length, percent: v.length ? (done.length * 100) / v.length : 100, by_band, running, checked_this_run: done.length, high, halted, last_error: null, phase: running ? "file only" : null, in_flight: {}, unchecked_online: 0, queued: running ? v.length - done.length : 0 }
 }
 
 async function simulateRun(haltAfter: number) {
@@ -79,7 +79,7 @@ async function simulateRun(haltAfter: number) {
       stopFlag = true
     }
     emit("validation://verdict", { event: merged(e), summary: await summary() })
-    await new Promise((r) => setTimeout(r, 40))
+    await new Promise((r) => setTimeout(r, 10 + (h % 7) * 15))
   }
   running = false
   emit("validation://status", await summary())

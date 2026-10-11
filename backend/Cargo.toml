@@ -49,3 +49,52 @@ panic = "deny"
 [profile.release]
 opt-level = "z"
 lto = true
+
+# Signature and hash arithmetic must stay at full speed: at opt-level "z" / "s" an Ed25519 verify
+# costs ~2.7 ms instead of ~50 µs, which made replaying a 500-block chain take seconds.
+[profile.release.package.curve25519-dalek]
+opt-level = 3
+[profile.release.package.ed25519-dalek]
+opt-level = 3
+[profile.release.package.p256]
+opt-level = 3
+[profile.release.package.ecdsa]
+opt-level = 3
+[profile.release.package.elliptic-curve]
+opt-level = 3
+[profile.release.package.primeorder]
+opt-level = 3
+[profile.release.package.crypto-bigint]
+opt-level = 3
+[profile.release.package.sha2]
+opt-level = 3
+[profile.release.package.sha3]
+opt-level = 3
+[profile.release.package.keccak]
+opt-level = 3
+[profile.release.package.alloy-primitives]
+opt-level = 3
+
+# Same for dev builds (`cargo test`, `tauri dev`): replaying a chain must not take seconds there either.
+[profile.dev.package.curve25519-dalek]
+opt-level = 3
+[profile.dev.package.ed25519-dalek]
+opt-level = 3
+[profile.dev.package.p256]
+opt-level = 3
+[profile.dev.package.ecdsa]
+opt-level = 3
+[profile.dev.package.elliptic-curve]
+opt-level = 3
+[profile.dev.package.primeorder]
+opt-level = 3
+[profile.dev.package.crypto-bigint]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.sha3]
+opt-level = 3
+[profile.dev.package.keccak]
+opt-level = 3
+[profile.dev.package.alloy-primitives]
+opt-level = 3
