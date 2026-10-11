@@ -5,7 +5,7 @@ import { uiError, type UiError } from '../../ui/core/errors';
 import { err, ok } from '../../ui/core/result';
 import type { AirdropOutcome, TestnetNetwork, TestnetWallet } from '../../ui/services/UiBridge';
 import type { NetworkKeyring } from '../dapp/NetworkKeyring';
-import { CIRCLE_FAUCET_URL, USDC_DECIMALS, type GaslessUsdc } from './GaslessUsdc';
+import { BASE_SEPOLIA_USDC, CIRCLE_FAUCET_URL, USDC_DECIMALS, type GaslessUsdc } from './GaslessUsdc';
 import { LAMPORTS_PER_SOL, type DevnetError, type SolanaDevnet } from './SolanaDevnet';
 import type { SolanaKeyring } from './SolanaKeyring';
 
@@ -82,6 +82,7 @@ export class TestnetWallets {
               inWalletAirdrop: false,
               faucetUrl: CIRCLE_FAUCET_URL,
               gasless: true,
+              assetAddress: BASE_SEPOLIA_USDC,
             },
           ];
     return ok([

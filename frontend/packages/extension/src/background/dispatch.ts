@@ -20,7 +20,7 @@ function isLoginRequest(v: unknown): v is LoginRequest {
 }
 
 function isSendDraft(v: unknown): v is SendDraft {
-  return isRecord(v) && isString(v.to) && (v.asset === null || isString(v.asset)) && isString(v.amount);
+  return isRecord(v) && isString(v.to) && (v.asset === null || isString(v.asset)) && isString(v.amount) && (v.rail === undefined || v.rail === 'ferra' || v.rail === 'base-sepolia-usdc');
 }
 
 function isConfirmOptions(v: unknown): v is ConfirmOptions {

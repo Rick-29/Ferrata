@@ -73,9 +73,24 @@ export interface SwissquoteBridgeDeps {
   readonly testnet?: TestnetWallets;
   /** Sends from the test-network keys, each one approved by the passkey (P3). */
   readonly testnetSender?: TestnetSender;
+  /** Gasless USDC rail: the EVM key's ERC-4337 smart account on Base Sepolia. Absent: rail refused. */
+  readonly gasless?: GaslessRail;
   /** Clock and auto-lock delay, injectable for tests. Default: Date.now, 15 minutes of inactivity. */
   readonly now?: () => number;
   readonly lockAfterMs?: number;
+}
+
+/** The subset of the ERC-4337 path the bridge needs; `GaslessUsdc` + `NetworkKeyring` behind it. */
+export interface GaslessRail {
+  readonly enabled: boolean;
+  /** Smart account address, or null before the EVM key exists on this device. */
+  address(): Promise<string | null>;
+  /** USDC base units held by the smart account, null when the node cannot be read. */
+  balance(address: string): Promise<string | null>;
+  /** Transfers USDC from the smart account; the paymaster pays. Returns the Base Sepolia tx hash. */
+  send(to: string, amount: bigint): Promise<{ ok: true; hash: string } | { ok: false; message: string }>;
+  readonly usdc: string;
+  readonly explorerTx: (hash: string) => string;
 }
 
 /** What the website learns at sign-in: never the session token. */
@@ -436,14 +451,27 @@ export class SwissquoteBridge implements UiBridge {
     const amount = parseUnits(draft.amount);
     if (amount === null || amount <= 0n) return err(uiError('UI_INVALID_AMOUNT'));
 
-    const account = await this.#getWallet();
-    if (!account.ok) return account;
-    const balance = account.value.balances.find((b) => b.asset === draft.asset);
-    if (!balance) return err(uiError('SQ_BAD_REQUEST'));
-    if (amount > BigInt(balance.amount)) return err(uiError('SQ_CHAIN_INSUFFICIENT_BALANCE'));
+    const gasless = draft.rail === 'base-sepolia-usdc';
+    if (gasless) {
+      // The funds live in the smart account on Base Sepolia, not in the Ferra account.
+      const rail = this.#deps.gasless;
+      if (!rail?.enabled) return err(uiError('TESTNET_GASLESS_OFF'));
+      if (!sameAddress(draft.asset ?? '', rail.usdc)) return err(uiError('SQ_BAD_REQUEST'));
+      const smart = await rail.address();
+      const held = smart === null ? null : await rail.balance(smart);
+      if (held !== null && amount > BigInt(held)) return err(uiError('SQ_CHAIN_INSUFFICIENT_BALANCE'));
+    } else {
+      const account = await this.#getWallet();
+      if (!account.ok) return account;
+      const balance = account.value.balances.find((b) => b.asset === draft.asset);
+      if (!balance) return err(uiError('SQ_BAD_REQUEST'));
+      if (amount > BigInt(balance.amount)) return err(uiError('SQ_CHAIN_INSUFFICIENT_BALANCE'));
+    }
 
     const { wallet } = await this.#load();
     if (!wallet) return err(NO_WALLET);
+    // Same TxRequest shape on both rails: Swissquote decodes the ERC-20 transfer, scores it,
+    // records the intent on the Ferra chain and later the co-sign decision in the audit log.
     const tx = buildTx(wallet, draft, amount);
     const assessed = await this.#deps.api.assess({ tx, account: null });
     if (!assessed.ok) return this.#fail(assessed.error);
@@ -529,6 +557,7 @@ export class SwissquoteBridge implements UiBridge {
     if (!mode.withoutAnalysis && (!pending.cosignature || !pending.receipt)) return err(uiError('SQ_BAD_REQUEST'));
     const ownerSig = await this.#deps.passkey.sign(wallet.passkeyName, pending.userOpHash);
     if (!ownerSig.ok) return this.#fail(ownerSig.error);
+    if (pending.draft.rail === 'base-sepolia-usdc') return this.#submitGasless(wallet, pending, ownerSig.value);
     const submitted = await this.#deps.api.submit({
       tx: pending.tx,
       nonce: pending.nonce,
@@ -538,6 +567,32 @@ export class SwissquoteBridge implements UiBridge {
     if (!submitted.ok) return this.#fail(submitted.error);
     await this.#dropPending(pending.id);
     return ok({ kind: 'confirmed', txHash: submitted.value.tx_hash, receipt: pending.receipt ?? null });
+  }
+
+  /**
+   * Gasless rail: the passkey has just approved `user_op_hash` (verified locally, as for testnet
+   * sends), Swissquote has co-signed; now the smart account broadcasts on Base Sepolia and the
+   * Ferra chain pulls the resulting transfer. The pseudo-chain nonce is untouched: nothing was
+   * submitted there, only an intent and a log entry.
+   */
+  async #submitGasless(wallet: WalletRef, pending: PendingSend, ownerSig: OwnerSignature): UiResult<SendOutcome> {
+    const rail = this.#deps.gasless;
+    if (!rail?.enabled) return err(uiError('TESTNET_GASLESS_OFF'));
+    if (!verifyOwner(wallet.owner, pending.userOpHash, ownerSig)) return err(uiError('PASSKEY_FAILED'));
+    const amount = parseUnits(pending.draft.amount);
+    if (amount === null) return err(uiError('UI_INVALID_AMOUNT'));
+    const sent = await rail.send(pending.draft.to, amount);
+    if (!sent.ok) {
+      console.warn('[sqw] gasless send failed:', sent.message);
+      return err(uiError('TESTNET_SEND_FAILED'));
+    }
+    await this.#dropPending(pending.id);
+    const smart = await rail.address();
+    if (smart !== null) {
+      const synced = await this.#deps.api.sync({ wallet: wallet.address, network: 'base-sepolia', address_raw: smart, limit: null, cursor: null });
+      if (!synced.ok) console.warn('[sqw] gasless send landed but /chain/sync failed', synced.error.code);
+    }
+    return ok({ kind: 'confirmed', txHash: sent.hash, receipt: pending.receipt ?? null, explorerUrl: rail.explorerTx(sent.hash) });
   }
 
   async #cancelSend(previewId: string): UiResult<void> {

@@ -21,7 +21,7 @@ import { SolanaDevnet } from './testnet/SolanaDevnet';
 import { SolanaKeyring } from './testnet/SolanaKeyring';
 import { TestnetWallets } from './testnet/TestnetWallets';
 import { TestnetSender, type EvmSend } from './testnet/TestnetSender';
-import { GaslessUsdc } from './testnet/GaslessUsdc';
+import { BASE_SEPOLIA_USDC, GaslessUsdc } from './testnet/GaslessUsdc';
 import { createWalletClient, createPublicClient, http } from 'viem';
 import { baseSepolia, sepolia } from 'viem/chains';
 
@@ -90,6 +90,22 @@ const bridge = new SwissquoteBridge({
   api,
   testnet,
   testnetSender,
+  gasless: {
+    enabled: gasless.enabled,
+    usdc: BASE_SEPOLIA_USDC,
+    explorerTx: (hash) => `https://sepolia.basescan.org/tx/${hash}`,
+    address: async () => {
+      const owner = await evmKeyring.account();
+      return owner === null ? null : gasless.address(owner);
+    },
+    balance: (address) => gasless.balance(address),
+    send: async (to, amount) => {
+      await evmKeyring.ensure();
+      const owner = await evmKeyring.account();
+      if (owner === null) return { ok: false, message: 'no EVM key on this device' };
+      return gasless.send(owner, to, amount);
+    },
+  },
   passkey: passkeySigner(),
   store: new ChromeStore(chrome.storage.session),
   auditLog: new LocalAuditLog(new ChromeStore(chrome.storage.local)),

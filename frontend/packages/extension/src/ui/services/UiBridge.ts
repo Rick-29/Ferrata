@@ -15,7 +15,15 @@ export interface SendDraft {
   readonly to: string;
   readonly asset: string | null;
   readonly amount: string;
+  /**
+   * Where the transfer settles. Default `ferra`. `base-sepolia-usdc`: the wallet's ERC-4337 smart
+   * account sends USDC on Base Sepolia with gas paid by the paymaster; Swissquote's assessment,
+   * co-signature and audit entry are the same as for a Ferra send, only the broadcast differs.
+   */
+  readonly rail?: SendRail;
 }
+
+export type SendRail = 'ferra' | 'base-sepolia-usdc';
 
 /** Everything the Confirm screen shows, keyed by `id` so the confirmation refers to exactly what was previewed. */
 export interface SendPreview {
@@ -59,7 +67,7 @@ export interface ConfirmOptions {
  * `receipt` is null when the transfer went through without Swissquote's analysis.
  */
 export type SendOutcome =
-  | { readonly kind: 'confirmed'; readonly txHash: string; readonly receipt: Receipt | null }
+  | { readonly kind: 'confirmed'; readonly txHash: string; readonly receipt: Receipt | null; readonly explorerUrl?: string }
   | { readonly kind: 'confirmation_required'; readonly previewId: string; readonly level: ConfirmationLevel }
   | { readonly kind: 'refused'; readonly reason: 'regulatory' };
 
@@ -141,6 +149,8 @@ export interface TestnetWallet {
   readonly faucetUrl: string;
   /** True when sends from this address need no native gas token (ERC-4337 + paymaster). */
   readonly gasless?: boolean;
+  /** Token contract when the wallet holds an ERC-20 rather than the native coin. */
+  readonly assetAddress?: string;
 }
 
 export interface AirdropOutcome {
